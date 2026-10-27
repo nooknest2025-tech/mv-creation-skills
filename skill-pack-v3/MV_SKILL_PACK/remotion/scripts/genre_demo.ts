@@ -15,11 +15,15 @@ const TEXT: Record<string, [string, string, string]> = {
   idol_pop: ["きらきら 星に 願いをかけて", "大好きって 言わせてよ", "せーの！"],
   wa: ["桜 舞う 月の夜に", "紅の 花は 風に 散る", "雅"],
   hiphop: ["マイク握って 言葉を刻む 今夜も 街で 韻を踏む", "止まらない ビートに 乗せて 叫ぶ", "Yeah"],
+  acoustic: ["ギター一本で 君に歌う", "飾らない 言葉のままで", "ありがとう"],
+  dark: ["壊れた 世界の 片隅で", "誰にも 見えない 声で 叫ぶ", "消えて"],
+  ambient: ["静かな 朝の 光の中", "ゆっくり ほどける 夢の 続き", "おやすみ"],
 };
-const BPM: Record<string, number> = { ballad: 72, rock_edm: 150, citypop_jazz: 108, idol_pop: 140, wa: 96, hiphop: 92 };
+const DEFAULT_TEXT: [string, string, string] = ["はじめの 音を 重ねて", "ここから 新しい 景色へ", "Go"];
+const BPM: Record<string, number> = { ballad: 72, rock_edm: 150, citypop_jazz: 108, idol_pop: 140, wa: 96, hiphop: 92, acoustic: 84, dark: 128, ambient: 70 };
 
 function songFor(g: string, sec: number): Song {
-  const [a, b, c] = TEXT[g], bpm = BPM[g];
+  const [a, b, c] = TEXT[g] ?? DEFAULT_TEXT, bpm = BPM[g] ?? 110; // new genres still work without demo text
   const mk = (text: string, s: number, e: number) => { const ws = text.split(" "); const tot = ws.join("").length; let acc = s;
     const words = ws.map((w) => { const d = ((e - s) * w.length) / tot; const o = { text: w, start: acc, end: acc + d }; acc += d; return o; });
     return { text, start: s, end: e, ...charTimes(text, s, e, words) }; };
