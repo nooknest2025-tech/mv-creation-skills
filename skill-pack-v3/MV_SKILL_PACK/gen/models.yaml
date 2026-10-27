@@ -1,0 +1,166 @@
+# 動画/画像生成モデルの登録簿（provider-agnostic）。価格は公式ドキュメントで確認したものだけ記入。
+# verified: true  = 公式ページで確認済み（verified_at の日付時点）。価格は変わるので使う前に source を再確認。
+# verified: false = 未確認（price_per_sec は null。勝手に推測しない）。
+# 更新方法: 値を書き換えて verified_at を今日に → `npm run models` で一覧確認。
+models:
+  - id: grok-imagine-video-1.5-lite
+    provider: xAI API
+    kind: video
+    price_per_sec: { "480p": 0.02, "720p": 0.03, "1080p": 0.14 }
+    input_extra: "画像入力 $0.01/枚"
+    max_res: 1080p (720pからのアップスケール)
+    max_sec: 15
+    aspects: ["1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "21:9", "5:2"]
+    strengths: 最安。テキスト/画像→動画、リップシンク音声つき。量産・背景・つなぎカット向き
+    verified: true
+    verified_at: 2026-10-26
+    source: https://docs.x.ai/developers/model-capabilities/video/overview
+  - id: grok-imagine-video-1.5
+    provider: xAI API
+    kind: video
+    price_per_sec: { "480p": 0.08, "720p": 0.14, "1080p": 0.25 }
+    input_extra: "画像入力 $0.01/枚、プリセット音声は無料"
+    max_res: 1080p (native)
+    max_sec: 15
+    aspects: ["1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "21:9", "5:2"]
+    strengths: 最高品質。参照画像14枚・最初/最後/中間フレーム指定・ネイティブ1080p。キャラの一貫性・リップシンク向き
+    verified: true
+    verified_at: 2026-10-26
+    source: https://docs.x.ai/developers/models/grok-imagine-video-1.5
+  - id: grok-imagine-video
+    provider: xAI API
+    kind: video
+    price_per_sec: { "480p": 0.05, "720p": 0.07 }
+    input_extra: "動画入力 $0.01/秒、画像入力 $0.002/枚"
+    max_res: 720p
+    max_sec: 15
+    aspects: ["1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "21:9", "5:2"]
+    strengths: 既存動画の編集・延長（2〜10秒追加）
+    verified: true
+    verified_at: 2026-10-26
+    source: https://docs.x.ai/developers/models/grok-imagine-video
+  - id: runway/gen4_turbo
+    provider: Runway API
+    kind: video
+    price_per_sec: { "any": 0.05 }
+    input_extra: "5 credits/秒（1 credit = $0.01）、最低10 credits/回、画像入力必須"
+    max_res: 720p相当 (1280:720)
+    max_sec: 10
+    aspects: ["16:9", "9:16", "1:1"]
+    strengths: 画像→動画が速い
+    verified: true
+    verified_at: 2026-10-26
+    source: https://docs.dev.runwayml.com/guides/pricing/
+  - id: runway/gen4.5
+    provider: Runway API
+    kind: video
+    price_per_sec: { "any": 0.12 }
+    input_extra: "12 credits/秒"
+    max_res: null
+    max_sec: null
+    aspects: null
+    strengths: Runway の上位モデル（テキスト/画像→動画）
+    verified: true
+    verified_at: 2026-10-26
+    source: https://docs.dev.runwayml.com/guides/pricing/
+  - id: gemini-omni-1.1-flash
+    provider: Google Gemini API
+    kind: video
+    price_per_sec: null
+    input_extra: "トークン課金。公式ページで要確認（第三者サイトでは720pで約$0.10/秒と紹介）"
+    max_res: null
+    max_sec: null
+    aspects: null
+    strengths: Veo 3.1 Preview の後継として案内されている
+    verified: false
+    verified_at: null
+    source: https://ai.google.dev/gemini-api/docs/pricing
+  - id: veo-3.1-*-preview
+    provider: Google Gemini API
+    kind: video
+    price_per_sec: null
+    input_extra: "2026-10-22 に提供終了（公式告知）。使わないでください"
+    max_res: 4k
+    max_sec: 8
+    aspects: ["16:9", "9:16"]
+    strengths: (終了)
+    verified: true
+    verified_at: 2026-10-26
+    deprecated: true
+    source: https://ai.google.dev/gemini-api/docs/veo
+  # ---- Pollo AI（API と MCP。MCP は Pollo のクレジットで課金）----
+  - id: pollo/pollo-v2-5
+    provider: Pollo AI API / MCP
+    mcp_model: { modelBrand: pollo, modelAlias: pollo-v2-5 }
+    kind: video
+    price_per_sec: { "720p": 0.03, "1080p": 0.054 }
+    input_extra: "音声なし basic モードの価格（5秒 $0.15 / 1080p $0.27）。音声ありは 720p $0.072/秒・1080p $0.096/秒。pro モードは別料金"
+    max_res: 1080p
+    min_sec: 4
+    max_sec: 12
+    aspects: ["16:9", "9:16", "1:1"]
+    strengths: 安い。マルチショット・キャラの一貫性・カメラ指定。つなぎ〜見せ場まで
+    verified: true
+    verified_at: 2026-10-26
+    source: https://api.pollo.ai/pollo-ai/pollo-v2-5
+  - id: pollo/kling-v3-omni
+    provider: Pollo AI API / MCP
+    kind: video
+    price_per_sec: { "any": 0.066 }
+    input_extra: "Pollo API トップページ記載の1秒あたり価格（解像度・音声で変わる可能性あり。使う前にモデルページで確認）"
+    max_res: null
+    max_sec: null
+    aspects: null
+    strengths: マルチモーダル入力・音声生成・見た目の一貫性・動きの制御
+    verified: true
+    verified_at: 2026-10-26
+    source: https://api.pollo.ai/
+  - id: pollo/minimax-h3
+    provider: Pollo AI API / MCP
+    kind: video
+    price_per_sec: { "any": 0.0372 }
+    input_extra: "Pollo API トップページ記載の1秒あたり価格（条件で変わる可能性あり）"
+    max_res: null
+    max_sec: null
+    aspects: null
+    strengths: マルチショット・音声同期・カメラ制御・キーフレーム
+    verified: true
+    verified_at: 2026-10-26
+    source: https://api.pollo.ai/
+  - id: pollo/app-credits
+    provider: Pollo AI（アプリ / リモートMCP・クレジット制）
+    kind: video
+    price_per_sec: null
+    input_extra: "Pollo アカウントのクレジットで課金。MCP の pollo_estimate_generation_cost で事前に見積もれる（ドル換算は未確認）"
+    max_res: null
+    max_sec: null
+    aspects: null
+    strengths: Codex から MCP でそのまま使える（300以上のモデル）
+    verified: false
+    verified_at: null
+    source: https://pollo.ai/mcp
+  # ---- 無料/手動ルート（API課金なし） ----
+  - id: manual/grok-app
+    provider: Grok アプリ / grok.com（手動）
+    kind: video
+    price_per_sec: { "any": 0 }
+    input_extra: "API課金なし。プラン（SuperGrok 等）の利用枠内。生成した動画を input/ に入れるだけ"
+    max_res: null
+    max_sec: null
+    aspects: null
+    strengths: 追加料金ゼロ。プロンプトは npm run gen -- plan が書き出すシートからコピペ
+    verified: false
+    verified_at: null
+    source: https://grok.com
+  - id: manual/stills
+    provider: このパック（静止画モード）
+    kind: video
+    price_per_sec: { "any": 0 }
+    input_extra: "画像だけで動き（Ken Burns・疑似2.5D・光・粒子・拍の揺れ）をつける"
+    max_res: 4K
+    max_sec: null
+    aspects: ["16:9", "9:16", "1:1", "4:5"]
+    strengths: 完全無料・ローカル
+    verified: true
+    verified_at: 2026-10-26
+    source: README_ja.md
