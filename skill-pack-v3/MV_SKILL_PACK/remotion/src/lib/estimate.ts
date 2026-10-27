@@ -33,7 +33,7 @@ export function estimate(shots: ShotIn[], models: any[], pf: PlansFile, user: Us
   const lines: Line[] = [], unknown: Estimate["unknown"] = [], credits: Estimate["credits"] = {};
   let usd = 0;
   for (const s of shots) {
-    const m = models.find((x) => x.id === s.model); if (!m) { unknown.push({ shot: s.shot, why: `モデル ${s.model} が未登録` }); continue; }
+    const m = models.find((x) => x.id === s.model); if (!m) { unknown.push({ shot: s.shot, why: `指定された動画AIが登録されていません（npm run models で一覧を確認）` }); continue; }
     const sec = snapDuration(s.seconds, m), snapped = sec !== s.seconds;
     const prov = providerOf(pf, m.id), pl = planOf(user, prov);
     if (pl && prov) {
@@ -42,14 +42,14 @@ export function estimate(shots: ShotIn[], models: any[], pf: PlansFile, user: Us
       const c = creditsFor(P, m.id, s.res, sec, s.audio);
       const tot = c.credits == null ? null : c.credits * s.takes;
       lines.push({ adjustJa: s.adjustJa, shot: s.shot, model: m.id, provider: prov, mode: "plan", sec, snapped, res: s.res, takes: s.takes, usd: null, credits: tot, verified: c.verified && def.verified });
-      if (tot == null) unknown.push({ shot: s.shot, why: `${P.ja} の ${m.id} ${s.res} のクレジット消費が未確認` });
+      if (tot == null) unknown.push({ shot: s.shot, why: `${P.ja} のこの画質（${s.res}）で使うクレジット数がまだ確認できていません` });
       const k = credits[prov] ??= { plan: pl.plan, ja: `${P.ja} ${def.ja}`, used: 0, included: def.credits, remaining: pl.remaining ?? def.credits, after: 0, overCredits: 0, overUsd: 0, verified: def.verified, source: P.source };
       k.used += tot ?? 0; k.verified &&= c.verified;
       continue;
     }
     const p = m.verified ? priceAt(m, s.res) : null;
     const u = p == null ? null : +(p * sec * s.takes).toFixed(3);
-    if (u == null) unknown.push({ shot: s.shot, why: m.deprecated ? `${m.id} は提供終了` : `${m.id} の価格が未確認${m.input_extra ? "（" + m.input_extra + "）" : ""}` });
+    if (u == null) unknown.push({ shot: s.shot, why: m.deprecated ? "選んだ動画AIは提供が終了しています" : `選んだ動画AIの料金がまだ確認できていません` });
     else usd += u;
     lines.push({ adjustJa: s.adjustJa, shot: s.shot, model: m.id, provider: prov, mode: "api", sec, snapped, res: s.res, takes: s.takes, usd: u, credits: null, verified: u != null });
   }
@@ -65,18 +65,21 @@ export function estimate(shots: ShotIn[], models: any[], pf: PlansFile, user: Us
   return { lines, images: imgs, usdTotal: +usd.toFixed(3), unknown, credits, clips: lines.reduce((a, l) => a + l.takes, 0), seconds: lines.reduce((a, l) => a + l.sec * l.takes, 0), complete: unknown.length === 0 };
 }
 
+/** S005 -> シーン5 (internal ids are not shown to users). */
+export const shotJa = (id: string) => String(id ?? "").replace(/^S0*(\d+)(b?)$/i, (_, n, b) => `シーン${n}${b ? "の後半" : ""}`);
+const resJa = (r: string) => (r === "720p" ? "標準(720p)" : r === "1080p" ? "高画質(1080p)" : r === "480p" ? "軽量(480p)" : r);
 export function estimateMd(e: Estimate): string {
   const L: string[] = ["# 💰 生成前の見積もり", "",
     `カット数 ${e.lines.length} / クリップ ${e.clips} 本（テイク込み）/ 合計 ${e.seconds} 秒`, "",
-    "| ショット | モデル | 支払い | 秒 | 解像度 | テイク | 金額 | クレジット |", "|---|---|---|---|---|---|---|---|",
-    ...e.lines.map((l) => `| ${l.shot} | ${l.model} | ${l.mode === "plan" ? "サブスク" : "API従量"} | ${l.sec}${l.snapped ? "（対応尺に調整）" : ""} | ${l.res} | ${l.takes} | ${l.mode === "plan" ? "—" : l.usd == null ? "未確認" : "$" + l.usd} | ${l.mode === "plan" ? (l.credits ?? "未確認") + (l.verified ? "" : "（未確認）") : "—"} |`)];
-  const adj = e.lines.filter((l) => l.adjustJa); if (adj.length) L.push("", "## 尺の調整（口パク/ダンス）", ...adj.map((l) => `- ${l.shot}: ${l.adjustJa}`));
-  if (e.images.length) L.push("", "## 参照・開始画の画像", ...e.images.map((i) => `- ${i.model} × ${i.count} 枚: ${i.usd == null ? "未確認" : "$" + i.usd}`));
-  for (const c of Object.values(e.credits)) L.push("", `## ${c.ja}（サブスク）`, `- 使用 ${c.used} クレジット / 残り ${c.remaining} → **実行後 ${c.after}**${c.after < 0 ? `（${c.overCredits} 不足: 追加 ${c.overUsd == null ? "単価未確認" : "$" + c.overUsd}）` : ""}${c.verified ? "" : " ※未確認の値を含む"}`, `- 出典: ${c.source}`);
+    "| シーン | 支払い方法 | 秒 | 画質 | 作る回数 | 金額 | クレジット |", "|---|---|---|---|---|---|---|",
+    ...e.lines.map((l) => `| ${shotJa(l.shot)} | ${l.mode === "plan" ? "月額プラン" : "使った分だけ"} | ${l.sec}${l.snapped ? "（対応できる長さに調整）" : ""} | ${resJa(l.res)} | ${l.takes} | ${l.mode === "plan" ? "—" : l.usd == null ? "未確認" : "$" + l.usd} | ${l.mode === "plan" ? (l.credits ?? "未確認") + (l.verified ? "" : "（未確認）") : "—"} |`)];
+  const adj = e.lines.filter((l) => l.adjustJa); if (adj.length) L.push("", "## 尺の調整（口パク/ダンス）", ...adj.map((l) => `- ${shotJa(l.shot)}: ${l.adjustJa}`));
+  if (e.images.length) L.push("", "## 参照・開始画の画像", ...e.images.map((i) => `- 画像AI × ${i.count} 枚: ${i.usd == null ? "未確認" : "$" + i.usd}`));
+  for (const c of Object.values(e.credits)) L.push("", `## ${c.ja}（月額プラン）`, `- 使用 ${c.used} クレジット / 残り ${c.remaining} → **実行後 ${c.after}**${c.after < 0 ? `（${c.overCredits} 不足: 追加 ${c.overUsd == null ? "単価未確認" : "$" + c.overUsd}）` : ""}${c.verified ? "" : " ※未確認の値を含む"}`, `- 出典: ${c.source}`);
   const sh = (e as any).shortShots as import("./lipsync").ShortAdvice[] | undefined;
   if (sh?.length) L.push("", "## ⚠ 短い口パク/ダンスショット", ...sh.flatMap((a) => [`- ${a.msg}`, ...a.options.map((x) => `  - 案: ${x}`)]), ...(((e as any).merged ?? []).length ? [`- 🔧 自動で結合: ${(e as any).merged.join("、")}`] : []));
   L.push("", `## 合計（確認済みの金額）: **$${e.usdTotal}**`);
-  if (e.unknown.length) L.push("", "⚠️ 次の項目は未確認のため合計に入っていません（推測しません）:", ...e.unknown.map((u) => `- ${u.shot}: ${u.why}`));
+  if (e.unknown.length) L.push("", "⚠️ 次の項目は未確認のため合計に入っていません（推測しません）:", ...e.unknown.map((u) => `- ${shotJa(u.shot)}: ${u.why}`));
   return L.join("\n");
 }
 

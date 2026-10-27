@@ -8,14 +8,24 @@ const read=(p:string)=>JSON.parse(fs.readFileSync(p,'utf8').replace(/^\uFEFF/,''
 export function normalizeLyrics(raw:any,duration:number){const lines=raw.lines??raw.lyrics??raw;return lines.map((l:any,i:number)=>({...l,id:l.id??`L${String(i+1).padStart(3,'0')}`,start:Number(l.start??l.startSeconds),end:Math.min(duration-1,Number(l.end??l.endSeconds)),motion:l.motion??'simple',scale:l.scale??.72,y:l.y??.8,motionDuration:l.motionDuration??.8}));}
 function tone(file:string){const rate=48000,duration=8,n=rate*duration,data=Buffer.alloc(n*2);const notes=[261.63,329.63,392,523.25,440,392,329.63,261.63];for(let i=0;i<n;i++){const t=i/rate,local=t%1,env=Math.min(1,local/.025)*Math.exp(-local*2.5);data.writeInt16LE(Math.round(Math.sin(2*Math.PI*notes[Math.floor(t)]*t)*env*4500),i*2)}const h=Buffer.alloc(44);h.write('RIFF');h.writeUInt32LE(data.length+36,4);h.write('WAVEfmt ',8);h.writeUInt32LE(16,16);h.writeUInt16LE(1,20);h.writeUInt16LE(1,22);h.writeUInt32LE(rate,24);h.writeUInt32LE(rate*2,28);h.writeUInt16LE(2,32);h.writeUInt16LE(16,34);h.write('data',36);h.writeUInt32LE(data.length,40);fs.writeFileSync(file,Buffer.concat([h,data]));}
 function writeDemo(runtime:string){const assets=path.join(runtime,'assets');fs.mkdirSync(assets,{recursive:true});tone(path.join(assets,'demo.wav'));for(let i=0;i<2;i++)fs.writeFileSync(path.join(assets,`demo-${i}.svg`),`<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720"><defs><linearGradient id="g"><stop stop-color="${i?'#533959':'#153d46'}"/><stop offset="1" stop-color="${i?'#b98562':'#376853'}"/></linearGradient></defs><path fill="url(#g)" d="M0 0H1280V720H0z"/><circle cx="${i?920:330}" cy="280" r="170" fill="#ebd7b2" opacity=".15"/><path d="M-100 580Q350 320 750 600T1400 540" fill="none" stroke="#e2d9ad" opacity=".35" stroke-width="3"/></svg>`);
- const data:any={title:'共通エディター・サンプル',duration:8,width:1280,height:720,fps:24,bpm:120,particleStart:3,audioFile:'assets/demo.wav',assets:[{src:'assets/demo-0.svg',label:'青緑の背景'},{src:'assets/demo-1.svg',label:'夕色の背景'}],scenes:[{id:'S001',start:0,end:4,asset:0,transition:0,label:'はじめの景色'},{id:'S002',start:4,end:8,asset:1,transition:.7,label:'次の景色'}],lyrics:normalizeLyrics([{text:'はじめの音を',start:.4,end:2.5},{text:'重ねてみよう',start:2.6,end:4.8},{text:'ここから新しい景色へ',start:4.9,end:6.8}],8)};return data;
+ const data:any={title:'共通エディター・サンプル',duration:8,width:1280,height:720,fps:24,bpm:120,particleStart:3,audioFile:'assets/demo.wav',assets:[{src:'assets/demo-0.svg',label:'青緑の背景'},{src:'assets/demo-1.svg',label:'夕色の背景'}],scenes:[{id:'S001',start:0,end:4,asset:0,transition:0,label:'はじめの景色'},{id:'S002',start:4,end:8,asset:1,transition:.7,label:'次の景色'}],sections:[{type:'verse',label:'Aメロ',start:0,end:4},{type:'chorus',label:'サビ',start:4,end:8}],lyrics:normalizeLyrics([{text:'はじめの音を',start:.4,end:2.5},{text:'重ねてみよう',start:2.6,end:4.8},{text:'ここから新しい景色へ',start:4.9,end:6.8}],8)};return data;
+}
+const IMG=/\.(png|jpe?g|webp|svg)$/i,VID=/\.(mp4|mov|m4v|webm)$/i;
+/** copy one image or video clip into the editor folder (videos keep their length for looping). */
+export function assetFor(file:string,i:number,runtime:string){
+ if(!fs.existsSync(file))throw new UserError('素材ファイルが見つかりません: '+file,'ファイルの場所を確認してください。');
+ const ext=path.extname(file).toLowerCase();
+ if(IMG.test(file)){const dest=`assets/image-${i}${ext}`;fs.copyFileSync(file,path.join(runtime,dest));return {src:dest,label:path.basename(file)}}
+ if(VID.test(file)){const dest=`assets/video-${i}${ext}`;fs.copyFileSync(file,path.join(runtime,dest));const r=spawnSync(process.env.MVPACK_FFPROBE??'ffprobe',['-v','error','-show_entries','format=duration','-of','csv=p=0',file],{encoding:'utf8',windowsHide:true});const d=Number(r.stdout?.trim());return {src:dest,label:path.basename(file)+'（動画）',kind:'video',...(Number.isFinite(d)&&d>0?{duration:+d.toFixed(3)}:{})}}
+ throw new UserError('この形式の素材は使えません: '+path.basename(file),'画像は png/jpg/webp/svg、動画は mp4/mov/m4v/webm に対応しています。');
 }
 export function prepareProject(o:Record<string,any>){
  const project=o.project?path.resolve(PROJECTS_DIR,String(o.project)):path.join(PROJECTS_DIR,'editor-demo');
  const runtime=path.join(project,'out','editor');fs.mkdirSync(runtime,{recursive:true});
- if(fs.existsSync(path.join(runtime,'editor-state.json')))return {project,runtime,reused:true};
  const manifestFile=o.manifest?path.resolve(String(o.manifest)):path.join(project,'out','editor-input.json');
  const manifest=fs.existsSync(manifestFile)?read(manifestFile):{};
+ const stateFile0=path.join(runtime,'editor-state.json');
+ if(fs.existsSync(stateFile0)){const st=read(stateFile0);if(!st.data.sections&&manifest.sections){st.data.sections=manifest.sections;fs.writeFileSync(stateFile0,JSON.stringify(st,null,2))}return {project,runtime,reused:true};}
  let data:any,sourceLyrics:any[];
  if(o.demo){data=writeDemo(runtime);sourceLyrics=data.lyrics.map((l:any)=>({text:l.text}));}
  else{
@@ -24,16 +34,17 @@ export function prepareProject(o:Record<string,any>){
   const audio=String(o.audio??manifest.audio??'');
   const images=o.images?String(o.images).split(',').map(p=>path.resolve(p)):manifest.images??[];
   const lyricsFile=String(o.lyrics??manifest.lyrics??'');
-  if(!audio||!fs.existsSync(audio)||!images.length||!lyricsFile||!fs.existsSync(lyricsFile))throw new UserError('編集用の音源・画像・歌詞が見つかりません','npm run editor -- --demo、または --project <名前> --audio <音源> --lyrics <同期JSON> --images <画像1,画像2>。npm run mv後は --project <名前> で再開できます。');
+  if(!audio||!fs.existsSync(audio)||!(images.length||(o.videos||manifest.videos?.length))||!lyricsFile||!fs.existsSync(lyricsFile))throw new UserError('編集用の音源・画像・歌詞が見つかりません','npm run editor -- --demo、または --project <名前> --audio <音源> --lyrics <同期JSON> --images <画像1,画像2>（動画は --videos <動画1.mp4,動画2.mov>）。npm run mv後は --project <名前> で再開できます。');
   const raw=read(lyricsFile),duration=Number(imported?.data?.duration??raw.duration??raw.audio?.duration);
   if(!Number.isFinite(duration)||duration<=1)throw new UserError('歌詞JSONに曲尺が必要です','song.jsonのduration、またはlyrics JSONのaudio.durationを指定してください。');
   const assetsDir=path.join(runtime,'assets');fs.mkdirSync(assetsDir,{recursive:true});
   const audioFile='assets/original'+path.extname(audio).toLowerCase();fs.copyFileSync(audio,path.join(runtime,audioFile));
-  const assets=images.map((file:string,i:number)=>{if(!/\.(png|jpe?g|webp|svg)$/i.test(file)||!fs.existsSync(file))throw new UserError('この編集UIは静止画に対応しています: '+file,'動画素材の編集はStudioを使ってください。');const dest=`assets/image-${i}${path.extname(file).toLowerCase()}`;fs.copyFileSync(file,path.join(runtime,dest));return {src:dest,label:path.basename(file)}});
+  const videos=o.videos?String(o.videos).split(',').map(p=>path.resolve(p)):manifest.videos??[];
+  const assets=[...images,...videos].map((file:string,i:number)=>assetFor(file,i,runtime));
   const lyrics=normalizeLyrics(imported?.data?.lyrics??raw,duration);
   if(!imported&&manifest.lyricStyles)lyrics.forEach((l:any,i:number)=>Object.assign(l,manifest.lyricStyles[i]??{}));
   const scenes=imported?.data?.scenes??manifest.scenes??assets.map((_:any,i:number)=>({id:`S${String(i+1).padStart(3,'0')}`,start:i*duration/assets.length,end:(i+1)*duration/assets.length,asset:i,transition:i?.7:0,label:`シーン ${i+1}`}));
-  data={...(imported?.data??{}),title:manifest.title??raw.title??raw.projectName??path.basename(project),duration,fps:imported?.data?.fps??manifest.fps??raw.fps??24,width:imported?.data?.width??manifest.width??1280,height:imported?.data?.height??manifest.height??720,bpm:raw.bpm||120,phase:raw.phase??0,lyrics,scenes,assets,audioFile};
+  data={...(imported?.data??{}),title:manifest.title??raw.title??raw.projectName??path.basename(project),duration,fps:imported?.data?.fps??manifest.fps??raw.fps??24,width:imported?.data?.width??manifest.width??1280,height:imported?.data?.height??manifest.height??720,bpm:raw.bpm||120,phase:raw.phase??0,lyrics,scenes,assets,audioFile,sections:imported?.data?.sections??manifest.sections??raw.sections?.map((x:any)=>({type:x.type,label:x.label,start:x.start,end:x.end}))};
   const sourceFile=o['source-lyrics']?String(o['source-lyrics']):manifest.sourceLyrics;
   const original=sourceFile?read(sourceFile):raw;sourceLyrics=(original.lines??original.lyrics??original).map((l:any)=>({text:l.text}));
  }

@@ -17,7 +17,7 @@ GitHub からこのパックを入れた人なら、同じ画面を自分の曲�
 - このパックの `setup`（`remotion/` で `npm install` 済み）
 - Node.js 18 以上、Python 3.9 以上（`python3` / `python` / `py` を自動で探します。別の場所なら `MVPACK_PYTHON`）
 - 書き出しに Chrome / Chromium と ffmpeg（見つからなければ Remotion 同梱のものを使います。指定は `MVPACK_BROWSER` / `MVPACK_FFMPEG`）
-- 素材は **静止画（png/jpg/webp/svg）＋音源＋時刻つき歌詞 JSON**。動画素材のプロジェクトは Remotion Studio（`npm run studio`）を使ってください
+- 素材は **静止画（png/jpg/webp/svg）や動画クリップ（mp4/mov/m4v/webm）＋音源＋時刻つき歌詞 JSON**。動画は `--videos 動画1.mp4,動画2.mov` で追加できます（画像と混ぜてもOK）。動画の音は使わず、曲の音だけが入ります。シーンより短い動画は繰り返し再生します
 
 ## 起動（`remotion/` フォルダで）
 ```bash
@@ -28,7 +28,7 @@ npm run editor -- --demo --project editor-demo
 npm run editor -- --project <曲名>
 
 # 3) ファイルを直接指定して開く
-npm run editor -- --project <名前> --audio 曲.wav --lyrics 歌詞.json --images 画像1.png,画像2.png
+npm run editor -- --project <名前> --audio 曲.wav --lyrics 歌詞.json --images 画像1.png,画像2.png --videos 動画1.mp4
 #   見本: --lyrics editor/sample/lyrics.json --images editor/sample/scene1.svg,editor/sample/scene2.svg
 ```
 表示された `http://127.0.0.1:5194/editor.html` をブラウザで開きます（ポート変更は `--port 5200`）。
@@ -67,4 +67,51 @@ npm run editor -- --project <名前> --audio 曲.wav --lyrics 歌詞.json --imag
 
 ## 作り終わったらそのまま編集画面へ
 
-おまかせ・半自動・ジャンル・こだわり・`npm run mv` が終わると「いま編集画面を開きますか？ [Y/n]」と聞きます（静止画の曲のみ。開かない場合は `--no-editor`）。編集画面の上部の「タイミング」「顔の位置」タブから、タイミング調整と顔の位置の修正も同じ画面で開けます（保存は次の `npm run mv` に反映）。
+おまかせ・半自動・ジャンル・こだわり・`npm run mv` が終わると「いま編集画面を開きますか？ [Y/n]」と聞きます（画像・動画どちらの曲でも。開かない場合は `--no-editor`）。編集画面の上部の「タイミング」「顔の位置」タブから、タイミング調整と顔の位置の修正も同じ画面で開けます（保存は次の `npm run mv` に反映）。
+
+## 日本語の指示と編集画面は「同じ記録」です
+
+`npm run edit -- "サビの歌詞をもっと派手に"` のような日本語の指示は、編集画面の保存先と同じファイル
+（`projects/<曲名>/out/editor/editor-state.json`）に書き込みます。
+
+- 画面で手直しした内容（色・書体・位置など）は消えません。指示はその上に重ねて反映されます
+- 指示のあとに編集画面を開く（または再読み込みする）と、AI の変更が表示されます
+- 変更前の状態は毎回 `edit-history/` に保存されます。`--dry-run` を付けると、変更内容の表示だけで保存しません
+- 画面比・ジャンルなど「作り直し」が必要な設定だけは、これまで通り `mv.config.json` に入ります（次の `npm run mv` で反映）
+
+使える言い方の例:
+
+| 言い方 | 変わること |
+|---|---|
+| 「サビの歌詞をもっと派手に」 | サビの文字を激しい動き＋光彩に |
+| 「2番の歌詞を赤に」 | 2番（1回目のサビのあと〜2回目のサビ）の文字を赤に |
+| 「全体をゆっくりに」「サビを速く」 | 文字の動きの速さ |
+| 「1番のAメロを青に」「最後のサビを大きく」 | 場所を細かく指定 |
+| 「Aメロを静かに」「サビはグリッチで」 | 動きの種類 |
+
+場所: 全体 / 1番・2番・3番 / イントロ・Aメロ・Bメロ・サビ・Cメロ（間奏）・アウトロ / 最後のサビ。
+色: 赤・ピンク・オレンジ・黄色・金色・緑・水色・青・紫・白・黒。
+読み取れなかった指示には、使える言い方の例を日本語で表示します。
+
+## Mac で使うとき（Linux で同じ手順を確認済み・Mac 実機は未確認）
+
+Mac 実機でのテストはまだですが、Mac と同じ仕組み（POSIX のパス・`setup.sh`・`start.sh`）を Linux で一通り確認しました:
+セットアップ → 編集画面の起動 → 画面で保存 → 日本語の指示 → 開き直して反映を確認 → 動画クリップ入りの6秒の書き出し（H.264＋AAC）。
+
+Mac で準備が必要なもの:
+
+1. **Node.js**: https://nodejs.org の LTS 版、または `brew install node`
+2. **ffmpeg（フル版）**: `brew install ffmpeg`（Homebrew が無ければ https://brew.sh ）。ffprobe も一緒に入ります
+3. **Chrome**: 書き出しは `/Applications/Google Chrome.app` を自動で使います。無い場合は Remotion が初回に専用ブラウザを自動ダウンロードします（ネット接続が必要）。別の場所なら `MVPACK_BROWSER`
+4. **Python 3**: Mac 標準の `python3` で動きます（初回にコマンドライン・デベロッパツールのインストールを求められたら「インストール」）。Homebrew の Python は `pip install` を禁止しているため、`setup.sh` がパックの中に専用の環境（`.python-deps/venv`）を作って任意部品を入れます。パックは自動でそちらを使います
+5. 初回に `./setup.sh` を実行（ダブルクリックで開けない場合はターミナルで `bash setup.sh`）。「開発元が未確認」と出たら、システム設定 → プライバシーとセキュリティ で許可してください
+
+## テストに必要な追加ツール
+
+`npm test` の一部は、追加ツールが無いと自動で **スキップ** します（失敗ではありません。理由と入れ方が表示されます）:
+
+- **ffmpeg のフル版と ffprobe**（音声の切り出し、口パク用の再切り出し、動画クリップの取り込み）
+  - Mac: `brew install ffmpeg` / Windows: `winget install Gyan.FFmpeg`（essentials ではなく full 版）/ Ubuntu: `sudo apt install ffmpeg`
+- **numpy と Pillow 入りの Python**（パーツ分割、動画クリップの品質チェック）
+  - `./setup.sh`（Windows は `setup.bat`）を実行するか、`python -m pip install -r requirements_optional.txt`
+- OpenCV が一部だけ入っている環境でも、顔チェックだけを「未実行」として続行します

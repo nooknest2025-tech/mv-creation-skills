@@ -1,3 +1,4 @@
+import { ffmpegMissing, skipNote, FF_FIX } from "./_caps";
 // Lip-sync/dance post-sync in Remotion, short-shot advice, auto-merge, and non-destructive restore.
 import { describe, expect, it } from "vitest";
 import fs from "node:fs"; import os from "node:os"; import path from "node:path"; import { execFileSync } from "node:child_process";
@@ -108,7 +109,7 @@ describe("restore (non-destructive undo)", () => {
     expect(applyLipsync(shots, { S1: c.timing.perShot.S1.lipsync }).shots.length).toBe(2);
     const r = restoreCut(c, ["S1"]); expect(applyLipsync(shots, { S1: r.cfg.timing.perShot.S1.lipsync }).shots.map((s) => [s.id, s.start, s.end])).toEqual([["S1", 0, 2], ["S2", 2, 4], ["S3", 4, 8]]);
   });
-  const FF = (() => { try { execFileSync("ffmpeg", ["-version"], { stdio: "ignore" }); return true; } catch { return false; } })();
+  const FFR = ffmpegMissing(), FF = !FFR; if (FFR) skipNote("口パク用音声の再切り出しテスト", FFR, FF_FIX);
   it.skipIf(!FF)("re-trimming keeps the previous wav as a version", () => {
     const d = fs.mkdtempSync(path.join(os.tmpdir(), "ls-")), songF = path.join(d, "song.wav");
     execFileSync("ffmpeg", ["-v", "error", "-y", "-f", "lavfi", "-i", "sine=frequency=440:duration=12", songF]);

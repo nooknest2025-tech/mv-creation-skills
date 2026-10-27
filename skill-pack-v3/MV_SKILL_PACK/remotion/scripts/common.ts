@@ -7,6 +7,8 @@ import { fileURLToPath } from "node:url";
 
 export const REMOTION_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 export const PACK_DIR = path.resolve(REMOTION_DIR, "..");
+// setup.sh puts optional Python parts into a pack-local venv when the system Python refuses pip (PEP 668: Homebrew / recent Linux).
+{ const v = path.join(PACK_DIR, ".python-deps", "venv", process.platform === "win32" ? "Scripts/python.exe" : "bin/python"); if (!process.env.MVPACK_PYTHON && fs.existsSync(v)) process.env.MVPACK_PYTHON = v; }
 export const INPUT_DIR = path.join(PACK_DIR, "input");
 export const PROJECTS_DIR = path.join(PACK_DIR, "projects");
 export const PUBLIC_PROJECT = path.join(REMOTION_DIR, "public", "project");
@@ -245,4 +247,15 @@ export { fs, path, execFileSync };
 /** natural pixel size of an image (ffprobe). */
 export function imageSize(file: string): [number, number] | undefined {
   try { const st = probe(file).streams?.find((x: any) => x.width); return st ? [st.width, st.height] : undefined; } catch { return undefined; }
+}
+
+/** Demo outputs always stay inside the pack: remotion/out/. A path outside is reduced to its file name. */
+export const DEMO_OUT_DIR = path.join(REMOTION_DIR, "out");
+export function demoOut(def: string, given?: unknown): string {
+  const want = given == null || given === true ? def : String(given);
+  let p = path.resolve(DEMO_OUT_DIR, want.replace(/^out[\\/]/, ""));
+  const rel = path.relative(DEMO_OUT_DIR, p);
+  if (rel.startsWith("..") || path.isAbsolute(rel)) { p = path.join(DEMO_OUT_DIR, path.basename(p)); console.log(`📁 デモ動画はパックの中（${DEMO_OUT_DIR}）に保存します: ${path.basename(p)}`); }
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  return p;
 }

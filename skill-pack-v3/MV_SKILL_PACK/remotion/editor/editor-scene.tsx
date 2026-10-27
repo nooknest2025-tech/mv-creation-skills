@@ -19,15 +19,24 @@ function combined(el:React.ReactNode,l:any,t:number,cx:number,cy:number,W:number
  return <>{[-1,1].map(sign=><div key={sign} style={{position:'absolute',inset:0,transform:`translate(${kind==='lr'?sign*W*.42*amount:0}px,${kind==='tb'?sign*H*.42*amount:0}px)`,opacity:1-amount*.8}}><div style={{position:'absolute',inset:0,clipPath:kind==='lr'?(sign<0?`inset(0 ${W-cx}px 0 0)`:`inset(0 0 0 ${cx}px)`):(sign<0?`inset(0 0 ${H-cy}px 0)`:`inset(${cy}px 0 0 0)`)}}>{el}</div></div>)}</>;
 }
 export {CATALOG};
+export const VIDEO_EXT=/\.(mp4|mov|m4v|webm)$/i;
+export const isVideoAsset=(a:any)=>!!a&&(a.kind==='video'||VIDEO_EXT.test(typeof a==='string'?a:a.src??''));
+/** browser preview: a muted <video> kept in sync with the editor clock (seeks only when it drifts). */
+function PreviewVideo({src,time,style}:{src:string;time:number;style:any}){const ref=React.useRef<HTMLVideoElement>(null);
+ React.useEffect(()=>{const v=ref.current;if(!v)return;const d=v.duration;const want=Number.isFinite(d)&&d>0?time%d:time;if(Math.abs(v.currentTime-want)>.2)try{v.currentTime=want}catch{}});
+ return <video ref={ref} src={src} muted playsInline preload="auto" style={style}/>}
+export type VideoRenderer=(src:string,sceneStart:number,localT:number,style:any,key:any)=>React.ReactNode;
 
-export function Scene({data,t,base=''}:{data:any;t:number;base?:string}) {
- const W=data.width??1280,H=data.height??720; const scenes=data.scenes;const assets=data.assets.map((a:any)=>typeof a==='string'?a:a.src);
+export function Scene({data,t,base='',video}:{data:any;t:number;base?:string;video?:VideoRenderer}) {
+ const W=data.width??1280,H=data.height??720; const scenes=data.scenes;const assets=data.assets.map((a:any)=>typeof a==='string'?a:a.src);const kinds=data.assets.map((a:any)=>isVideoAsset(a));
  let idx=scenes.findIndex((s:any,i:number)=>t>=s.start&&t<(scenes[i+1]?.start??data.duration)); if(idx<0)idx=scenes.length-1;
  const beat={bpm:data.bpm??120,phase:data.phase??0,beatsPerBar:4};
  const bg=(i:number)=>{const s=scenes[i],end=scenes[i+1]?.start??data.duration,dur=Math.max(.1,end-s.start),p=Math.max(0,Math.min(1,(t-s.start)/dur));const zoom=s.zoom??1;
   const m=cameraPose(sceneMove(s),{p,t,t0:s.start,dur,beat,seed:i*7+1,W,sync:s.cameraSync,accents:data.accents},s.cameraStrength);
   const sc=zoom*m.s,maxX=(1.11*sc-1)*W/2,maxY=(1.11*sc-1)*H/2;const x=Math.max(-maxX,Math.min(maxX,m.x*W+(s.x??0)/100*(1.11*zoom-1)*W/2)),y=Math.max(-maxY,Math.min(maxY,m.y*H+(s.y??0)/100*(1.11*zoom-1)*H/2));const bl=m.blur+(m.focus??0);
-  return <img key={i} src={base+assets[s.asset]} style={{position:'absolute',width:'111%',height:'111%',left:'-5.5%',top:'-5.5%',objectFit:'cover',transform:`perspective(1400px) translate(${x}px,${y}px) scale(${sc}) rotate(${m.r}deg) rotateY(${m.ry??0}deg)`,filter:bl>.2?`blur(${bl.toFixed(2)}px)`:undefined}}/>};
+  const st={position:'absolute',width:'111%',height:'111%',left:'-5.5%',top:'-5.5%',objectFit:'cover',transform:`perspective(1400px) translate(${x}px,${y}px) scale(${sc}) rotate(${m.r}deg) rotateY(${m.ry??0}deg)`,filter:bl>.2?`blur(${bl.toFixed(2)}px)`:undefined};
+  if(kinds[s.asset]){const local=Math.max(0,t-s.start);return video?<React.Fragment key={i}>{video(base+assets[s.asset],s.start,local,st,i)}</React.Fragment>:<PreviewVideo key={i} src={base+assets[s.asset]} time={local} style={st}/>}
+  return <img key={i} src={base+assets[s.asset]} style={st as any}/>};
  const fade=scenes[idx].transition??1.1;let blend=idx&&fade>0?Math.max(0,Math.min(1,(t-scenes[idx].start)/fade)):1;blend=blend*blend*(3-2*blend);
  const active=data.lyrics.filter((l:any)=>t>=l.start&&t<l.end&&t<data.duration-1);
  return <div style={{position:'relative',width:W,height:H,overflow:'hidden',background:'#19221c','--lyric-fill':'#f8f3e6','--lyric-stroke':'#1f271f','--lyric-accent':'#e6aa96','--lyric-font':"'Noto Serif JP'"} as any}>

@@ -107,7 +107,7 @@ class Handler(SimpleHTTPRequestHandler):
             body=json.loads(self.rfile.read(size))
             with LOCK:
                 current=read()
-                if body.get('revision')!=current['revision']:return self.respond({'error':'別の保存があります。ページを開き直して確認してください'},409)
+                if body.get('revision')!=current['revision']:return self.respond({'error':'ほかの画面か日本語の指示（npm run edit）で内容が更新されています。ページを再読み込みすると最新の内容が表示されます（再読み込み前の未保存の変更は消えます）'},409)
                 if self.path=='/api/reload-catalog':
                     if JOB['status']=='running':return self.respond({'error':'書き出し完了後に追加分を読み込んでください'},409)
                     result=subprocess.run(['node',str(EDITOR/'build.mjs'),str(ROOT)],capture_output=True,text=True,encoding='utf-8',errors='replace')

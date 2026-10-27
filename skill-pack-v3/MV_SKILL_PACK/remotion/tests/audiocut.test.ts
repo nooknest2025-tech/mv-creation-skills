@@ -1,5 +1,5 @@
 // Lip-sync/dance audio auto-trim: exact length, snapping adjusts in/out, mismatch blocks, original untouched.
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import fs from "node:fs"; import os from "node:os"; import path from "node:path"; import { execFileSync } from "node:child_process";
 import YAML from "yaml";
 import { planCut, checkSync } from "../src/lib/audiocut";
@@ -9,7 +9,8 @@ import { buildSpecs } from "../src/lib/shotprompt";
 
 const MODELS = YAML.parse(fs.readFileSync(path.join(__dirname, "../../gen/models.yaml"), "utf8")).models;
 const M = (id: string) => MODELS.find((m: any) => m.id === id);
-const FF = (() => { try { execFileSync("ffmpeg", ["-version"], { stdio: "ignore" }); return true; } catch { return false; } })();
+import { ffmpegMissing, skipNote, FF_FIX } from "./_caps";
+const FFR = ffmpegMissing(), FF = !FFR; if (FFR) skipNote("ffmpeg で音声を切り出すテスト", FFR, FF_FIX);
 
 describe("planCut (pure)", () => {
   it("snapping 7s -> 6s trims the shot and says so", () => {
@@ -26,8 +27,8 @@ describe("planCut (pure)", () => {
 
 describe.skipIf(!FF)("ffmpeg cut", () => {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), "ac-")), song = path.join(d, "song.mp3");
-  execFileSync("ffmpeg", ["-v", "error", "-y", "-f", "lavfi", "-i", "sine=frequency=440:duration=30", "-c:a", "libmp3lame", song]);
-  const h0 = md5(song);
+  let h0 = "";
+  beforeAll(() => { execFileSync("ffmpeg", ["-v", "error", "-y", "-f", "lavfi", "-i", "sine=frequency=440:duration=30", "-c:a", "libmp3lame", song]); h0 = md5(song); });
   it("10s shot from a 30s song -> 10.000s audio + 10s request", () => {
     const m = M("wan2.6-i2v"), c = planCut({ id: "S010", start: 12.345, end: 22.345 }, m, 30);
     const f = cutAudio(song, c, path.join(d, "out"));

@@ -7,7 +7,7 @@ import { planShots } from "../src/lib/cuts";
 import { PRESETS } from "../src/lib/presets";
 import { ASPECTS } from "../src/lib/config";
 import type { Song, SectionType } from "../src/lib/types";
-import { PUBLIC_PROJECT, PACK_DIR, REMOTION_DIR, focusPoint, imageSize, fail, fs, log, npx, parseArgs, path } from "./common";
+import { PUBLIC_PROJECT, PACK_DIR, REMOTION_DIR, focusPoint, imageSize, fail, fs, log, npx, parseArgs, path, demoOut } from "./common";
 
 // original sample lines (written for this pack) - include keyword-effect words (光/好き/キライ/夢/溶け)
 const TEXT = ["光の中で 君を呼ぶ", "好きって 言えないまま", "キライ キライ だいキライ", "夢の続きを 見せてよ", "甘い声が 溶けていく", "揺れる 心の 音", "星を 数えて 眠る", "ノイズまみれの 世界で"];
@@ -59,7 +59,7 @@ async function main() {
     log("✅ スチル: remotion/out/showcase_stills/");
     return;
   }
-  const out = String(o.out ?? path.join("out", aspect === "16:9" ? "showcase.mp4" : `showcase_${aspect.replace(":", "x")}.mp4`));
+  const out = demoOut(aspect === "16:9" ? "showcase.mp4" : `showcase_${aspect.replace(":", "x")}.mp4`, o.out);
   log(`🎬 ショーケース ${styles.length}スタイル × ${seconds}秒 を書き出し中… → ${out}`);
   npx(["remotion", "render", "Showcase", out, `--props=${pf}`, "--codec=h264", "--crf=20", "--pixel-format=yuv420p", "--log=error"]);
   log(`✅ 完成: remotion/${out}`);

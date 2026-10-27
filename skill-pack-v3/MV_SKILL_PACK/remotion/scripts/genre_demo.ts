@@ -5,7 +5,7 @@ import { GENRES } from "../src/lib/genres";
 import { FONT_REG } from "../src/lib/fonts";
 import { charTimes } from "../src/lib/song";
 import type { Song } from "../src/lib/types";
-import { PACK_DIR, PUBLIC_PROJECT, REMOTION_DIR, ff, fail, focusPoint, fs, imageSize, log, npx, parseArgs, path , labelFilter, ffFilterPath } from "./common";
+import { PACK_DIR, PUBLIC_PROJECT, REMOTION_DIR, ff, fail, focusPoint, fs, imageSize, log, npx, parseArgs, path , labelFilter, ffFilterPath, demoOut } from "./common";
 
 // original sample lyrics written for this pack
 const TEXT: Record<string, [string, string, string]> = {
@@ -59,7 +59,7 @@ async function main() {
     parts.push(lab);
   });
   const list = path.join(tmp, "list.txt"); fs.writeFileSync(list, parts.map((p) => `file '${p}'`).join("\n"));
-  const out = path.resolve(REMOTION_DIR, String(o.out ?? `out/genre_samples_${aspect.replace(":", "x")}.mp4`));
+  const out = demoOut(`genre_samples_${aspect.replace(":", "x")}.mp4`, o.out);
   ff(["-y", "-f", "concat", "-safe", "0", "-i", list, "-c", "copy", "-movflags", "+faststart", out]);
   log(`✅ ${out}`);
 }

@@ -39,6 +39,10 @@ const SECTION_WORDS: [RegExp, string][] = [
   [/ラスサビ|最後のサビ/, "chorus#last"], [/サビ/, "chorus"], [/Aメロ/i, "verse"], [/Bメロ|プレサビ/i, "pre_chorus"], [/Cメロ|間奏|ブリッジ/, "bridge"],
   [/イントロ/, "intro"], [/アウトロ|エンディング|最後/, "outro"],
 ];
+const SEC_JA: Record<string, string> = { chorus: "サビ", verse: "Aメロ", pre_chorus: "Bメロ", bridge: "Cメロ", intro: "イントロ", outro: "アウトロ", other: "その他" };
+/** "chorus#2" -> 「2番のサビ」, "chorus#last" -> 「最後のサビ」 (user-facing; internal keys stay English). */
+export const kJa = (k: string | null | undefined) => { if (!k || k === "all") return "全体"; if (k === "chorus#last") return "最後のサビ"; const [t, n] = k.split("#"); const j = SEC_JA[t] ?? t; return n ? `${n}番の${j}` : j; };
+const stJa = (s: string | null | undefined) => { if (!s) return ""; if (s === "simple:film") return "映画字幕風"; return CATALOG[s]?.short ?? s; };
 const KANSUJI: Record<string, number> = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5 };
 const num = (s: string) => (KANSUJI[s] ?? Number(s.normalize("NFKC")));
 
@@ -104,7 +108,7 @@ export function applyInstruction(cfg0: MVConfig, text: string): { cfg: MVConfig;
         if (fragM) { (L.fontLines ??= {})[fragM[1]] = fid!; changes.push(`「${fragM[1]}」の行の書体 → ${label}`); }
         else if (lineM) { (L.fontLines ??= {})[String(+lineM[1] - 1)] = fid!; changes.push(`${lineM[1]}行目の書体 → ${label}`); }
         else if (kwM && !sectionKey(kwM[1])) { (L.fontKeywords ??= {})[kwM[1]] = fid!; changes.push(`「${kwM[1]}」の書体 → ${label}`); }
-        else if (k) { (L.fontSections ??= {})[k] = fid!; changes.push(`${k} の書体 → ${label}`); }
+        else if (k) { (L.fontSections ??= {})[k] = fid!; changes.push(`${kJa(k)} の書体 → ${label}`); }
         else { L.font = fid!; changes.push(`全体の書体 → ${label}`); }
         continue;
       }
@@ -131,7 +135,7 @@ export function applyInstruction(cfg0: MVConfig, text: string): { cfg: MVConfig;
         else if (k) { cfg.puppetSections ??= {}; cfg.puppetSections[k] = { ...(cfg.puppetSections[k] ?? {}), ...patch }; where = k; }
         else cfg.puppet = { ...(cfg.puppet ?? {}), ...patch };
         const JA: Record<string, string> = { blink: "目パチ", mouth: "口パク", breath: "呼吸", hair: "髪揺れ", sway: "ノリ(横揺れ)", bounce: "バウンド" };
-        changes.push(`${where} の ${keys.map((x) => JA[x]).join("・")} → ${v}`);
+        changes.push(`${/^S\d/.test(where) ? where.replace(/^S0*/, "シーン") : kJa(where)} の ${keys.map((x) => JA[x]).join("・")} → ${v}`);
         continue;
       }
     }
@@ -162,7 +166,7 @@ export function applyInstruction(cfg0: MVConfig, text: string): { cfg: MVConfig;
       const shotM = t.match(/S\d{3}/i), k = sectionKey(t);
       if (shotM) { const id = shotM[0].toUpperCase(); T.perShot ??= {}; T.perShot[id] = { ...(T.perShot[id] ?? {}), ramp: r }; }
       else { cfg.ramps ??= {}; cfg.ramps[k ?? "all"] = r; }
-      changes.push(`${shotM?.[0].toUpperCase() ?? k ?? "全体"} のスピードランプ → ${r}`);
+      changes.push(`${shotM ? shotM[0].toUpperCase().replace(/^S0*/, "シーン") : kJa(k)} のスピードランプ → ${({ none: "なし", out: "スロー", in: "加速", smooth: "なめらか", punch: "メリハリ" } as any)[r]}`);
       continue;
     }
     // preset / aspect / quality
@@ -195,7 +199,7 @@ export function applyInstruction(cfg0: MVConfig, text: string): { cfg: MVConfig;
       const which = /消え|退場|終わり|out/i.test(t) ? "lyricOut" : "lyricIn";
       const k = sectionKey(t);
       if (k) { (T.perSection ??= {})[k] = { ...(T.perSection[k] ?? {}), [which]: v }; } else (T as any)[which] = v;
-      changes.push(`${k ?? "全体"} の歌詞${which === "lyricIn" ? "の出" : "の消え"}を ${v}秒`);
+      changes.push(`${kJa(k)} の歌詞${which === "lyricIn" ? "の出" : "の消え"}を ${v}秒`);
       continue;
     }
     if (sec !== null && /ビート|拍|グリッド/.test(t)) { T.beatShift = /前|早/.test(t) ? -Math.abs(sec) : Math.abs(sec); T.locked = [...new Set([...(T.locked ?? []), "beatShift"])]; changes.push(`拍グリッドを ${T.beatShift}秒ずらす`); continue; }
@@ -206,10 +210,10 @@ export function applyInstruction(cfg0: MVConfig, text: string): { cfg: MVConfig;
       const k = sectionKey(t) ?? "all";
       if (k === "all") cfg.cutBeats = Object.fromEntries(["intro", "verse", "pre_chorus", "chorus", "bridge", "outro", "other"].map((s) => [s, beats]));
       else (cfg.cutBeats ??= {})[k] = beats;
-      changes.push(`${k === "all" ? "全体" : k} のカット → ${beats}拍ごと`);
+      changes.push(`${kJa(k)} のカット → ${beats}拍ごと`);
       continue;
     }
-    if (/長回し|カット(を)?(なし|無し|しない)/.test(t)) { const k = sectionKey(t) ?? "all"; if (k === "all") cfg.cutBeats = Object.fromEntries(["intro", "verse", "pre_chorus", "chorus", "bridge", "outro", "other"].map((s) => [s, 0])); else (cfg.cutBeats ??= {})[k] = 0; changes.push(`${k} を長回し`); continue; }
+    if (/長回し|カット(を)?(なし|無し|しない)/.test(t)) { const k = sectionKey(t) ?? "all"; if (k === "all") cfg.cutBeats = Object.fromEntries(["intro", "verse", "pre_chorus", "chorus", "bridge", "outro", "other"].map((s) => [s, 0])); else (cfg.cutBeats ??= {})[k] = 0; changes.push(`${kJa(k)} を長回し`); continue; }
     // look & feel
     if (/揺れ|シェイク|手ブレ/.test(t) && (/カメラ|画面|映像/.test(t) || /^(揺れ|シェイク|手ブレ)/.test(t))) { cfg.shake = /なし|無し|止め|やめ/.test(t) ? 0 : /強/.test(t) ? 0.9 : /弱|控えめ/.test(t) ? 0.2 : 0.5; changes.push(`カメラ揺れ → ${cfg.shake}`); continue; }
     if (/光漏れ|ライトリーク|フレア/.test(t)) { cfg.leaks = /なし|無し/.test(t) ? 0 : /強/.test(t) ? 1 : 0.4; changes.push(`光漏れ → ${cfg.leaks}`); continue; }
@@ -221,24 +225,24 @@ export function applyInstruction(cfg0: MVConfig, text: string): { cfg: MVConfig;
     const km = t.match(/^[「『"]?(.+?)[」』"]?\s*(?:という(?:言葉|単語))?\s*(?:は|を)\s*(.+?)(?:ように|みたいに|感じ|っぽく|演出|エフェクト)/) ?? t.match(/^[「『](.+?)[」』]\s*(?:は|を)\s*(.+?)(?:で|に|して)?$/);
     if (km && !sectionKey(km[1]) && !/文字|歌詞|全体|全部|行目/.test(km[1])) {
       const eff = EFFECT_WORDS.find(([re]) => re.test(km[2]));
-      if (eff) { cfg.lyrics ??= {}; (cfg.lyrics.keywords ??= {})[km[1]] = eff[1]; changes.push(`「${km[1]}」→ 語エフェクト ${eff[1] || "なし"}`); continue; }
+      if (eff) { cfg.lyrics ??= {}; (cfg.lyrics.keywords ??= {})[km[1]] = eff[1]; changes.push(`「${km[1]}」→ 言葉の演出「${({ crack: "割れる", melt: "溶ける", glow: "光る", shake: "震える", sparks: "火花", heart: "ハート", wave: "揺れる", blur: "ぼやける", red: "赤くする" } as any)[eff[1]] ?? "なし"}」`); continue; }
     }
     const st = styleOf(t);
     const quiet = /静か|落ち着|控えめ|しっとり/.test(t), loud = /派手|激しく|盛り上げ/.test(t);
     const lineM = t.match(/(\d+)\s*行目/), fragM = t.match(/[「『](.+?)[」』]\s*の行/);
     const k = sectionKey(t);
-    if (lineM && (st || quiet || loud)) { cfg.lyrics ??= {}; (cfg.lyrics.lines ??= {})[String(+lineM[1] - 1)] = specOf(st ?? (quiet ? "reveal" : "scale_pop")); changes.push(`${lineM[1]}行目 → ${st ?? (quiet ? "reveal" : "scale_pop")}`); continue; }
-    if (fragM && (st || quiet || loud)) { cfg.lyrics ??= {}; (cfg.lyrics.lines ??= {})[fragM[1]] = specOf(st ?? (quiet ? "reveal" : "scale_pop")); changes.push(`「${fragM[1]}」を含む行 → ${st}`); continue; }
+    if (lineM && (st || quiet || loud)) { cfg.lyrics ??= {}; (cfg.lyrics.lines ??= {})[String(+lineM[1] - 1)] = specOf(st ?? (quiet ? "reveal" : "scale_pop")); changes.push(`${lineM[1]}行目 → ${stJa(st ?? (quiet ? "reveal" : "scale_pop"))}`); continue; }
+    if (fragM && (st || quiet || loud)) { cfg.lyrics ??= {}; (cfg.lyrics.lines ??= {})[fragM[1]] = specOf(st ?? (quiet ? "reveal" : "scale_pop")); changes.push(`「${fragM[1]}」を含む行 → ${stJa(st)}`); continue; }
     if (k && (st || quiet || loud)) {
       cfg.lyrics ??= {}; cfg.lyrics.sections ??= {};
-      if (st) { cfg.lyrics.sections[k] = specOf(st); changes.push(`${k} の歌詞 → ${st}`); }
-      if (quiet) { if (!st) cfg.lyrics.sections[k] = "blur_in"; (cfg.cutBeats ??= {})[k] = 8; changes.push(`${k} を静かに（文字 blur_in・カット1小節×2）`); }
-      if (loud) { if (!st) cfg.lyrics.sections[k] = "kinetic"; (cfg.cutBeats ??= {})[k] = 0.5; changes.push(`${k} を派手に（文字 kinetic・半拍カット）`); }
+      if (st) { cfg.lyrics.sections[k] = specOf(st); changes.push(`${kJa(k)} の歌詞 → ${stJa(st)}`); }
+      if (quiet) { if (!st) cfg.lyrics.sections[k] = "blur_in"; (cfg.cutBeats ??= {})[k] = 8; changes.push(`${kJa(k)} を静かに（文字「ピント」・カット1小節×2）`); }
+      if (loud) { if (!st) cfg.lyrics.sections[k] = "kinetic"; (cfg.cutBeats ??= {})[k] = 0.5; changes.push(`${kJa(k)} を派手に（文字「キネティック」・半拍カット）`); }
       continue;
     }
-    if (st && /全体|全部|すべて|ぜんぶ|デフォルト/.test(t)) { cfg.lyrics ??= {}; cfg.lyrics.default = specOf(st); changes.push(`全体の歌詞 → ${st}`); continue; }
-    if (st) { cfg.lyrics ??= {}; cfg.lyrics.default = specOf(st); changes.push(`全体の歌詞 → ${st}`); continue; }
-    changes.push(`？ 解釈できませんでした: 「${t}」（例: 「サビはグリッチで」「画は0.1秒前から切り替え」「縦型で」）`);
+    if (st && /全体|全部|すべて|ぜんぶ|デフォルト/.test(t)) { cfg.lyrics ??= {}; cfg.lyrics.default = specOf(st); changes.push(`全体の歌詞 → ${stJa(st)}`); continue; }
+    if (st) { cfg.lyrics ??= {}; cfg.lyrics.default = specOf(st); changes.push(`全体の歌詞 → ${stJa(st)}`); continue; }
+    changes.push(`？ 解釈できませんでした: 「${t}」（例: 「サビの歌詞をもっと派手に」「2番の歌詞を赤に」「全体をゆっくりに」「サビはグリッチで」「縦型で」）`);
   }
   return { cfg, changes };
 }

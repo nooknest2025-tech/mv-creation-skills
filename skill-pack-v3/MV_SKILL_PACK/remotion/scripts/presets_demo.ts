@@ -3,7 +3,7 @@
 import { buildProps } from "../src/lib/pipeline";
 import { PRESETS } from "../src/lib/presets";
 import { loadConfig, readJson } from "./project";
-import { PROJECTS_DIR, REMOTION_DIR, ff, fail, fs, log, npx, parseArgs, path , labelFilter, ffFilterPath } from "./common";
+import { PROJECTS_DIR, REMOTION_DIR, ff, fail, fs, log, npx, parseArgs, path , labelFilter, ffFilterPath, demoOut } from "./common";
 
 const LABEL: Record<string, string> = { story: "story｜物語・シネスコ・長回し", dance: "dance｜短いカット・粒子・パンチ", lipsync: "lipsync｜顔アップ・口パク強め", live: "live｜ライブ感・グロー・ランプ", vocaloid: "vocaloid｜中央大文字・プラズマ・リング", firsttake: "firsttake｜一発撮り・ほぼ無加工" };
 
@@ -28,7 +28,7 @@ async function main() {
     parts.push(lab);
   }
   const list = path.join(tmp, "list.txt"); fs.writeFileSync(list, parts.map((p) => `file '${p}'`).join("\n"));
-  const out = path.resolve(REMOTION_DIR, String(o.out ?? `out/presets_compare_${aspect.replace(":", "x")}.mp4`));
+  const out = demoOut(`presets_compare_${aspect.replace(":", "x")}.mp4`, o.out);
   ff(["-y", "-f", "concat", "-safe", "0", "-i", list, "-c", "copy", "-movflags", "+faststart", out]);
   log(`✅ ${out}`);
 }
