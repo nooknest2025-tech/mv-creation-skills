@@ -59,6 +59,15 @@ export function ffmpegCmd() {
   if (bf && bp) return (FF = { ff: [bf], probe: [bp], full: false });
   return (FF = { ff: ["npx", "remotion", "ffmpeg"], probe: ["npx", "remotion", "ffprobe"], full: false });
 }
+/** ffmpeg filter-path escaping for fontfile= (Windows "C:\\..." breaks drawtext otherwise). */
+export const ffFilterPath = (p: string) => p.replace(/\\/g, "/").replace(/:/g, "\\:").replace(/'/g, "\\'");
+let warnedLabel = false;
+/** drawtext filter, or a plain format filter when only Remotion's minimal ffmpeg (no drawtext) is available. */
+export function labelFilter(drawtext: string): string {
+  if (ffmpegCmd().full) return drawtext;
+  if (!warnedLabel) { warnedLabel = true; console.log("ℹ️ 簡易版 ffmpeg（Remotion 同梱）のためラベル文字は省略します。表示するには ffmpeg を入れてください（Windows: winget install Gyan.FFmpeg）"); }
+  return "format=yuv420p";
+}
 export function ffTry(args: string[], o: { input?: Buffer; maxBuffer?: number } = {}) {
   const [cmd, ...pre] = ffmpegCmd().ff;
   return run(cmd, [...pre, "-hide_banner", "-y", ...args], { input: o.input, maxBuffer: o.maxBuffer ?? 1 << 30, cwd: REMOTION_DIR });

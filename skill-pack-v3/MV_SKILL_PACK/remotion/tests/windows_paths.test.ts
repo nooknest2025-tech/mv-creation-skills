@@ -57,3 +57,10 @@ describe("ffmpeg helpers", () => {
     expect(bundledBinary("ffmpeg")).toBeTruthy();
   });
 });
+
+describe("drawtext font path escaping", () => {
+  it("escapes Windows drive colons and backslashes", async () => {
+    const { ffFilterPath } = await import("../scripts/common");
+    expect(ffFilterPath("C:\\Users\\a b\\MV創作\\f.ttf")).toBe("C\\:/Users/a b/MV創作/f.ttf");
+  });
+});

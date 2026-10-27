@@ -5,7 +5,7 @@ import { GENRES } from "../src/lib/genres";
 import { FONT_REG } from "../src/lib/fonts";
 import { charTimes } from "../src/lib/song";
 import type { Song } from "../src/lib/types";
-import { PACK_DIR, PUBLIC_PROJECT, REMOTION_DIR, ff, fail, focusPoint, fs, imageSize, log, npx, parseArgs, path } from "./common";
+import { PACK_DIR, PUBLIC_PROJECT, REMOTION_DIR, ff, fail, focusPoint, fs, imageSize, log, npx, parseArgs, path , labelFilter, ffFilterPath } from "./common";
 
 // original sample lyrics written for this pack
 const TEXT: Record<string, [string, string, string]> = {
@@ -50,7 +50,7 @@ async function main() {
     log(`🎬 ${GENRES[g].ja}: ${used}`);
     npx(["remotion", "render", "MV", mp4, `--props=${pf}`, "--log=error", "--concurrency=4"]);
     const label = `${GENRES[g].ja}｜${used}`.replace(/:/g, "\\:").replace(/'/g, "");
-    ff(["-y", "-i", mp4, "-f", "lavfi", "-t", String(sec), "-i", "anullsrc=r=48000:cl=stereo", "-vf", `drawtext=fontfile=${font}:text='${label}':x=30:y=26:fontsize=${Math.round(Math.min(props.height / 28, props.width / 48))}:fontcolor=white:box=1:boxcolor=black@0.55:boxborderw=10`,
+    ff(["-y", "-i", mp4, "-f", "lavfi", "-t", String(sec), "-i", "anullsrc=r=48000:cl=stereo", "-vf", labelFilter(`drawtext=fontfile=${ffFilterPath(font)}:text='${label}':x=30:y=26:fontsize=${Math.round(Math.min(props.height / 28, props.width / 48))}:fontcolor=white:box=1:boxcolor=black@0.55:boxborderw=10`),
       "-map", "0:v", "-map", "1:a", "-shortest", "-c:v", "libx264", "-profile:v", "main", "-pix_fmt", "yuv420p", "-crf", "21", "-c:a", "aac", "-b:a", "128k", lab]);
     parts.push(lab);
   });
