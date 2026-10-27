@@ -3,11 +3,11 @@
 import { spawnSync } from "node:child_process";
 import os from "node:os";
 import readline from "node:readline/promises";
-import { REMOTION_DIR, fs, log, path } from "./common";
+import { REMOTION_DIR, fs, log, path, run as runCmd } from "./common";
 import { TOOLS, report, type OS, type Probe } from "./doctor_lib";
 
 const WIN = process.platform === "win32";
-const run = (c: string, a: string[] = ["--version"]) => { const r = spawnSync(c, a, { shell: WIN, encoding: "utf8", timeout: 20000 }); return { ok: r.status === 0, out: `${r.stdout ?? ""}${r.stderr ?? ""}`.trim().split("\n")[0] }; };
+const run = (c: string, a: string[] = ["--version"]) => { const r = runCmd(c, a, { encoding: "utf8", timeout: 20000 }); return { ok: r.status === 0, out: `${r.stdout ?? ""}${r.stderr ?? ""}`.trim().split("\n")[0] }; };
 export function probeAll(): Probe {
   const P: Probe = {};
   const major = Number(process.versions.node.split(".")[0]);

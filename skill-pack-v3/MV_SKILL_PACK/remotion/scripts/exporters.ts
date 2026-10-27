@@ -1,12 +1,17 @@
 // Finishing / export: audio-safe mux + faststart, Drive-size variant, DaVinci FCPXML, QA checks.
-import { ff, probe, durationOf, fs, path, md5File, UserError } from "./common";
+import crypto from "node:crypto";
+import { ff, ffTry, probe, durationOf, fs, path, md5File, UserError } from "./common";
 
 const COPYABLE = new Set(["aac", "mp3", "alac"]);
 
 /** audio stream md5 (packets, codec copy) - equal when the source audio was not re-encoded. */
 export function audioStreamMd5(file: string): string {
-  const r = ff(["-i", file, "-map", "0:a:0", "-c", "copy", "-f", "md5", "-"]);
-  return String(r.stdout).trim().replace(/^MD5=/, "");
+  const r = ffTry(["-i", file, "-map", "0:a:0", "-c", "copy", "-f", "md5", "-"]);
+  if (r.status === 0) return String(r.stdout).trim().replace(/^MD5=/, "");
+  // minimal ffmpeg (no md5 muxer): hash decoded PCM - still equal when the audio stream was copied
+  const w = ff(["-i", file, "-map", "0:a:0", "-c:a", "pcm_s16le", "-f", "wav", "-"]);
+  const b = w.stdout as Buffer, d = b.indexOf("data", 12, "latin1");
+  return "pcm:" + crypto.createHash("md5").update(b.subarray(d >= 0 ? d + 8 : 44)).digest("hex");
 }
 
 /** mux silent video + ORIGINAL audio (copied bit-exact when possible), H.264 Main yuv420p, +faststart. */

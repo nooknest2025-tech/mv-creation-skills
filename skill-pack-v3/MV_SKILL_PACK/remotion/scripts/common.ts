@@ -19,38 +19,60 @@ export function fail(e: unknown): never {
 }
 export const log = (s: string) => console.log(s);
 
+// Child Python/ffmpeg output is UTF-8 everywhere (Windows consoles default to cp932 otherwise).
+process.env.PYTHONUTF8 ??= "1";
+process.env.PYTHONIOENCODING ??= "utf-8";
+
 // ---------- Windows-safe process launch ----------
-// npx/npm are .cmd shims on Windows and need a shell; with shell:true Node joins args with spaces
-// unquoted, so paths like "C:\Users\a b\MV創作" would split. Quote for cmd.exe in that case only.
+// npx/npm are .cmd shims on Windows and need a shell. Node joins shell args unquoted (and warns DEP0190),
+// so we build one quoted command line ourselves; paths like "C:\\Users\\a b\\MV創作" stay intact.
 export const isShim = (cmd: string) => /^(npx|npm|pnpm|yarn)(\.cmd)?$/i.test(cmd);
 export function winArg(a: string): string { return a === "" ? '""' : /[\s"&|<>^()%!,;=]/.test(a) ? `"${a.replace(/"/g, '""')}"` : a; }
 export function shellOpts(cmd: string, args: string[], platform = process.platform): { args: string[]; shell: boolean } {
   const shell = platform === "win32" && isShim(cmd);
   return { args: shell ? args.map(winArg) : args, shell };
 }
+/** spawnSync that is safe for .cmd shims on Windows (no DEP0190, quoted args). */
+export function run(cmd: string, args: string[], opts: Parameters<typeof spawnSync>[2] = {}) {
+  const so = shellOpts(cmd, args);
+  return so.shell ? spawnSync([cmd, ...so.args].join(" "), { ...opts, shell: true }) : spawnSync(cmd, args, { ...opts, shell: false });
+}
 
-// ---------- ffmpeg (system, else Remotion's bundled ffmpeg via `npx remotion ffmpeg`) ----------
-let FF: { ff: string[]; probe: string[] } | null = null;
+// ---------- ffmpeg: MVPACK_FFMPEG > system > pack tools/ffmpeg > Remotion's bundled binaries ----------
+// The bundled build is minimal (no f32le/md5 muxers, no drawtext/select filters): callers fall back where possible.
+let FF: { ff: string[]; probe: string[]; full: boolean } | null = null;
+const EXE = process.platform === "win32" ? ".exe" : "";
+export function bundledBinary(name: "ffmpeg" | "ffprobe"): string | null {
+  const dir = path.join(REMOTION_DIR, "node_modules", "@remotion");
+  try { for (const d of fs.readdirSync(dir)) if (d.startsWith("compositor-")) { const f = path.join(dir, d, name + EXE); if (fs.existsSync(f)) return f; } } catch {}
+  return null;
+}
 export function ffmpegCmd() {
   if (FF) return FF;
+  const env = process.env.MVPACK_FFMPEG;
+  if (env && fs.existsSync(env)) { const pr = path.join(path.dirname(env), "ffprobe" + EXE); return (FF = { ff: [env], probe: [fs.existsSync(pr) ? pr : "ffprobe"], full: true }); }
   const sys = spawnSync(process.platform === "win32" ? "where" : "which", ["ffmpeg"], { encoding: "utf8" });
-  if (sys.status === 0 && sys.stdout.trim()) FF = { ff: ["ffmpeg"], probe: ["ffprobe"] };
-  else FF = { ff: ["npx", "remotion", "ffmpeg"], probe: ["npx", "remotion", "ffprobe"] };
-  return FF;
+  if (sys.status === 0 && sys.stdout.trim()) return (FF = { ff: ["ffmpeg"], probe: ["ffprobe"], full: true });
+  const tools = path.join(PACK_DIR, "tools", "ffmpeg");
+  if (fs.existsSync(tools)) for (const d of fs.readdirSync(tools)) { const f = path.join(tools, d, "bin", "ffmpeg" + EXE); if (fs.existsSync(f)) return (FF = { ff: [f], probe: [path.join(tools, d, "bin", "ffprobe" + EXE)], full: true }); }
+  const bf = bundledBinary("ffmpeg"), bp = bundledBinary("ffprobe");
+  if (bf && bp) return (FF = { ff: [bf], probe: [bp], full: false });
+  return (FF = { ff: ["npx", "remotion", "ffmpeg"], probe: ["npx", "remotion", "ffprobe"], full: false });
+}
+export function ffTry(args: string[], o: { input?: Buffer; maxBuffer?: number } = {}) {
+  const [cmd, ...pre] = ffmpegCmd().ff;
+  return run(cmd, [...pre, "-hide_banner", "-y", ...args], { input: o.input, maxBuffer: o.maxBuffer ?? 1 << 30, cwd: REMOTION_DIR });
 }
 export function ff(args: string[], o: { input?: Buffer; maxBuffer?: number } = {}) {
-  const [cmd, ...pre] = ffmpegCmd().ff;
-  const so = shellOpts(cmd, [...pre, "-hide_banner", "-y", ...args]);
-  const r = spawnSync(cmd, so.args, { input: o.input, maxBuffer: o.maxBuffer ?? 1 << 30, shell: so.shell, cwd: REMOTION_DIR });
+  const r = ffTry(args, o);
   if (r.status !== 0) throw new UserError(`ffmpeg が失敗しました: ${String(r.stderr).split("\n").slice(-4).join(" ")}`, "ffmpeg が無い場合は README の「ffmpeg」節（winget install Gyan.FFmpeg か、何もしなくても Remotion 同梱版が使われます）を見てください。");
   return r;
 }
 export function probe(file: string): any {
   const [cmd, ...pre] = ffmpegCmd().probe;
-  const so = shellOpts(cmd, [...pre, "-v", "error", "-print_format", "json", "-show_format", "-show_streams", file]);
-  const r = spawnSync(cmd, so.args, { encoding: "utf8", shell: so.shell, cwd: REMOTION_DIR });
+  const r = run(cmd, [...pre, "-v", "error", "-print_format", "json", "-show_format", "-show_streams", file], { encoding: "utf8", cwd: REMOTION_DIR });
   if (r.status !== 0) throw new UserError(`ファイルを読めません: ${file}`, "壊れていないか、対応形式（mp3/wav/m4a/flac, mp4/mov, png/jpg/webp）か確認してください。");
-  return JSON.parse(r.stdout);
+  return JSON.parse(String(r.stdout));
 }
 export const durationOf = (f: string) => Number(probe(f).format?.duration ?? 0);
 export const md5File = (f: string) => crypto.createHash("md5").update(fs.readFileSync(f)).digest("hex");
@@ -85,9 +107,18 @@ export function detectInput(dir: string): Detected {
 
 // ---------- audio analysis (energy / BPM / sections) with ffmpeg PCM decode ----------
 export function decodeMono(file: string, sr = 11025): Float32Array {
-  const r = ff(["-i", file, "-ac", "1", "-ar", String(sr), "-f", "f32le", "-"], { maxBuffer: 1 << 30 });
-  const b = Buffer.from(r.stdout as Buffer); // copy -> aligned
-  return new Float32Array(b.buffer.slice(b.byteOffset, b.byteOffset + Math.floor(b.length / 4) * 4));
+  // WAV/s16le: supported by both full and Remotion's minimal ffmpeg (which lacks the f32le muxer)
+  const r = ff(["-i", file, "-vn", "-ac", "1", "-ar", String(sr), "-c:a", "pcm_s16le", "-f", "wav", "-"], { maxBuffer: 1 << 30 });
+  return wavToFloat(Buffer.from(r.stdout as Buffer));
+}
+/** PCM s16le WAV (possibly streamed with unknown sizes) -> Float32 samples. */
+export function wavToFloat(b: Buffer): Float32Array {
+  let p = 12, data = -1;
+  while (p + 8 <= b.length) { const id = b.toString("latin1", p, p + 4); if (id === "data") { data = p + 8; break; } p += 8 + b.readUInt32LE(p + 4); }
+  if (data < 0) data = 44;
+  const n = Math.floor((b.length - data) / 2), out = new Float32Array(n);
+  for (let i = 0; i < n; i++) out[i] = b.readInt16LE(data + i * 2) / 32768;
+  return out;
 }
 export function analyzeAudio(file: string) {
   const sr = 11025, x = decodeMono(file, sr), hop = Math.round(sr / 100); // 100 Hz frames
@@ -145,9 +176,15 @@ export function autoSections(an: { bpm: number; phase: number; energy: number[];
 /** edge-density centroid as a cheap saliency focus point (0..1, 0..1) for smart crop. */
 export function focusPoint(file: string): [number, number] {
   try {
-    const r = ff(["-i", file, "-frames:v", "1", "-vf", "scale=64:36,format=gray,sobel", "-f", "rawvideo", "-"]);
-    const b = r.stdout as Buffer; let sx = 0, sy = 0, s = 0;
-    for (let y = 0; y < 36; y++) for (let x = 0; x < 64; x++) { const v = b[y * 64 + x] ?? 0; const w = v * v; sx += w * x; sy += w * y; s += w; }
+    // grey 64x36 raw frame (works on minimal ffmpeg too); Sobel magnitude computed here
+    const r = ff(["-i", file, "-frames:v", "1", "-vf", "scale=64:36,format=gray", "-f", "image2pipe", "-c:v", "rawvideo", "-"]);
+    const g = r.stdout as Buffer, at = (x: number, y: number) => g[Math.min(35, Math.max(0, y)) * 64 + Math.min(63, Math.max(0, x))] ?? 0;
+    let sx = 0, sy = 0, s = 0;
+    for (let y = 0; y < 36; y++) for (let x = 0; x < 64; x++) {
+      const gx = at(x + 1, y - 1) + 2 * at(x + 1, y) + at(x + 1, y + 1) - at(x - 1, y - 1) - 2 * at(x - 1, y) - at(x - 1, y + 1);
+      const gy = at(x - 1, y + 1) + 2 * at(x, y + 1) + at(x + 1, y + 1) - at(x - 1, y - 1) - 2 * at(x, y - 1) - at(x + 1, y - 1);
+      const v = Math.min(255, Math.hypot(gx, gy) / 4); const w = v * v; sx += w * x; sy += w * y; s += w;
+    }
     if (!s) return [0.5, 0.5];
     // pull toward centre (saliency is noisy)
     return [+(0.5 + ((sx / s / 63) - 0.5) * 0.7).toFixed(3), +(0.5 + ((sy / s / 35) - 0.5) * 0.7).toFixed(3)];
@@ -157,7 +194,10 @@ export function focusPoint(file: string): [number, number] {
 /** scene detection + motion score per scene for video clips. */
 export function detectScenes(file: string, thr = 0.3): { start: number; end: number; score: number }[] {
   const dur = durationOf(file);
-  const r = ff(["-i", file, "-vf", `scale=160:-2,select='gt(scene,0)',metadata=print:file=-`, "-an", "-f", "null", "-"]);
+  const r = ffTry(["-i", file, "-vf", `scale=160:-2,select='gt(scene,0)',metadata=print:file=-`, "-an", "-f", "null", "-"]);
+  if (r.status !== 0) { // minimal ffmpeg has no select/metadata filters: even ~3s segments instead
+    const n = Math.max(1, Math.round(dur / 3)); return Array.from({ length: n }, (_, i) => ({ start: (i * dur) / n, end: ((i + 1) * dur) / n, score: 0.5 }));
+  }
   const txt = String(r.stdout) + String(r.stderr);
   const pts: { t: number; s: number }[] = [];
   let cur = -1;
@@ -186,8 +226,7 @@ export function parseArgs(argv: string[]) {
   return { o, rest };
 }
 export function npx(args: string[], opts: { quiet?: boolean } = {}) {
-  const so = shellOpts("npx", args);
-  const r = spawnSync("npx", so.args, { cwd: REMOTION_DIR, stdio: opts.quiet ? "pipe" : "inherit", shell: so.shell, encoding: "utf8" });
+  const r = run("npx", args, { cwd: REMOTION_DIR, stdio: opts.quiet ? "pipe" : "inherit", encoding: "utf8" });
   if (r.status !== 0) throw new UserError(`レンダリングに失敗しました（npx ${args.slice(0, 3).join(" ")} …）。${opts.quiet ? String(r.stderr).slice(-600) : ""}`, "npm run setup で環境チェック → それでもダメならエラー全文を Codex に貼ってください。");
   return r;
 }

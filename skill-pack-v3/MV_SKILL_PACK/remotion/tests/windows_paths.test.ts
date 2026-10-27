@@ -44,3 +44,16 @@ describe("Windows-safe dynamic imports", () => {
     }
   });
 });
+
+describe("ffmpeg helpers", () => {
+  it("wavToFloat reads streamed s16le WAV", async () => {
+    const { wavToFloat } = await import("../scripts/common");
+    const h = Buffer.alloc(44); h.write("RIFF", 0); h.write("WAVE", 8); h.write("fmt ", 12); h.writeUInt32LE(16, 16); h.write("data", 36); h.writeUInt32LE(0xffffffff, 40);
+    const d = Buffer.alloc(4); d.writeInt16LE(16384, 0); d.writeInt16LE(-32768, 2);
+    expect(Array.from(wavToFloat(Buffer.concat([h, d])))).toEqual([0.5, -1]);
+  });
+  it("finds Remotion's bundled ffmpeg binary", async () => {
+    const { bundledBinary } = await import("../scripts/common");
+    expect(bundledBinary("ffmpeg")).toBeTruthy();
+  });
+});

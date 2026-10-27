@@ -14,7 +14,7 @@ describe("doctor", () => {
     expect(r.blocking).toHaveLength(0);
     expect(r.text).toContain("winget install Gyan.FFmpeg");
     expect(r.text).toContain("winget install Python.Python.3.12");
-    expect(r.text).toMatch(/Remotion 同梱の ffmpeg/);
+    expect(r.text).toMatch(/Remotion 同梱の簡易版 ffmpeg/);
     expect(r.text).toMatch(/\(先に Python\) pip install faster-whisper/);
     expect(r.text).toMatch(/完全無料ルート/);
   });
