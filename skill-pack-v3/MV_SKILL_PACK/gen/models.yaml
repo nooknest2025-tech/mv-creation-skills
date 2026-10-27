@@ -1,0 +1,706 @@
+# 動画/画像生成モデルの登録簿（provider-agnostic）。価格は公式ドキュメントで確認したものだけ記入。
+# verified: true  = 公式ページで確認済み（verified_at の日付時点）。価格は変わるので使う前に source を再確認。
+# verified: false = 未確認（price_per_sec は null。勝手に推測しない）。
+# 更新方法: 値を書き換えて verified_at を今日に → `npm run models` で一覧確認。
+models:
+- id: grok-imagine-video-1.5-lite
+  provider: xAI API
+  kind: video
+  price_per_sec:
+    480p: 0.02
+    720p: 0.03
+    1080p: 0.14
+  input_extra: 画像入力 $0.01/枚
+  max_res: 1080p (720pからのアップスケール)
+  max_sec: 15
+  aspects:
+  - '1:1'
+  - '16:9'
+  - '9:16'
+  - '4:3'
+  - '3:4'
+  - '3:2'
+  - '2:3'
+  - '21:9'
+  - '5:2'
+  strengths: 最安。テキスト/画像→動画、リップシンク音声つき。量産・背景・つなぎカット向き
+  verified: true
+  verified_at: 2026-10-26
+  source: https://docs.x.ai/developers/model-capabilities/video/overview
+  family: grok
+  modes:
+  - t2v
+  - i2v
+  durations:
+  - 1
+  - 15
+  audio: native+lipsync
+  refs: 0
+  first_last: false
+- id: grok-imagine-video-1.5
+  provider: xAI API
+  kind: video
+  price_per_sec:
+    480p: 0.08
+    720p: 0.14
+    1080p: 0.25
+  input_extra: 画像入力 $0.01/枚、プリセット音声は無料
+  max_res: 1080p (native)
+  max_sec: 15
+  aspects:
+  - '1:1'
+  - '16:9'
+  - '9:16'
+  - '4:3'
+  - '3:4'
+  - '3:2'
+  - '2:3'
+  - '21:9'
+  - '5:2'
+  strengths: 最高品質。参照画像14枚・最初/最後/中間フレーム指定・ネイティブ1080p。キャラの一貫性・リップシンク向き
+  verified: true
+  verified_at: 2026-10-26
+  source: https://docs.x.ai/developers/models/grok-imagine-video-1.5
+  family: grok
+  modes:
+  - t2v
+  - i2v
+  - ref
+  durations:
+  - 1
+  - 15
+  audio: native+lipsync
+  refs: 14
+  first_last: true
+  keyframes: 4
+- id: grok-imagine-video
+  provider: xAI API
+  kind: video
+  price_per_sec:
+    480p: 0.05
+    720p: 0.07
+  input_extra: 動画入力 $0.01/秒、画像入力 $0.002/枚
+  max_res: 720p
+  max_sec: 15
+  aspects:
+  - '1:1'
+  - '16:9'
+  - '9:16'
+  - '4:3'
+  - '3:4'
+  - '3:2'
+  - '2:3'
+  - '21:9'
+  - '5:2'
+  strengths: 既存動画の編集・延長（2〜10秒追加）
+  verified: true
+  verified_at: 2026-10-26
+  source: https://docs.x.ai/developers/models/grok-imagine-video
+  family: grok
+  modes:
+  - t2v
+  - i2v
+  - ref
+  - edit
+  - extend
+  durations:
+  - 1
+  - 15
+  audio: generated
+  refs: 7
+  first_last: false
+- id: runway/gen4_turbo
+  provider: Runway API
+  kind: video
+  price_per_sec:
+    any: 0.05
+  input_extra: 5 credits/秒（1 credit = $0.01）、最低10 credits/回、画像入力必須
+  max_res: 720p相当 (1280:720)
+  max_sec: 10
+  aspects:
+  - '16:9'
+  - '9:16'
+  - '1:1'
+  strengths: 画像→動画が速い
+  verified: true
+  verified_at: 2026-10-26
+  source: https://docs.dev.runwayml.com/guides/pricing/
+  family: runway
+  modes:
+  - i2v
+  durations: null
+  audio: null
+  refs: 0
+  first_last: false
+- id: runway/gen4.5
+  provider: Runway API
+  kind: video
+  price_per_sec:
+    any: 0.12
+  input_extra: 12 credits/秒
+  max_res: null
+  max_sec: null
+  aspects: null
+  strengths: Runway の上位モデル（テキスト/画像→動画）
+  verified: true
+  verified_at: 2026-10-26
+  source: https://docs.dev.runwayml.com/guides/pricing/
+  family: runway
+  modes:
+  - t2v
+  - i2v
+  durations: null
+  audio: null
+  refs: 0
+  first_last: false
+- id: gemini-omni-1.1-flash
+  provider: Google Gemini API
+  kind: video
+  price_per_sec: null
+  input_extra: トークン課金。公式ページで要確認（第三者サイトでは720pで約$0.10/秒と紹介）
+  max_res: null
+  max_sec: null
+  aspects: null
+  strengths: Veo 3.1 Preview の後継として案内されている
+  verified: false
+  verified_at: null
+  source: https://ai.google.dev/gemini-api/docs/pricing
+  family: veo
+- id: veo-3.1-*-preview
+  provider: Google Gemini API
+  kind: video
+  price_per_sec: null
+  input_extra: 2026-10-22 に提供終了（公式告知）。使わないでください
+  max_res: 4k
+  max_sec: 8
+  aspects:
+  - '16:9'
+  - '9:16'
+  strengths: (終了)
+  verified: true
+  verified_at: 2026-10-26
+  deprecated: true
+  source: https://ai.google.dev/gemini-api/docs/veo
+  family: veo
+- id: pollo/pollo-v2-5
+  provider: Pollo AI API / MCP
+  mcp_model:
+    modelBrand: pollo
+    modelAlias: pollo-v2-5
+  kind: video
+  price_per_sec:
+    720p: 0.03
+    1080p: 0.054
+  input_extra: 音声なし basic モードの価格（5秒 $0.15 / 1080p $0.27）。音声ありは 720p $0.072/秒・1080p $0.096/秒。pro モードは別料金
+  max_res: 1080p
+  min_sec: 4
+  max_sec: 12
+  aspects:
+  - '16:9'
+  - '9:16'
+  - '1:1'
+  strengths: 安い。マルチショット・キャラの一貫性・カメラ指定。つなぎ〜見せ場まで
+  verified: true
+  verified_at: 2026-10-26
+  source: https://api.pollo.ai/pollo-ai/pollo-v2-5
+  family: pollo
+  modes:
+  - t2v
+  - i2v
+  durations:
+  - 4
+  - 12
+  audio: optional
+  refs: null
+  first_last: null
+- id: pollo/kling-v3-omni
+  provider: Pollo AI API / MCP
+  kind: video
+  price_per_sec:
+    any: 0.066
+  input_extra: Pollo API トップページ記載の1秒あたり価格（解像度・音声で変わる可能性あり。使う前にモデルページで確認）
+  max_res: null
+  max_sec: null
+  aspects: null
+  strengths: マルチモーダル入力・音声生成・見た目の一貫性・動きの制御
+  verified: true
+  verified_at: 2026-10-26
+  source: https://api.pollo.ai/
+  family: kling
+- id: pollo/minimax-h3
+  provider: Pollo AI API / MCP
+  kind: video
+  price_per_sec:
+    any: 0.0372
+  input_extra: Pollo API トップページ記載の1秒あたり価格（条件で変わる可能性あり）
+  max_res: null
+  max_sec: null
+  aspects: null
+  strengths: マルチショット・音声同期・カメラ制御・キーフレーム
+  verified: true
+  verified_at: 2026-10-26
+  source: https://api.pollo.ai/
+  family: hailuo
+- id: pollo/app-credits
+  provider: Pollo AI（アプリ / リモートMCP・クレジット制）
+  kind: video
+  price_per_sec: null
+  input_extra: Pollo アカウントのクレジットで課金。MCP の pollo_estimate_generation_cost で事前に見積もれる（ドル換算は未確認）
+  max_res: null
+  max_sec: null
+  aspects: null
+  strengths: Codex から MCP でそのまま使える（300以上のモデル）
+  verified: false
+  verified_at: null
+  source: https://pollo.ai/mcp
+  family: pollo
+- id: wan2.6-t2v
+  family: wan
+  provider: Alibaba Cloud Model Studio
+  kind: video
+  modes:
+  - t2v
+  price_per_sec:
+    720p: 0.086012
+    1080p: 0.143353
+  input_extra: 音声URL入力で音に合わせた生成が可能（wav/mp3 3〜30秒）。shot_type multi でマルチショット
+  max_res: 1080p
+  min_sec: 2
+  max_sec: 15
+  durations:
+  - 2
+  - 15
+  aspects:
+  - '16:9'
+  - '9:16'
+  - '1:1'
+  - '4:3'
+  - '3:4'
+  audio: audio_url input
+  refs: 0
+  first_last: false
+  negative_prompt: true
+  prompt_max: 1500
+  strengths: マルチショットの物語（被写体・場面の一貫性）、ネガティブプロンプト対応、中国語/英語
+  verified: true
+  verified_at: '2026-10-27'
+  source: https://docs.modelstudio.console.alibabacloud.com/en/model-studio/wan2-6-t2v ; https://www.alibabacloud.com/help/en/model-studio/legacy-wan-text-to-video-api-reference
+- id: wan2.6-i2v
+  family: wan
+  provider: Alibaba Cloud Model Studio
+  kind: video
+  modes:
+  - i2v
+  price_per_sec:
+    720p: 0.086012
+    1080p: 0.143353
+  max_res: 1080p
+  min_sec: 2
+  max_sec: 15
+  durations:
+  - 2
+  - 15
+  aspects: null
+  audio: audio_url input
+  refs: 0
+  first_last: null
+  negative_prompt: true
+  prompt_max: 1500
+  strengths: 画像から動画。ネガティブプロンプト対応
+  verified: true
+  verified_at: '2026-10-27'
+  source: https://docs.modelstudio.console.alibabacloud.com/en/model-studio/wan2-6-i2v
+- id: MiniMax-Hailuo-2.3
+  family: hailuo
+  provider: MiniMax API
+  kind: video
+  modes:
+  - t2v
+  - i2v
+  price_per_sec:
+    768p: 0.0467
+    1080p: 0.0817
+  input_extra: '1本単位の料金: 768P 6秒 $0.28 / 10秒 $0.56、1080P 6秒 $0.49（秒単価は換算）'
+  max_res: 1080p
+  durations:
+  - 6
+  - 10
+  allowed_durations:
+  - 6
+  - 10
+  aspects: null
+  audio: null
+  refs: 0
+  first_last: false
+  camera_syntax: '[Pan left] など15種のカメラ命令（最大3つ同時）'
+  prompt_max: 2000
+  strengths: カメラ命令が正確（[Push in] [Tracking shot] 等）。1080Pは6秒のみ
+  verified: true
+  verified_at: '2026-10-27'
+  source: https://platform.minimax.io/docs/api-reference/video-generation-t2v ; https://platform.minimax.io/docs/pricing/overview
+- id: MiniMax-H3
+  family: hailuo
+  provider: MiniMax API
+  kind: video
+  modes:
+  - t2v
+  - i2v
+  price_per_sec:
+    768p: 0.08
+    2k: 0.13
+  input_extra: '画像入力: 1タスク5枚まで無料、以降 $0.04/枚。動画入力も秒課金。尺・カメラ命令の対応は未確認'
+  max_res: 2k
+  durations: null
+  aspects: null
+  audio: null
+  refs: null
+  first_last: null
+  strengths: MiniMax の最上位（品質優先）
+  verified: true
+  verified_at: '2026-10-27'
+  source: https://platform.minimax.io/docs/pricing/overview
+- id: MiniMax-H3-Highspeed
+  family: hailuo
+  provider: MiniMax API
+  kind: video
+  modes:
+  - t2v
+  - i2v
+  price_per_sec:
+    768p: 0.06
+  max_res: 768p
+  durations: null
+  strengths: 品質と速度のバランス
+  verified: true
+  verified_at: '2026-10-27'
+  source: https://platform.minimax.io/docs/pricing/overview
+- id: MiniMax-H3-Lite
+  family: hailuo
+  provider: MiniMax API
+  kind: video
+  modes:
+  - t2v
+  - i2v
+  price_per_sec:
+    480p: 0.025
+    768p: 0.04
+  max_res: 768p
+  durations: null
+  strengths: 低価格・試作/大量生成
+  verified: true
+  verified_at: '2026-10-27'
+  source: https://platform.minimax.io/docs/pricing/overview
+- id: seedance-2.0
+  family: seedance
+  provider: BytePlus ModelArk
+  kind: video
+  modes:
+  - t2v
+  - i2v
+  - ref
+  price_per_sec: null
+  input_extra: トークン課金（公式価格ページ未確認。第三者の再販サイトでは 720p 約$0.13/秒と紹介）
+  max_res: 4k
+  durations:
+  - 4
+  - 15
+  aspects:
+  - '16:9'
+  - '9:16'
+  - '1:1'
+  - '4:3'
+  - '3:4'
+  - '21:9'
+  audio: native
+  refs: 9
+  first_last: true
+  strengths: 参照画像9枚・参照動画/音声・最初と最後のフレーム・ネイティブ音声。仕様は公式API形式を再掲した第三者ドキュメントで確認
+  verified: false
+  verified_at: null
+  source: https://docs.byteplus.com/en/docs/modelark/seedance-2-0-prompt-guide ; (仕様の再掲) https://modelrun.dev/docs/video/seedance-2-0
+- id: kling-3.0
+  family: kling
+  provider: Kling AI API
+  kind: video
+  modes:
+  - t2v
+  - i2v
+  price_per_sec:
+    720p: 0.084
+    1080p: 0.112
+    4k: 0.42
+  input_extra: ネイティブ音声ありは 720p $0.126/秒・1080p $0.168/秒。Motion Control も 0.126/0.168
+  max_res: 4k
+  durations:
+  - 3
+  - 15
+  aspects:
+  - '16:9'
+  - '9:16'
+  - '1:1'
+  audio: native (optional)
+  refs: null
+  first_last: true
+  multishot: shot n, m, words; （最大6ショット）
+  prompt_max: 3072
+  strengths: マルチショット、最初/最後のフレーム、1ショット1つのカメラ動作で安定
+  verified: true
+  verified_at: '2026-10-27'
+  source: https://kling.ai/document-api/pricing/base/video.md
+- id: kling-2.6
+  family: kling
+  provider: Kling AI API
+  kind: video
+  modes:
+  - t2v
+  - i2v
+  price_per_sec:
+    720p: 0.042
+    1080p: 0.07
+  input_extra: 音声なしの価格。ネイティブ音声つきは 1080p $0.14/秒
+  max_res: 1080p
+  durations: null
+  strengths: 安価な Kling
+  verified: true
+  verified_at: '2026-10-27'
+  source: https://kling.ai/document-api/pricing/base/video.md
+- id: runway/aleph2
+  family: runway
+  provider: Runway API
+  kind: video
+  modes:
+  - edit
+  price_per_sec:
+    any: 0.28
+  input_extra: 28 credits/秒、1回最低56 credits。動画→動画（編集）
+  max_res: null
+  durations: null
+  strengths: 既存の映像を編集（スタイル変更・要素の差し替え）
+  verified: true
+  verified_at: '2026-10-27'
+  source: https://docs.dev.runwayml.com/guides/pricing/
+- id: veo-3.1-generate-001
+  family: veo
+  provider: Google Vertex AI
+  kind: video
+  modes:
+  - t2v
+  - i2v
+  price_per_sec: null
+  input_extra: Vertex AI の価格ページ未確認。Gemini API の Preview 版は 2026-10-22 終了
+  max_res: 1080p
+  durations:
+  - 4
+  - 8
+  allowed_durations:
+  - 4
+  - 6
+  - 8
+  aspects:
+  - '16:9'
+  - '9:16'
+  audio: native
+  refs: null
+  first_last: true
+  strengths: lastFrame（最初→最後の補間）、音声の手がかりをプロンプトに書ける
+  verified: false
+  verified_at: '2026-10-27'
+  source: https://docs.cloud.google.com/vertex-ai/generative-ai/docs/model-reference/veo-video-generation
+- id: luma/ray-3.2
+  family: luma
+  provider: Luma API
+  kind: video
+  modes:
+  - t2v
+  - i2v
+  - edit
+  price_per_sec:
+    540p: 0.03
+    720p: 0.06
+    1080p: 0.24
+  input_extra: '5秒ごとの課金: 540p $0.15 / 720p $0.30 / 1080p $1.20（10秒は2倍）。HDRは2倍'
+  max_res: 1080p
+  durations:
+  - 5
+  - 10
+  allowed_durations:
+  - 5
+  - 10
+  aspects: null
+  audio: null
+  refs: null
+  first_last: null
+  strengths: 5秒/10秒、HDR出力、動画→動画
+  verified: true
+  verified_at: '2026-10-27'
+  source: https://docs.agents.lumalabs.ai/guides/pricing/
+- id: pixverse/v5
+  family: pixverse
+  provider: PixVerse Platform API
+  kind: video
+  modes:
+  - t2v
+  - i2v
+  price_per_sec: null
+  input_extra: 'クレジット課金: 1080p 5秒 120クレジット / 8秒 240クレジット（ドル換算は未確認）'
+  max_res: 1080p
+  durations:
+  - 5
+  - 8
+  allowed_durations:
+  - 5
+  - 8
+  aspects: null
+  audio: null
+  refs: 0
+  first_last: null
+  strengths: 1080pは5秒のみ。カメラは文章で指定
+  verified: false
+  verified_at: '2026-10-27'
+  source: https://docs.platform.pixverse.ai/model-pricing-796039m0
+- id: vidu/q3
+  family: vidu
+  provider: Vidu API
+  kind: video
+  modes:
+  - t2v
+  - i2v
+  - ref
+  price_per_sec: null
+  input_extra: 'クレジット/秒: 参照生成 540p 7 / 720p 12 / 1080p 15（turbo は 4/10/13）。ドル換算は未確認'
+  max_res: 1080p
+  durations:
+  - 3
+  - 16
+  aspects: null
+  audio: optional
+  refs: null
+  first_last: null
+  strengths: 参照（subjects）でキャラ・物を固定する reference-to-video
+  verified: false
+  verified_at: '2026-10-27'
+  source: https://platform.vidu.com/docs/api-reference/video-models/vidu-q3/reference-to-video ; https://platform.vidu.com/docs/pricing.md
+- id: pollo/pollo-v2
+  family: pollo
+  provider: Pollo AI API
+  kind: video
+  modes:
+  - t2v
+  - i2v
+  price_per_sec: null
+  input_extra: 'パラメータ: 480p/720p/1080p・1〜10秒・generateAudio。価格は未確認'
+  max_res: 1080p
+  durations:
+  - 1
+  - 10
+  aspects: null
+  audio: optional
+  strengths: Pollo のネイティブモデル
+  verified: false
+  verified_at: '2026-10-27'
+  source: https://docs.pollo.ai/pollo-ai/pollo-v2
+- id: sora-2
+  family: sora
+  provider: OpenAI API
+  kind: video
+  modes:
+  - t2v
+  - i2v
+  price_per_sec: null
+  input_extra: API は 2026-09-24 に提供終了（OpenAI ドキュメント）。使わないでください
+  max_res: null
+  durations:
+  - 4
+  - 12
+  deprecated: true
+  verified: true
+  verified_at: '2026-10-27'
+  source: https://developers.openai.com/api/docs/guides/video-generation
+- id: manual/grok-app
+  provider: Grok アプリ / grok.com（手動）
+  kind: video
+  price_per_sec:
+    any: 0
+  input_extra: API課金なし。プラン（SuperGrok 等）の利用枠内。生成した動画を input/ に入れるだけ
+  max_res: null
+  max_sec: null
+  aspects: null
+  strengths: 追加料金ゼロ。プロンプトは npm run gen -- plan が書き出すシートからコピペ
+  verified: false
+  verified_at: null
+  source: https://grok.com
+  family: grok
+- id: manual/stills
+  provider: このパック（静止画モード）
+  kind: video
+  price_per_sec:
+    any: 0
+  input_extra: 画像だけで動き（Ken Burns・疑似2.5D・光・粒子・拍の揺れ）をつける
+  max_res: 4K
+  max_sec: null
+  aspects:
+  - '16:9'
+  - '9:16'
+  - '1:1'
+  - '4:5'
+  strengths: 完全無料・ローカル
+  verified: true
+  verified_at: 2026-10-26
+  source: README_ja.md
+  family: stills
+- id: grok-imagine-image
+  family: grok-image
+  provider: xAI API
+  kind: image
+  price_per_image: 0.02
+  input_extra: 1K/2K とも $0.02/枚、入力画像 $0.002/枚
+  verified: true
+  verified_at: 2026-10-27
+  source: https://docs.x.ai/developers/models/grok-imagine-image
+- id: grok-imagine-image-2.0
+  family: grok-image
+  provider: xAI API
+  kind: image
+  price_per_image: 0.04
+  input_extra: 1K Low $0.04〜2K Medium $0.08。参照画像5枚まで編集・合成
+  max_refs: 5
+  verified: true
+  verified_at: 2026-10-27
+  source: https://docs.x.ai/developers/pricing
+- id: runway/gen4_image
+  family: runway-image
+  provider: Runway API
+  kind: image
+  price_per_image: 0.05
+  input_extra: 5 credits(720p) / 8 credits(1080p)。referenceImages 1〜3枚を @タグ で参照
+  max_refs: 3
+  verified: true
+  verified_at: 2026-10-27
+  source: https://github.com/runwayml/skills/blob/main/skills/rw-api-reference/SKILL.md
+- id: gemini-image
+  family: gemini-image
+  provider: Google Gemini API（Imagen / Gemini 画像）
+  kind: image
+  price_per_image: null
+  input_extra: 価格・参照枚数は未確認
+  verified: false
+  verified_at: null
+  source: https://ai.google.dev/gemini-api/docs/pricing
+- id: flux
+  family: flux
+  provider: Black Forest Labs ほか
+  kind: image
+  price_per_image: null
+  input_extra: 価格・参照枚数は未確認
+  verified: false
+  verified_at: null
+  source: https://docs.bfl.ai/
+- id: local/sd
+  family: local-sd
+  provider: ローカル Stable Diffusion（ComfyUI / A1111 など）
+  kind: image
+  price_per_image: 0
+  input_extra: API料金ゼロ（自分のPCのGPUで生成）。品質・速度はPC次第
+  verified: true
+  verified_at: 2026-10-27
+  source: README_ja.md

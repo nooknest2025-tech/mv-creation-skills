@@ -1,0 +1,6 @@
+# 任意（無くても MV は作れます）
+# 目パチ・口パクの顔検出（OpenCV 5 は検出器が無いので 4.x）
+opencv-python-headless<5
+numpy
+# 歌詞の自動書き起こし
+faster-whisper

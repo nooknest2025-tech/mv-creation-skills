@@ -20,3 +20,7 @@ skill-pack-v3/MV_SKILL_PACK/remotion/build/
 skill-pack-v3/MV_SKILL_PACK/gen/takes/
 skill-pack-v3/MV_SKILL_PACK/tools/ffmpeg/
 *.log
+skill-pack-v3/MV_SKILL_PACK/remotion/public/fonts/dl/
+skill-pack-v3/MV_SKILL_PACK/remotion/src/lib/fonts.gen.json
+skill-pack-v3/MV_SKILL_PACK/remotion/out/
+**/node_modules
