@@ -20,9 +20,10 @@ const publicDir=path.join(runtime,'.render-public');fs.mkdirSync(publicDir,{recu
 for(const item of [...snapshot.data.assets.map(a=>typeof a==='string'?a:a.src),snapshot.data.audioFile,'editor.css','font-options.css']){const src=path.resolve(runtime,item),dest=path.resolve(publicDir,item);if(!src.startsWith(runtime+path.sep)||!dest.startsWith(publicDir+path.sep))throw Error('Media path must stay inside project output');fs.mkdirSync(path.dirname(dest),{recursive:true});fs.copyFileSync(src,dest)}
 fs.cpSync(path.join(runtime,'editor-fonts'),path.join(publicDir,'editor-fonts'),{recursive:true});
 const serveUrl=await bundle({entryPoint:path.join(editor,'export-entry.tsx'),publicDir});
-const inputProps={data:snapshot.data};const composition=await selectComposition({serveUrl,id:'EditableMV',inputProps,browserExecutable});
+const gl=process.env.MVPACK_GL||(process.platform==='win32'?'angle':null);const chromiumOptions=gl?{gl}:{};
+const inputProps={data:snapshot.data};const composition=await selectComposition({serveUrl,id:'EditableMV',inputProps,browserExecutable,chromiumOptions});
 const silent=output.replace(/\.mp4$/,'.silent.mp4'),qa=snapshot.qaFrames;
-await renderMedia({serveUrl,composition,inputProps,browserExecutable,binariesDirectory,outputLocation:silent,muted:true,codec:'h264',pixelFormat:'yuv420p',crf:20,concurrency:2,frameRange:qa?[0,qa-1]:undefined,onProgress:p=>console.log(Math.min(98,Math.round(p.progress*98))),logLevel:'error'});
+await renderMedia({serveUrl,composition,inputProps,browserExecutable,chromiumOptions,binariesDirectory,outputLocation:silent,muted:true,codec:'h264',pixelFormat:'yuv420p',crf:20,concurrency:2,frameRange:qa?[0,qa-1]:undefined,onProgress:p=>console.log(Math.min(98,Math.round(p.progress*98))),logLevel:'error'});
 const audio=path.resolve(runtime,snapshot.data.audioFile);
 if(!audio.startsWith(runtime+path.sep))throw Error('Audio must be inside project editor output');
 const args=['-y','-v','error','-i',silent,'-i',audio,'-map','0:v','-map','1:a','-vf','scale=out_range=tv,format=yuv420p','-c:v','libx264','-preset','fast','-crf','20','-color_range','tv','-c:a','aac','-b:a','256k','-t',String(qa?Math.min(snapshot.data.duration,qa/snapshot.data.fps):snapshot.data.duration),'-movflags','+faststart',output];
