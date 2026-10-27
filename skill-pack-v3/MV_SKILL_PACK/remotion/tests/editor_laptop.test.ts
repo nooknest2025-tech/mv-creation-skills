@@ -68,3 +68,21 @@ describe("素材の差し替え（動画も画像と同じ）", () => {
     } finally { srv.kill(); }
   }, 20000);
 });
+
+import { resizeSceneOnly, moveSceneOnly } from "../editor/timeline";
+describe("Ctrl＋ドラッグ：そのシーンだけ", () => {
+  const S = () => [{ start: 0 }, { start: 2 }, { start: 4 }, { start: 6 }];
+  it("edge resize clamps the neighbour at 0.5s, never deletes it", () => {
+    const s = S(); resizeSceneOnly(s, 1, "end", 9, 8); expect(s.map((x) => x.start)).toEqual([0, 2, 5.5, 6]);
+    resizeSceneOnly(s, 1, "start", -3, 8); expect(s[1].start).toBe(0.5);
+  });
+  it("body move keeps its length; previous stretches, next is trimmed (min 0.5s)", () => {
+    const s = S(); moveSceneOnly(s, 1, 2, 4, 1, 8); expect(s.map((x) => x.start)).toEqual([0, 3, 5, 6]);
+    const t = S(); moveSceneOnly(t, 1, 2, 4, 9, 8); expect(t.map((x) => x.start)).toEqual([0, 3.5, 5.5, 6]);
+    const u = S(); moveSceneOnly(u, 1, 2, 4, -9, 8); expect(u.map((x) => x.start)).toEqual([0, 0.5, 2.5, 6]);
+  });
+  it("first scene stays at 0, last scene still ends with the song", () => {
+    const s = S(); moveSceneOnly(s, 0, 0, 2, 1, 8); expect(s.map((x) => x.start)).toEqual([0, 3, 4, 6]);
+    const t = S(); moveSceneOnly(t, 3, 6, 8, -1, 8); expect(t.map((x) => x.start)).toEqual([0, 2, 4, 5]);
+  });
+});

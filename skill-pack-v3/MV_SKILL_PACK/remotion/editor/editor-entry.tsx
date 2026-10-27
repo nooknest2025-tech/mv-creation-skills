@@ -2,7 +2,7 @@ import React from 'react';
 import {createRoot} from 'react-dom/client';
 import {lyricRange,sceneRange,loopStep} from './loop';
 import {sceneName} from '../src/lib/editstate';
-import {snapTime,pinDefault,resizeBoundary,sceneEdges,sceneBoundaryIndex,resetClipForAsset,ADD_ASSET_EXT,isVideoName,moveLyricEdge,moveLyric,slideInPoint,fmt} from './timeline';
+import {snapTime,pinDefault,resizeBoundary,sceneEdges,sceneBoundaryIndex,resizeSceneOnly,moveSceneOnly,resetClipForAsset,ADD_ASSET_EXT,isVideoName,moveLyricEdge,moveLyric,slideInPoint,fmt} from './timeline';
 import {clipPlan,clipSummary,trimSpan,SPEED_PRESETS,TAILS,SPEED_MIN,SPEED_MAX} from '../src/lib/clipspeed';
 import {Scene,isVideoAsset,CATALOG,FONT_OPTIONS,POSITIONS,EFFECTS,TRANSITIONS,CAMERA_MOVES,EFFECT_FX,STRENGTH,SYNC,sceneMove} from './editor-scene';
 const root=createRoot(document.getElementById('stage')!);
@@ -174,7 +174,7 @@ function clipPanel(cur:()=>number,preview:()=>void){
 const PIN_KEY='mvEditor.pinTimeline';
 const pinWanted=()=>{let v:string|null=null;try{v=localStorage.getItem(PIN_KEY)}catch{}return pinDefault(v,innerHeight)};
 function timeline(){
- const host=$('timeline');host.innerHTML=`<div class="tlBar"><b>タイムライン</b><button id="pinToggle" class="pinToggle" aria-pressed="false" title="映像はいつも上に固定。タイムラインも一緒に固定するか">タイムラインも固定 OFF</button><label>ズーム <input id="tlZoom" type="range" min="10" max="200" value="${pxs}" aria-label="タイムラインのズーム"></label><span class="hint">帯の左端・右端どちらもドラッグで長さ変更（拍にくっつく／Shift・Altで自由）。動画の「自動で合わせる」は場面の長さに合わせて速さも自動調整。帯をクリックで選択。</span></div>
+ const host=$('timeline');host.innerHTML=`<div class="tlBar"><b>タイムライン</b><button id="pinToggle" class="pinToggle" aria-pressed="false" title="映像はいつも上に固定。タイムラインも一緒に固定するか">タイムラインも固定 OFF</button><label>ズーム <input id="tlZoom" type="range" min="10" max="200" value="${pxs}" aria-label="タイムラインのズーム"></label><span class="hint tlKeys">端をドラッグ：隣も連動 ／ Ctrl＋ドラッグ：そのシーンだけ ／ Shift・Alt：拍に吸着しない</span></div>
  <div id="tlScroll"><div id="tlInner"><div id="tlBeats"></div><div class="tlRow" id="tlScenes"></div><div class="tlRow" id="tlLyrics"></div><div id="tlHead"></div></div></div><div id="tlTip" hidden></div>`;
  const sc=$('tlScroll'),tip=$('tlTip');
  const pb=$('pinToggle'),pinSync=()=>{const on=pinWanted();document.body.classList.toggle('pinTimeline',on);const top=$('stickyTop'),tl=$('timeline');if(on){if(tl.parentElement!==top)top.append(tl)}else if(tl.parentElement===top)top.after(tl);pb.setAttribute('aria-pressed',String(on));pb.textContent='タイムラインも固定 '+(on?'ON':'OFF')};pb.onclick=()=>{try{localStorage.setItem(PIN_KEY,pinWanted()?'0':'1')}catch{}pinSync()};pinSync();
@@ -192,16 +192,18 @@ function timeline(){
   if(!blk){cue(x);return}
   const edge=tg.dataset.edge;
   if(blk.dataset.scene){const i=Number(blk.dataset.scene),s=data.scenes[i];selectSceneUi(i);
-   if(edge)drag={kind:'cut',i:sceneBoundaryIndex(i,edge as any)};else if(isVideoAsset(data.assets[s.asset]))drag={kind:'slide',i,x0:x,from0:s.clipFrom??0,to0:s.clipTo,rate:clipPlan(s,sceneDur(i),clipLen(s)).rate,moved:false};else drag=null}
+   const solo=e.ctrlKey||e.metaKey;if(solo&&edge)drag={kind:'soloEdge',i,edge};else if(solo)drag={kind:'soloMove',i,x0:x,s0:s.start,e0:s.start+sceneDur(i),moved:false};else if(edge)drag={kind:'cut',i:sceneBoundaryIndex(i,edge as any)};else if(isVideoAsset(data.assets[s.asset]))drag={kind:'slide',i,x0:x,from0:s.clipFrom??0,to0:s.clipTo,rate:clipPlan(s,sceneDur(i),clipLen(s)).rate,moved:false};else drag=null}
   else{const id=blk.dataset.lyric!;selectLyricUi(id);drag=edge?{kind:'lyr',id,edge}:{kind:'lyrMove',id,x0:x,s0:data.lyrics.find((l:any)=>l.id===id).start,moved:false}}
   if(drag){sc.setPointerCapture(e.pointerId);e.preventDefault()}});
  sc.addEventListener('pointermove',(e:PointerEvent)=>{if(!drag)return;let x=at(e);const free=e.shiftKey||e.altKey;const snap=(v:number)=>free?v:snapTime(v,data.bpm||120,data.phase??0,Math.max(.04,6/pxs));let msg='';
   if(drag.kind==='cut'){const v=resizeBoundary(data.scenes,drag.i,snap(x),data.duration);msg=`切替 ${fmt(v)}（前の場面 ${sceneDur(drag.i-1).toFixed(2)}秒／この場面 ${sceneDur(drag.i).toFixed(2)}秒）`}
+  else if(drag.kind==='soloEdge'){const v=resizeSceneOnly(data.scenes,drag.i,drag.edge,snap(x),data.duration);msg=`このシーンだけ：${drag.edge==='start'?'開始':'終わり'} ${fmt(v)}（長さ ${sceneDur(drag.i).toFixed(2)}秒）`}
+  else if(drag.kind==='soloMove'){if(Math.abs(x-drag.x0)*pxs<3&&!drag.moved)return;drag.moved=true;moveSceneOnly(data.scenes,drag.i,drag.s0,drag.e0,snap(drag.s0+(x-drag.x0))-drag.s0,data.duration);msg=`このシーンだけ移動：${fmt(data.scenes[drag.i].start)}〜${fmt(data.scenes[drag.i].start+sceneDur(drag.i))}`}
   else if(drag.kind==='slide'){const s=data.scenes[drag.i];const L=clipLen(s);if(drag.to0!==undefined){const w=drag.to0-drag.from0;s.clipFrom=slideInPoint(drag.from0,x-drag.x0,drag.rate,L!==undefined?L-w+.05:undefined);s.clipTo=+(s.clipFrom+w).toFixed(3)}else s.clipFrom=slideInPoint(drag.from0,x-drag.x0,drag.rate,L);drag.moved=true;msg=`使う部分 IN ${s.clipFrom.toFixed(2)}秒`+(s.clipTo!==undefined?`〜OUT ${s.clipTo.toFixed(2)}秒`:'')}
   else if(drag.kind==='lyr'){const l=data.lyrics.find((l:any)=>l.id===drag.id);const v=moveLyricEdge(l,drag.edge,snap(x),data.duration);msg=`${drag.edge==='start'?'開始':'終了'} ${fmt(v)}（長さ ${(l.end-l.start).toFixed(2)}秒）`}
   else{const l=data.lyrics.find((l:any)=>l.id===drag.id);if(Math.abs(x-drag.x0)*pxs<3&&!drag.moved)return;drag.moved=true;const len=l.end-l.start;moveLyric(l,snap(drag.s0+(x-drag.x0))-l.start,data.duration);msg=`歌詞 ${fmt(l.start)}〜${fmt(l.start+len)}`}
   tip.hidden=false;tip.textContent=msg+(free?'　（自由）':'　（拍にくっつく・Shift/Altで自由）');tip.style.left=e.clientX+12+'px';tip.style.top=e.clientY-34+'px';change()});
- const end=()=>{if(drag){if(drag.kind==='cut')cue(data.scenes[drag.i].start)}drag=null;tip.hidden=true};
+ const end=()=>{if(drag){if(drag.kind==='cut'||drag.kind==='soloEdge'||drag.kind==='soloMove')cue(data.scenes[drag.i].start)}drag=null;tip.hidden=true};
  sc.addEventListener('pointerup',end);sc.addEventListener('pointercancel',end);
  drawTimeline();
 }
@@ -249,13 +251,30 @@ function tables(){
  audio.pause();let begin=performance.now();let demo=JSON.parse(JSON.stringify(data));demo.lyrics=[{...l,start:0,end:3.5,motion:key}];mode='sample';function tick(now:number){if(mode!=='sample')return;const dt=(now-begin)/1000%4;root.render(<Scene data={demo} t={dt}/>);requestAnimationFrame(tick)}requestAnimationFrame(tick)};$('gallery').append(b)})
 }
 async function api(path:string,body?:any){const r=await fetch(path,body===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json();if(!r.ok)throw Error(d.error||r.statusText);return d}
-async function load(){const state=await api('/api/state');data=state.data;revision=state.revision;audio.src=data.audioFile;$('projectTitle').textContent=data.title??'MVエディター';$('bpmNote').textContent=`この曲のテンポ: ${Math.round(data.bpm||120)} BPM（曲データから自動で読み込み）`;document.title=(data.title??'MV')+'｜編集';$('seek').max=data.duration;tables();appearance();sceneInspector();timeline();fit();draw();dirty=false;status();$('catalogCount').textContent=`モーション${styles.length}種・書体${FONT_OPTIONS.length}種`}
+async function load(){const state=await api('/api/state');data=state.data;revision=state.revision;audio.src=data.audioFile;$('projectTitle').textContent=data.title??'MVエディター';$('bpmNote').textContent=`この曲のテンポ: ${Math.round(data.bpm||120)} BPM（曲データから自動で読み込み）`;document.title=(data.title??'MV')+'｜編集';$('seek').max=data.duration;tables();appearance();sceneInspector();timeline();exportPanel();fit();draw();dirty=false;status();$('catalogCount').textContent=`モーション${styles.length}種・書体${FONT_OPTIONS.length}種`}
 audio.onpause=()=>{$('play').textContent='再生'};audio.onplay=()=>{mode='live';$('sample').textContent='';$('play').textContent='一時停止'};
 $('play').onclick=()=>{mode='live';loopRange=null;loopUi();if(audio.paused)audio.play().catch(e=>$('error').textContent=e.message);else audio.pause();draw()};$('seek').oninput=()=>{mode='live';loopRange=null;loopUi();seek(Number($('seek').value))};$('live').onclick=()=>{mode='live';$('sample').textContent='';draw()};
 $('save').onclick=async()=>{try{const r=await api('/api/save',{revision,data});revision=r.revision;dirty=false;$('error').textContent='';status()}catch(e:any){$('error').textContent=e.message}};
-$('render').onclick=async()=>{try{const r=await api('/api/render',{revision});busy=true;lastJob=r;status();poll()}catch(e:any){$('error').textContent=e.message}};
+let exportFolder='';
+function exportPanel(){const box=document.createElement('details');box.className='exportPanel';box.open=true;
+ box.innerHTML=`<summary>MP4の保存先とファイル名</summary><div class="lookControls"><label class="wide">保存先フォルダ <span id="exFolder" class="exPath"></span></label><div class="wide lineNav"><button id="exPick">保存先を選ぶ</button><button id="exDefault">元に戻す（プロジェクトの out）</button></div>
+ <div class="wide" id="exManual" hidden><label>フォルダのパスを貼り付け <input id="exPath" placeholder="例：C:\\Users\\あなた\\Videos\\MV" aria-label="保存先フォルダのパス"></label><button id="exPathSet">このフォルダにする</button></div>
+ <label class="wide">ファイル名 <input id="exName" aria-label="書き出すファイル名"></label><p class="hint wide">同じ名前のファイルがあるときは「 (2)」などを付けて、上書きしません。</p></div>
+ <div id="exDone" hidden><p>保存しました：<b id="exSaved" class="exPath"></b></p><button id="exOpen">フォルダを開く</button></div>`;
+ const tl=$('timeline');(tl.parentElement?.id==='stickyTop'?$('stickyTop'):tl).after(box);
+ const apply=(d:any)=>{exportFolder=d.folder;$('exFolder').textContent=d.folder+(d.folder===d.default?'（いつもの場所）':'');if(!$('exName').dataset.touched)$('exName').value=d.suggestedName};
+ const err=(e:any)=>{$('error').textContent=e.message};
+ const setFolder=async(f:string)=>{try{apply(await api('/api/export-settings',{revision,folder:f}));$('error').textContent='';$('exManual').hidden=true}catch(e){err(e)}};
+ $('exName').oninput=()=>{$('exName').dataset.touched='1'};
+ $('exPick').onclick=async()=>{try{$('exPick').disabled=true;$('exPick').textContent='PCの画面でフォルダを選んでください…';const r=await api('/api/pick-folder',{revision,initial:exportFolder});if(!r.available){$('exManual').hidden=false;$('exPath').value=exportFolder;$('error').textContent='フォルダ選択の画面を開けなかったので、パスを貼り付けてください'}else if(r.folder)await setFolder(r.folder)}catch(e){err(e)}finally{$('exPick').disabled=false;$('exPick').textContent='保存先を選ぶ'}};
+ $('exPathSet').onclick=()=>setFolder($('exPath').value);
+ $('exDefault').onclick=async()=>{const d=await api('/api/export-settings');setFolder(d.default)};
+ $('exOpen').onclick=async()=>{try{await api('/api/open-folder',{revision})}catch(e){err(e)}};
+ api('/api/export-settings').then(apply).catch(err)}
+const refreshExportName=()=>api('/api/export-settings').then((d:any)=>{if(!$('exName').dataset.touched)$('exName').value=d.suggestedName}).catch(()=>{});
+$('render').onclick=async()=>{try{const r=await api('/api/render',{revision,folder:exportFolder,name:$('exName').value});busy=true;lastJob=r;status();poll()}catch(e:any){$('error').textContent=e.message}};
 $('refreshCatalog').onclick=async()=>{try{$('refreshCatalog').disabled=true;if(dirty){const s=await api('/api/save',{revision,data});revision=s.revision;dirty=false}await api('/api/reload-catalog',{revision});window.location.reload()}catch(e:any){$('error').textContent=e.message;$('refreshCatalog').disabled=false}};
-async function poll(){try{lastJob=await api('/api/job');$('exportStatus').textContent=lastJob.status==='running'?`書き出し中 ${lastJob.progress??0}%`:lastJob.status==='done'?`書き出し済み：編集版 ${lastJob.revision}`:lastJob.status==='failed'?`書き出し失敗：${lastJob.error}`:'まだ書き出していません';$('result').hidden=lastJob.status!=='done';if(lastJob.status==='done'){$('result').href=lastJob.url;$('result').textContent='書き出したMP4を開く';$('result').dataset.revision=lastJob.revision}busy=lastJob.status==='running';status();if(busy)setTimeout(poll,1500)}catch(e:any){$('error').textContent=e.message}}
+async function poll(){try{lastJob=await api('/api/job');$('exportStatus').textContent=lastJob.status==='running'?`書き出し中 ${lastJob.progress??0}%`:lastJob.status==='done'?`書き出し済み：編集版 ${lastJob.revision}`:lastJob.status==='failed'?`書き出し失敗：${lastJob.error}`:'まだ書き出していません';$('result').hidden=lastJob.status!=='done';$('exDone').hidden=lastJob.status!=='done'||!lastJob.path;if(lastJob.path)$('exSaved').textContent=lastJob.path;if(lastJob.status==='done'&&!lastJob.url)$('result').hidden=true;if(lastJob.status==='done'&&lastJob.url){$('result').href=lastJob.url;$('result').textContent='書き出したMP4を開く';$('result').dataset.revision=lastJob.revision}const was=busy;busy=lastJob.status==='running';status();if(busy)setTimeout(poll,1500);else if(was){$('exName').dataset.touched='';refreshExportName()}}catch(e:any){$('error').textContent=e.message}}
 window.addEventListener('resize',fit);window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue=''}});
 {const bar=$('play').parentElement;const lt=document.createElement('button');lt.id='loopToggle';lt.onclick=()=>{loopOn=!loopOn;loopUi()};const sp=document.createElement('button');sp.id='stopRange';sp.textContent='停止';sp.onclick=stopRange;const ls=document.createElement('span');ls.id='loopState';bar.append(lt,sp,ls);loopUi()}
 document.addEventListener('keydown',e=>{if(e.code!=='Space')return;const tag=(e.target as HTMLElement)?.tagName;if(/INPUT|SELECT|TEXTAREA|BUTTON/.test(tag??'')&&!(tag==='INPUT'&&(e.target as HTMLInputElement).type==='range'))return;e.preventDefault();mode='live';if(audio.paused){if(loopRange)seek(Math.max(loopRange()[0],Math.min(audio.currentTime,loopRange()[1]-.05)),true);else audio.play().catch(()=>{})}else audio.pause()});

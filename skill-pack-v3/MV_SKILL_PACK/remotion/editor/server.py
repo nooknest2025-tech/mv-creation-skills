@@ -1,6 +1,8 @@
 """Project-local edit/save/render API. One canonical state; immutable export snapshots."""
 import os,json,re,math,threading,subprocess,time,hashlib,shutil
 from pathlib import Path
+import sys;sys.path.insert(0,str(Path(__file__).resolve().parent))
+from exportpath import safe_name,unique_path,check_folder,pick_folder,open_folder,next_version
 from http.server import SimpleHTTPRequestHandler,ThreadingHTTPServer
 import argparse
 parser=argparse.ArgumentParser()
@@ -15,6 +17,15 @@ LOCK=threading.RLock(); JOB={'status':'idle'}
 if not STATE.exists():raise SystemExit('編集データがありません。npm run editor -- --project ... から起動してください')
 
 ADD_EXT={'.png','.jpg','.jpeg','.webp','.gif','.svg','.mp4','.mov','.m4v','.webm'};VIDEO_EXT={'.mp4','.mov','.m4v','.webm'};ADD_MAX=2*1024**3
+SETTINGS_NAME='export-settings.json'
+def settings():
+    try:return json.loads((ROOT/SETTINGS_NAME).read_text(encoding='utf-8'))
+    except Exception:return {}
+def export_info():
+    st=settings();folder=st.get('folder') or str(ROOT)
+    if not Path(folder).is_dir():folder=str(ROOT)
+    title=(read()['data'].get('title') or 'MV')
+    return {'folder':folder,'default':str(ROOT),'suggestedName':safe_name('',title,next_version(folder,title))}
 def read():return json.loads(STATE.read_text(encoding='utf-8'))
 def validate(d):
     orig=json.loads((ROOT/'original-source.json').read_text(encoding='utf-8'))
@@ -92,7 +103,7 @@ def render(snapshot,out):
             if p.wait():raise RuntimeError('書き出しログを確認してください: '+log.name)
         if not out.exists():raise RuntimeError('出力ファイルがありません')
         with LOCK:
-            JOB.update(status='done',progress=100,url='/'+out.name)
+            JOB.update(status='done',progress=100,path=str(out),folder=str(out.parent),url=('/'+out.relative_to(ROOT).as_posix()) if out.parent==ROOT else None)
             (ROOT/'last-export.json').write_text(json.dumps(JOB,ensure_ascii=False),encoding='utf-8')
     except Exception as e:
         with LOCK:JOB.update(status='failed',error=str(e))
@@ -105,6 +116,8 @@ class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
         if self.path=='/api/state':
             with LOCK:return self.respond(read())
+        if self.path=='/api/export-settings':
+            with LOCK:return self.respond(export_info())
         if self.path=='/api/job':
             with LOCK:
                 job=JOB.copy()
@@ -162,10 +175,23 @@ class Handler(SimpleHTTPRequestHandler):
                     shutil.copyfile(STATE,history/f'rev-{current["revision"]}-{time.time_ns()}.json')
                     new={'revision':rev,'data':body['data']};temp=STATE.with_suffix('.tmp');temp.write_text(json.dumps(new,ensure_ascii=False,indent=2),encoding='utf-8');temp.replace(STATE)
                     return self.respond({'revision':rev})
+                if self.path=='/api/pick-folder':
+                    folder,ok=pick_folder(body.get('initial') or export_info()['folder'])
+                    return self.respond({'folder':folder,'available':ok})
+                if self.path=='/api/export-settings':
+                    folder=check_folder(body.get('folder'));(ROOT/SETTINGS_NAME).write_text(json.dumps({**settings(),'folder':str(folder)},ensure_ascii=False,indent=2),encoding='utf-8')
+                    return self.respond(export_info())
+                if self.path=='/api/open-folder':
+                    f=Path(JOB.get('folder') or (json.loads((ROOT/'last-export.json').read_text(encoding='utf-8')).get('folder') if (ROOT/'last-export.json').exists() else '') or ROOT)
+                    if not f.is_dir():raise ValueError('フォルダが見つかりません：'+str(f))
+                    open_folder(f);return self.respond({'ok':True,'folder':str(f)})
                 if self.path=='/api/render':
                     if JOB['status']=='running':return self.respond({'error':'書き出し中です'},409)
                     validate(current['data']);stamp=time.time_ns();name=f'edit-r{current["revision"]}-{stamp}'
-                    snapshot=ROOT/(name+'.json');snapshot.write_text(json.dumps(current,ensure_ascii=False,indent=2),encoding='utf-8');out=ROOT/(name+'.mp4')
+                    folder=check_folder(body.get('folder') or export_info()['folder'])
+                    if body.get('folder'):(ROOT/SETTINGS_NAME).write_text(json.dumps({**settings(),'folder':str(folder)},ensure_ascii=False,indent=2),encoding='utf-8')
+                    snapshot=ROOT/(name+'.json');snapshot.write_text(json.dumps(current,ensure_ascii=False,indent=2),encoding='utf-8')
+                    out=unique_path(folder,safe_name(body.get('name'),current['data'].get('title') or 'MV',next_version(folder,current['data'].get('title') or 'MV')))
                     JOB={'status':'running','revision':current['revision'],'progress':0,'snapshot':snapshot.name,'hash':hashlib.sha256(snapshot.read_bytes()).hexdigest()}
                     threading.Thread(target=render,args=(snapshot,out),daemon=True).start();return self.respond(JOB)
                 self.respond({'error':'見つかりません'},404)

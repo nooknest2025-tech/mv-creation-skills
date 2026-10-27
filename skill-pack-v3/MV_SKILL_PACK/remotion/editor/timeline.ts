@@ -48,3 +48,21 @@ export function resetClipForAsset(s: any, isVideo: boolean) {
 }
 export const ADD_ASSET_EXT = /\.(png|jpe?g|webp|gif|svg|mp4|mov|m4v|webm)$/i;
 export const isVideoName = (n: string) => /\.(mp4|mov|m4v|webm)$/i.test(n);
+
+/** Ctrl+drag (そのシーンだけ): scenes stay back-to-back, neighbours are trimmed/extended but never below `min`. */
+export const MIN_SOLO = 0.5;
+const endOf = (sc: { start: number }[], k: number, duration: number) => sc[k + 1]?.start ?? duration;
+export function resizeSceneOnly(sc: { start: number }[], i: number, edge: "start" | "end", t: number, duration: number, min = MIN_SOLO): number {
+  const b = edge === "start" ? i : i + 1; if (b <= 0 || b >= sc.length) return edge === "start" ? sc[i].start : endOf(sc, i, duration);
+  const lo = sc[b - 1].start + min, hi = endOf(sc, b, duration) - min; if (lo > hi) return sc[b].start;
+  return (sc[b].start = +Math.max(lo, Math.min(hi, t)).toFixed(3));
+}
+/** Ctrl+drag the body: the scene keeps its length and moves. The previous scene stretches/shrinks to meet it,
+ *  the next one is trimmed/extended. First scene always starts at 0; last scene always ends with the song. */
+export function moveSceneOnly(sc: { start: number }[], i: number, start0: number, end0: number, delta: number, duration: number, min = MIN_SOLO) {
+  const n = sc.length, len = end0 - start0;
+  if (i === 0 || n < 2) { if (n > 1) resizeSceneOnly(sc, 0, "end", end0 + delta, duration, min); return; }
+  if (i === n - 1) { resizeSceneOnly(sc, i, "start", start0 + delta, duration, min); return; }
+  const lo = sc[i - 1].start + min, hi = endOf(sc, i + 1, duration) - min - len; if (lo > hi) return;
+  const s = +Math.max(lo, Math.min(hi, start0 + delta)).toFixed(3); sc[i].start = s; sc[i + 1].start = +(s + len).toFixed(3);
+}
