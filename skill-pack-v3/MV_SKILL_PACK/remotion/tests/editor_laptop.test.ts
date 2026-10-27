@@ -13,9 +13,10 @@ describe("ノートPC：タイムライン固定の初期値", () => {
     expect(pinDefault(null, 768)).toBe(false); expect(pinDefault(null, 720)).toBe(false); expect(pinDefault(null, 1080)).toBe(true);
     expect(pinDefault("1", 720)).toBe(true); expect(pinDefault("0", 1080)).toBe(false);
   });
-  it("layout CSS only pins when the toggle is ON", () => {
+  it("layout CSS always pins the preview; only the timeline is optional", () => {
     const css = fs.readFileSync(path.join(R, "editor/editor-layout.css"), "utf8");
-    expect(css).toMatch(/#stickyTop\{position:static/); expect(css).toMatch(/body\.pinTimeline #stickyTop\{position:sticky\}/);
+    expect(css).toMatch(/#stickyTop\{position:sticky/); expect(css).toMatch(/max-height:899px\)\{#screen\{max-width:min\(100%,calc\(38vh/);
+    const js = fs.readFileSync(path.join(R, "editor/editor-entry.tsx"), "utf8"); expect(js).toContain("top.after(tl)"); expect(js).toContain("タイムラインも固定");
   });
 });
 

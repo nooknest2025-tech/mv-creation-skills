@@ -174,10 +174,10 @@ function clipPanel(cur:()=>number,preview:()=>void){
 const PIN_KEY='mvEditor.pinTimeline';
 const pinWanted=()=>{let v:string|null=null;try{v=localStorage.getItem(PIN_KEY)}catch{}return pinDefault(v,innerHeight)};
 function timeline(){
- const host=$('timeline');host.innerHTML=`<div class="tlBar"><b>タイムライン</b><button id="pinToggle" class="pinToggle" aria-pressed="false" title="プレビューとタイムラインを画面上部に固定するか">タイムライン固定 OFF</button><label>ズーム <input id="tlZoom" type="range" min="10" max="200" value="${pxs}" aria-label="タイムラインのズーム"></label><span class="hint">帯の左端・右端どちらもドラッグで長さ変更（拍にくっつく／Shift・Altで自由）。動画の「自動で合わせる」は場面の長さに合わせて速さも自動調整。帯をクリックで選択。</span></div>
+ const host=$('timeline');host.innerHTML=`<div class="tlBar"><b>タイムライン</b><button id="pinToggle" class="pinToggle" aria-pressed="false" title="映像はいつも上に固定。タイムラインも一緒に固定するか">タイムラインも固定 OFF</button><label>ズーム <input id="tlZoom" type="range" min="10" max="200" value="${pxs}" aria-label="タイムラインのズーム"></label><span class="hint">帯の左端・右端どちらもドラッグで長さ変更（拍にくっつく／Shift・Altで自由）。動画の「自動で合わせる」は場面の長さに合わせて速さも自動調整。帯をクリックで選択。</span></div>
  <div id="tlScroll"><div id="tlInner"><div id="tlBeats"></div><div class="tlRow" id="tlScenes"></div><div class="tlRow" id="tlLyrics"></div><div id="tlHead"></div></div></div><div id="tlTip" hidden></div>`;
  const sc=$('tlScroll'),tip=$('tlTip');
- const pb=$('pinToggle'),pinSync=()=>{const on=pinWanted();document.body.classList.toggle('pinTimeline',on);pb.setAttribute('aria-pressed',String(on));pb.textContent='タイムライン固定 '+(on?'ON':'OFF')};pb.onclick=()=>{try{localStorage.setItem(PIN_KEY,pinWanted()?'0':'1')}catch{}pinSync()};pinSync();
+ const pb=$('pinToggle'),pinSync=()=>{const on=pinWanted();document.body.classList.toggle('pinTimeline',on);const top=$('stickyTop'),tl=$('timeline');if(on){if(tl.parentElement!==top)top.append(tl)}else if(tl.parentElement===top)top.after(tl);pb.setAttribute('aria-pressed',String(on));pb.textContent='タイムラインも固定 '+(on?'ON':'OFF')};pb.onclick=()=>{try{localStorage.setItem(PIN_KEY,pinWanted()?'0':'1')}catch{}pinSync()};pinSync();
  $('tlZoom').oninput=()=>{const mid=(sc.scrollLeft+sc.clientWidth/2)/pxs;pxs=Number($('tlZoom').value);drawTimeline();sc.scrollLeft=mid*pxs-sc.clientWidth/2};
  const el=(cls:string,x0:number,x1:number,txt:string,attrs:any)=>{const d=document.createElement('div');d.className=cls;d.style.left=x0*pxs+'px';d.style.width=Math.max(2,(x1-x0)*pxs)+'px';d.textContent=txt;for(const k in attrs)d.dataset[k]=attrs[k];d.title=txt;return d};
  drawTimeline=()=>{if(!data)return;$('tlInner').style.width=data.duration*pxs+20+'px';
