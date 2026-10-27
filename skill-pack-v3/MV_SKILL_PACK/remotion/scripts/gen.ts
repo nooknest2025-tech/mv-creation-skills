@@ -10,6 +10,10 @@ import { loadConfig, readJson, saveConfig, writeJson } from "./project";
 import { buildProps } from "../src/lib/pipeline";
 import { PRESETS } from "../src/lib/presets";
 import type { Song, Shot } from "../src/lib/types";
+import { buildSpecs, reviewShotList, proseOf } from "../src/lib/shotprompt";
+import { adapt, recommendModel, priceAt } from "../src/lib/videoModels";
+import { selectRefs, ROLE_JA } from "../src/lib/assets";
+import { loadLib, planImages, addAsset, setApproval, parseAssetCmd, ORDER_JA } from "./assets_lib";
 
 const GEN_DIR = path.join(PACK_DIR, "gen");
 export interface Model { id: string; provider: string; kind: string; price_per_sec: Record<string, number> | null; input_extra?: string; max_res?: string | null; max_sec?: number | null; aspects?: string[] | null; strengths?: string; verified: boolean; verified_at?: string | null; source: string; deprecated?: boolean }
@@ -36,8 +40,7 @@ export function recommend(shot: Shot, preset: string, models: Model[], override?
   return { model: by("grok-imagine-video-1.5-lite") ?? ok[0], why: "つなぎ・背景カット → 最安で量を確保" };
 }
 export function priceOf(m: Model, res: string): number | null {
-  if (!m.price_per_sec) return null;
-  return m.price_per_sec[res] ?? m.price_per_sec.any ?? null;
+  return priceAt(m, res);
 }
 export function estimate(sec: number, takes: number, price: number | null) { return price === null ? null : +(Math.ceil(sec) * takes * price).toFixed(3); }
 
@@ -59,21 +62,35 @@ export function makePlan(dir: string, o: Record<string, any>) {
     shots = shots.filter((s, i, a) => (i === 0 || a[i - 1].section !== s.section) && (!secs || secs.includes(s.sectionType ?? "") || secs.includes(s.section ?? "")));
   }
   const preset = PRESETS[props.preset!];
+  const aspect = props.width > props.height ? "16:9" : props.width === props.height ? "1:1" : "9:16";
+  const lib = loadLib(dir), locked = new Set<string>(props.shots.filter((s) => s.locked).map((s) => s.id));
+  const allSpecs = buildSpecs(props.shots, { subject: cfg.subject, continuity: cfg.continuity, bpm: song.bpm, textY: (props as any).textY });
+  const shotReview = reviewShotList(allSpecs, locked);
+  const specOf = (id: string) => allSpecs.find((x) => x.shot === id)!;
+  const legacy = !!(o.provider ?? cfg.gen?.provider);
   const rows = shots.map((s) => {
-    const { model, why } = recommend(s, preset.id, models, o.model ?? cfg.gen?.perShot?.[s.id] ?? cfg.gen?.model, o.provider ?? cfg.gen?.provider);
-    const sec = Math.min(model.max_sec ?? 15, Math.max((model as any).min_sec ?? 1, Math.ceil(s.end - s.start)));
-    const price = priceOf(model, res);
-    const prompt = preset.promptTemplate.replace("{subject}", cfg.subject ?? "the singer").replace("{section}", s.sectionType ?? "").replace("{mood}", MOOD[s.sectionType ?? "other"]).replace("{move}", MOVE_EN[s.move] ?? s.move) + `, ${props.width > props.height ? "16:9" : "9:16"}`;
+    const sp = specOf(s.id);
+    const refs = selectRefs(lib, { shot: s.id, role: sp.role, size: sp.size, performance: sp.performance });
+    const ov = o.model ?? cfg.gen?.perShot?.[s.id] ?? cfg.gen?.model;
+    let model: Model, why: string;
+    if (legacy) ({ model, why } = recommend(s, preset.id, models, ov, o.provider ?? cfg.gen?.provider));
+    else { const pk = recommendModel(sp, models, { res, refs, override: ov, verifiedOnly: true, budgetPerShot: cfg.gen?.budgetPerShot }); model = pk.model; why = pk.why.slice(0, 3).join("・"); }
+    const req = adapt(sp, model, refs, { res, aspect });
+    const sec = req.seconds, price = priceOf(model, res);
     const ref = s.kind === "image" && s.src ? path.join(PUBLIC_PROJECT, "..", s.src) : null;
-    return { ref, aspect: props.width > props.height ? "16:9" : props.width === props.height ? "1:1" : "9:16", shot: s.id, section: s.section, start: s.start, end: s.end, sec, model: model.id, why, res, takes, price_per_sec: price, cost: estimate(sec, takes, price), prompt, verified: model.verified, source: model.source };
+    return { ref, aspect, shot: s.id, section: s.section, start: s.start, end: s.end, sec, model: model.id, why, res, takes, price_per_sec: price, cost: estimate(sec, takes, price), prompt: req.prompt, negative_prompt: req.negative_prompt, params: req.params, refs: { first: req.refs.first?.file, last: req.refs.last?.file, keyframes: req.refs.keyframes.map((a) => a.file), refs: req.refs.refs.map((a) => ({ file: a.file, role: a.role })), audio: req.refs.audio?.file, composite: req.refs.composite?.map((a) => a.file) }, dropped: req.refs.dropped.map((d) => `${ROLE_JA[d.a.role]}: ${d.why}`), warnings: [...req.warnings, ...req.refs.notes], spec: sp, verified: model.verified, source: model.source };
   });
-  const total = +rows.reduce((a, r) => a + (r.cost ?? 0), 0).toFixed(3);
-  const plan = { createdAt: new Date().toISOString(), project: path.basename(dir), res, takes, total, unknownCost: rows.some((r) => r.cost === null), rows };
+  const imgT = readJson<any>(path.join(dir, "image_tasks.json"), null);
+  const imageUSD = imgT?.total_usd ?? 0;
+  const total = +(rows.reduce((a, r) => a + (r.cost ?? 0), 0) + (imageUSD ?? 0)).toFixed(3);
+  const plan = { shotReview, createdAt: new Date().toISOString(), project: path.basename(dir), res, takes, total, unknownCost: rows.some((r) => r.cost === null) || !!(imgT && imgT.total_usd == null), imageUSD, imageTasks: imgT?.tasks?.length ?? 0, rows };
   fs.mkdirSync(GEN_DIR, { recursive: true });
   writeJson(path.join(dir, "gen_plan.json"), plan);
-  const md = [`# 生成プラン — ${plan.project}`, "", `解像度 ${res} / 1カット ${takes} テイク / **見積もり合計 $${total}**${plan.unknownCost ? "（未確認価格のモデルを含むため一部不明）" : ""}`, "",
+  const md = [`# 生成プラン — ${plan.project}`, "", `解像度 ${res} / 1カット ${takes} テイク / **見積もり合計 $${total}**（うち参照画像 ${plan.imageTasks}枚 $${imageUSD ?? "?"}）${plan.unknownCost ? "（未確認価格のモデルを含むため一部不明）" : ""}`, "",
     "| ショット | セクション | 秒 | モデル | 理由 | $/秒 | 見積もり |", "|---|---|---|---|---|---|---|",
     ...rows.map((r) => `| ${r.shot} | ${r.section} | ${r.sec} | ${r.model} | ${r.why} | ${r.price_per_sec ?? "未確認"} | ${r.cost === null ? "不明" : "$" + r.cost} |`), "",
+    `## ショットリスト批評（スコア ${shotReview.score}）`, ...(shotReview.issues.length ? shotReview.issues.map((i) => `- ${i.fixed ? "🔧" : "💡"} ${i.msg}`) : ["- 問題なし"]), "",
+    "## 参照素材の割り当て", ...rows.map((r: any) => `- **${r.shot}**: ${[r.refs.first && "開始画", r.refs.last && "終了画", r.refs.refs.length && `参照${r.refs.refs.length}枚`, r.refs.composite && "合成開始画（要作成）", r.refs.audio && "音声"].filter(Boolean).join(" / ") || "なし"}${r.dropped.length ? `（使えない素材: ${r.dropped.join("、")}）` : ""}${r.warnings.length ? ` ⚠ ${r.warnings.join("、")}` : ""}`), "",
     "## 無料の代わり", "- **静止画モード**（このまま npm run mv）: 画像だけで Ken Burns・疑似2.5D・光・粒子・拍揺れ。API 料金ゼロ。",
     "- **Grok アプリ / grok.com で手動生成**: 下の prompts.csv をコピペ → できた mp4 を `gen/takes/<ショットID>/` か `input/` に入れる → `npm run gallery` で採用。", "",
     "## プロンプト", ...rows.map((r) => `- **${r.shot}** (${r.sec}s): ${r.prompt}`), "",
@@ -81,10 +98,58 @@ export function makePlan(dir: string, o: Record<string, any>) {
   fs.writeFileSync(path.join(dir, "gen_plan.md"), md);
   // provider-agnostic task list: any video MCP (Pollo / Grok / Runway / Kling ...) can execute it
   const tasks = { howto: "For each task call your video-generation MCP tool (text2video, or img2video when reference_image is set), wait for the result, then run: npm run gen -- import <file-or-url> --shot <shot> --from <provider>. Never exceed the user's confirmed budget.",
-    tasks: rows.map((r: any) => ({ shot: r.shot, seconds: r.sec, aspect: r.aspect, resolution: res, takes, prompt: r.prompt, reference_image: r.ref && fs.existsSync(r.ref) ? path.resolve(r.ref) : null, suggested_model: r.model, mcp_model: (models.find((m) => m.id === r.model) as any)?.mcp_model ?? null, estimated_usd: r.cost, save_to: path.join(GEN_DIR, "takes", r.shot) })) };
+    tasks: rows.map((r: any) => ({ negative_prompt: r.negative_prompt ?? null, params: r.params, refs: r.refs, shot: r.shot, seconds: r.sec, aspect: r.aspect, resolution: res, takes, prompt: r.prompt, reference_image: r.ref && fs.existsSync(r.ref) ? path.resolve(r.ref) : null, suggested_model: r.model, mcp_model: (models.find((m) => m.id === r.model) as any)?.mcp_model ?? null, estimated_usd: r.cost, save_to: path.join(GEN_DIR, "takes", r.shot) })) };
   writeJson(path.join(dir, "gen_tasks.json"), tasks);
   fs.writeFileSync(path.join(dir, "prompts.csv"), "\uFEFFshot,section,seconds,model,prompt\n" + rows.map((r) => [r.shot, r.section, r.sec, r.model, `"${r.prompt.replace(/"/g, '""')}"`].join(",")).join("\n"));
   return { plan, md };
+}
+
+// ---- reference assets: npm run gen -- assets [list|add <file> --role R [--shot S005]|approve <id>|plan|"キャラシート作って"] ----
+export function assetsCmd(dir: string, args: string[], o: Record<string, any>) {
+  const lib = loadLib(dir), sub = args[0] ?? "list";
+  const jp = parseAssetCmd(args.join(" "));
+  if (sub === "add" || jp?.kind === "replace") {
+    const file = sub === "add" ? args[1] : String(o.file ?? "");
+    if (!file || !fs.existsSync(file)) throw new UserError("画像ファイルを指定してください", jp?.kind === "replace" ? `例: npm run gen -- assets "${jp.shot}の開始画を差し替え" --file 新しい画像.png` : "例: npm run gen -- assets add face.png --role character_front");
+    const a = addAsset(dir, file, (jp?.kind === "replace" ? jp.role : o.role) as any, { shot: jp?.kind === "replace" ? jp.shot : o.shot, note: o.note });
+    log(`✅ ${ROLE_JA[a.role]}${a.shot ? "（" + a.shot + "）" : ""} を登録: ${a.file}`); return a;
+  }
+  if (sub === "approve" || jp?.kind === "approve") { const ids = jp?.kind === "approve" && jp.all ? lib.assets.filter((a) => a.approved === false).map((a) => a.id) : [args[1]]; ids.forEach((id) => setApproval(dir, id, true)); log(`✅ 承認: ${ids.join(", ")}`); return ids; }
+  if (sub === "plan" || jp && ["make_sheet", "make_bg", "make_frames"].includes(jp.kind)) {
+    const models = loadModels(), im = models.find((m: any) => m.id === (o.image ?? loadConfig(dir).gen?.imageModel ?? "grok-imagine-image"))!;
+    const song = readJson<Song>(path.join(dir, "song.json"), null as any), cfg = loadConfig(dir);
+    const props = buildProps(song, cfg, readJson(path.join(dir, "media.json"), []) as any);
+    const specs = buildSpecs(props.shots, { subject: cfg.subject, continuity: cfg.continuity, bpm: song.bpm });
+    const want = jp?.kind === "make_frames" && jp.shots ? jp.shots : null;
+    const need = specs.filter((s) => (!want || want.includes(s.shot)) && (jp?.kind === "make_frames" || sub === "plan")).map((s) => ({ shot: s.shot, needsStart: true, needsEnd: !!s.matchCutTo }));
+    let { tasks, total } = planImages(dir, lib, need, { model: im, character: cfg.continuity?.character ?? cfg.subject, wardrobe: cfg.continuity?.wardrobe, palette: "", specs: Object.fromEntries(specs.map((s) => [s.shot, proseOf(s)])), locations: cfg.continuity?.locations, props: cfg.continuity?.props });
+    if (jp?.kind === "make_sheet") tasks = tasks.filter((t) => /character/.test(t.role));
+    if (jp?.kind === "make_bg") tasks = tasks.filter((t) => /location|prop/.test(t.role));
+    total = tasks.some((t) => t.usd == null) ? null : +tasks.reduce((a, t) => a + (t.usd ?? 0), 0).toFixed(3);
+    writeJson(path.join(dir, "image_tasks.json"), { howto: "Generate each image with your image tool (Grok Imagine / Gemini / Flux / local SD / MCP), in order. Save into save_to, then: npm run gen -- assets add <file> --role <role> [--shot <shot>]. New images start unapproved: review in npm run gallery.", order: ORDER_JA, total_usd: total, tasks });
+    log(`🖼 画像タスク ${tasks.length} 件（順番: ${ORDER_JA}）/ ${im.id} 見積もり ${total == null ? "価格未確認" : "$" + total}\n💾 ${path.join(dir, "image_tasks.json")}`); return { tasks, total };
+  }
+  for (const a of lib.assets) log(`${a.approved === false ? "⏳" : "✅"} ${a.id.padEnd(26)} ${ROLE_JA[a.role]}${a.shot ? " " + a.shot : ""}  ${a.file}`);
+  if (!lib.assets.length) log("素材はまだありません。「キャラシート作って」→ npm run gen -- assets キャラシート作って");
+  return lib;
+}
+
+// ---- generated-clip QA (flicker / morph / face drift) -> marks takes "regen" in the gallery ----
+export function clipQA(dir: string, o: Record<string, any>) {
+  const { execFileSync } = require("node:child_process") as typeof import("node:child_process");
+  const py = process.env.MVPACK_PYTHON ?? (process.platform === "win32" ? "python" : "python3");
+  const takes = path.join(GEN_DIR, "takes"); if (!fs.existsSync(takes)) { log("テイクがありません"); return []; }
+  const face = loadLib(dir).assets.find((a) => a.role === "character_front" && a.approved !== false);
+  const out: any[] = [];
+  for (const s of fs.readdirSync(takes)) for (const f of fs.readdirSync(path.join(takes, s)).filter((x) => /\.(mp4|mov|webm)$/i.test(x))) {
+    let r: any;
+    try { r = JSON.parse(execFileSync(py, [path.join(REMOTION_DIR, "scripts", "clipqa.py"), path.join(takes, s, f), ...(face ? ["--ref", path.join(dir, face.file)] : []), "--json"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }))[0]; }
+    catch (e: any) { if (e.stdout) r = JSON.parse(e.stdout)[0]; else { log(`⚠️ QA 実行失敗 ${s}/${f}: ${String(e.message).split("\n")[0]}（ffmpeg / numpy / pillow が必要）`); continue; } }
+    out.push({ shot: s, file: f, ...r });
+    log(`${r.regenerate ? "🔁" : "✅"} ${s}/${f} ${r.flags.map((x: any) => x.ja).join("・")}${r.notes.length ? "（" + r.notes.join("、") + "）" : ""}`);
+    if (r.regenerate && !o.dry) reviewAction(dir, { shot: s, file: f, action: "regen" }), reviewAction(dir, { shot: s, file: f, action: "note", note: "自動QA: " + r.flags.map((x: any) => x.ja + " " + x.at_sec.join(",") + "秒").join(" / ") });
+  }
+  writeJson(path.join(dir, "clip_qa.json"), out); return out;
 }
 
 // ---- provider adapters (provider-agnostic; add more by implementing generate()) ----
@@ -101,6 +166,8 @@ async function runPlan(dir: string, o: Record<string, any>) {
   if (plan.unknownCost) throw new UserError("価格が未確認のモデルが含まれるため実行できません", "models.yaml の価格を公式ページで確認して verified: true にするか、--model で確認済みモデルを指定して plan をやり直してください。");
   if (Number(o.confirm) !== plan.total) throw new UserError(`有料生成です。見積もり $${plan.total} を確認したら --confirm ${plan.total} を付けて実行してください`, "金額が違う場合は plan をやり直してください。");
   if (plan.total > cap) throw new UserError(`見積もり $${plan.total} が上限 $${cap} を超えています`, "--cap で上限を上げるか、--sections で対象を減らしてください。");
+  const pending = loadLib(dir).assets.filter((a) => a.approved === false);
+  if (pending.length) throw new UserError(`未承認の参照素材が ${pending.length} 件あります`, "npm run gallery で確認して承認（または却下）してから動画を生成してください。");
   for (const r of plan.rows) {
     const ad = ADAPTERS.find((a) => a.id.test(r.model));
     if (!ad) { log(`⏭ ${r.shot}: ${r.model} は自動実行に未対応 → prompts.csv で手動生成してください`); continue; }
@@ -168,8 +235,8 @@ export function reviewAction(dir: string, a: { shot: string; file: string; actio
   return review[k];
 }
 const GALLERY_HTML = `<!doctype html><html lang="ja"><meta charset="utf-8"><title>生成レビュー</title><style>body{background:#15131a;color:#eee;font-family:sans-serif;margin:16px}.shot{margin:18px 0;padding:12px;background:#221e2a;border-radius:10px}.takes{display:flex;gap:12px;flex-wrap:wrap}.take{background:#2c2735;padding:8px;border-radius:8px;width:340px}video{width:100%;border-radius:6px}button{margin:3px;border:0;border-radius:5px;padding:5px 9px;cursor:pointer}.adopt{background:#2a9d5a;color:#fff}.reject{background:#7a2a3a;color:#fff}.regen{background:#555;color:#fff}.st{font-weight:700}textarea{width:100%;background:#111;color:#fff}</style>
-<h2>🎞 生成レビュー（ショットごと）</h2><p>採用 = タイムラインに自動で入ります（mv.config.json → timing.perShot）。新しいテイクは gen/takes/&lt;ショットID&gt;/ に置くと自動で表示（MCP・手動どちらでもOK）。</p><div id="list"></div>
-<script>async function load(){const d=await fetch('/state').then(r=>r.json());const L=document.getElementById('list');L.innerHTML='';
+<h2>🎞 生成レビュー（ショットごと）</h2><p>採用 = タイムラインに自動で入ります（mv.config.json → timing.perShot）。新しいテイクは gen/takes/&lt;ショットID&gt;/ に置くと自動で表示（MCP・手動どちらでもOK）。</p><h2>🖼 参照素材（動画生成の前に承認）</h2><div id=assets></div><div id="list"></div>
+<script>async function la(){const d=await fetch('/assets').then(r=>r.json());const A=document.getElementById('assets');A.innerHTML=(d.assets||[]).map(a=>'<div class=take style="display:inline-block;width:220px"><img style="width:100%" src="/afile/'+a.id+'"><div>'+a.id+' '+(a.approved===false?'⏳未承認':'✅')+'</div><button class=adopt onclick="aact(\\''+a.id+'\\',1)">承認</button><button class=reject onclick="aact(\\''+a.id+'\\',0)">却下</button></div>').join('')||'<p>素材なし</p>'}function aact(id,ok){fetch('/aact',{method:'POST',body:JSON.stringify({id,ok})}).then(la)}la();async function load(){const d=await fetch('/state').then(r=>r.json());const L=document.getElementById('list');L.innerHTML='';
 const plan={};(d.plan?.rows||[]).forEach(r=>plan[r.shot]=r);
 if(!d.shots.length)L.innerHTML='<p>まだテイクがありません。</p>';
 d.shots.forEach(s=>{const el=document.createElement('div');el.className='shot';const p=plan[s.shot];el.innerHTML='<h3>'+s.shot+(p?' — '+p.section+' / '+p.sec+'秒 / '+p.model:'')+'</h3>'+(p?'<small>'+p.prompt+'</small>':'')+'<div class=takes></div>';
@@ -189,6 +256,8 @@ async function main() {
   const dir = o.project ? path.join(PROJECTS_DIR, String(o.project)) : latestProject();
   if (cmd === "plan") { const { md } = makePlan(dir, o); log(md); log(`\n💾 ${path.join(dir, "gen_plan.md")} / prompts.csv\n▶ 実行するなら（有料）: npm run gen -- run --confirm <合計金額>`); return; }
   if (cmd === "run") return runPlan(dir, o);
+  if (cmd === "assets") return assetsCmd(dir, rest.slice(1), o);
+  if (cmd === "qa") return clipQA(dir, o);
   if (cmd === "import") {
     if (!rest[1]) throw new UserError("取り込むファイル・フォルダ・URLを指定してください", "例: npm run gen -- import ~/Downloads/clip.mp4 --shot S012 --from pollo");
     const got = await importTake(rest[1], o.shot ? String(o.shot).toUpperCase() : undefined, String(o.from ?? "manual"), o.note ? String(o.note) : undefined);
@@ -200,6 +269,9 @@ async function main() {
       try {
         if (req.url === "/") { res.writeHead(200, { "content-type": "text/html; charset=utf-8" }); res.end(GALLERY_HTML); return; }
         if (req.url === "/state") { const b = JSON.stringify(galleryState(dir)); res.writeHead(200, { "content-type": "application/json" }); res.end(b); return; }
+        if (req.url === "/assets") { res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify(loadLib(dir))); return; }
+        if (req.url?.startsWith("/afile/")) { const a = loadLib(dir).assets.find((x) => x.id === decodeURIComponent(req.url!.slice(7))); if (!a) { res.writeHead(404); res.end(); return; } res.writeHead(200); fs.createReadStream(path.join(dir, a.file)).pipe(res); return; }
+        if (req.url === "/aact" && req.method === "POST") { let b = ""; req.on("data", (c) => (b += c)); req.on("end", () => { const { id, ok } = JSON.parse(b); res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify(setApproval(dir, id, !!ok))); }); return; }
         if (req.url?.startsWith("/take/")) { const f = path.join(GEN_DIR, "takes", ...decodeURIComponent(req.url.slice(6)).split("/")); res.writeHead(200, { "content-type": "video/mp4" }); fs.createReadStream(f).pipe(res); return; }
         if (req.url === "/act" && req.method === "POST") { let b = ""; req.on("data", (c) => (b += c)); req.on("end", () => { const r = reviewAction(dir, JSON.parse(b)); res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify(r)); }); return; }
         res.writeHead(404); res.end();

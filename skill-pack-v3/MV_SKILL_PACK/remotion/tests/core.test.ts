@@ -82,7 +82,7 @@ describe("Japanese instructions", () => {
 
 describe("video generation plan", () => {
   const models = loadModels();
-  it("registry: priced entries must be verified with a source", () => { for (const m of models) { expect(m.source).toBeTruthy(); if (!m.verified && !m.id.startsWith("manual/")) expect(m.price_per_sec).toBeNull(); } });
+  it("registry: priced entries must be verified with a source", () => { for (const m of models) { expect(m.source).toBeTruthy(); if (!m.verified && !m.id.startsWith("manual/")) { expect(m.price_per_sec ?? null).toBeNull(); expect((m as any).price_per_image ?? null).toBeNull(); } } });
   it("recommend + cost", () => {
     const shot: any = { id: "S1", start: 0, end: 3, sectionType: "chorus", move: "push" };
     const r = recommend(shot, "dance", models); expect(r.model.verified).toBe(true); expect(r.model.deprecated).toBeFalsy();

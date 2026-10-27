@@ -49,7 +49,9 @@ export interface MVConfig {
   visuals?: import("./types").VisualFx; // audio-reactive layers
   finish?: import("./types").FinishFx; // in-Remotion finishing
   ramps?: Record<string, string>; // section -> speed ramp
-  gen?: { model?: string; perShot?: Record<string, string>; resolution?: string; takes?: number; capUSD?: number; provider?: string };
+  gen?: { model?: string; perShot?: Record<string, string>; resolution?: string; takes?: number; capUSD?: number; provider?: string; budgetPerShot?: number; imageModel?: string };
+  /** continuity sheet for AI video (character / wardrobe / locations / props) */
+  continuity?: { character?: string; wardrobe?: string; location?: string; locations?: string[]; props?: string[]; refImages?: string[] };
 }
 
 export const DEFAULT_CONFIG: MVConfig = { mode: "omakase", preset: "auto", aspect: "16:9", fps: 30, lyrics: { default: "auto" } };
