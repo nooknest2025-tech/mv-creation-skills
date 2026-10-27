@@ -31,6 +31,11 @@ def validate(d):
             if not finite(s.get(key,0)) or not -100<=s.get(key,0)<=100:raise ValueError('画像位置は-100〜100です')
         if not finite(s.get('zoom',1)) or not 1<=s.get('zoom',1)<=3:raise ValueError('画像の拡大率は1〜3倍です')
         if not isinstance(s.get('camera',True),bool):raise ValueError('自動カメラの設定を確認してください')
+        for key in ['cameraMove','cameraStrength','cameraSync']:
+            if key in s and not (isinstance(s[key],str) and len(s[key])<40):raise ValueError('カメラの設定を確認してください')
+        if not isinstance(s.get('effects',[]),list) or len(s.get('effects',[]))>40 or any(not isinstance(e,dict) or not isinstance(e.get('id'),str) for e in s.get('effects',[])):raise ValueError('エフェクトの設定を確認してください')
+    for r in d.get('effectRanges',[]) or []:
+        if not isinstance(r,dict) or not isinstance(r.get('id'),str) or not finite(r.get('start')) or not finite(r.get('end')) or not r['end']>r['start']:raise ValueError('範囲エフェクトの開始・終了秒を確認してください')
     catalog=json.loads((EDITOR/'style-catalog.json').read_text(encoding='utf-8'))
     original={f'L{i+1:03}':line['text'] for i,line in enumerate(orig.get('sourceLyrics',orig['lyrics']))}
     expected=[(key,i) for key,text in original.items() for i in range(len(text))]

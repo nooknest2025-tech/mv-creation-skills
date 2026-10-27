@@ -255,6 +255,22 @@ export async function run(argv: string[]) {
   addVersion(dir, m, { v, createdAt: new Date().toISOString(), note: String(o.note ?? o.say ?? ""), preset: first.preset!, aspect: aspects.join(","), outputs, configSnapshot: cfg });
   log(`\n🎉 完成！ v${v}\n${Object.values(outputs).map((x) => `  ・${path.join(dir, x)}`).join("\n")}\n`);
   log("次の一手: 気になる所を日本語で Codex に伝える（例「サビはグリッチで」）→ もう一度 npm run mv。良ければ npm run approve -- " + v);
+  await offerEditor(dir, o);
+}
+
+/** after any menu (おまかせ/半自動/ジャンル/こだわり/mv): offer the shared editor on this project. */
+export async function offerEditor(dir: string, o: Record<string, any>) {
+  const name = path.basename(dir), can = fs.existsSync(path.join(dir, "out", "editor-input.json")) || fs.existsSync(path.join(dir, "out", "editor", "editor-state.json"));
+  if (!can) { log("ℹ️ 動画素材を含むため、画面での手直し（編集画面）は静止画の曲のみ対応です。日本語の指示（npm run edit）で直せます。"); return; }
+  log(`✏️ 画面で手直しするなら: npm run editor -- --project ${name}\n   （歌詞・シーン・カメラ・エフェクト・タイミング・顔の位置を1つの画面で。保存した内容は次の AI 修正でも引き継がれます）`);
+  const tty = process.stdin.isTTY && process.stdout.isTTY && !process.env.CI;
+  if (o["no-editor"] || o.editor === false || (!tty && !o.editor)) return;
+  let yes = !!o.editor;
+  if (!yes) { const rl = (await import("node:readline")).createInterface({ input: process.stdin, output: process.stdout });
+    const a: string = await new Promise((r) => rl.question("いま編集画面を開きますか？ [Y/n] ", r)); rl.close(); yes = !/^(n|no|いいえ|いや)/i.test(a.trim()); }
+  if (!yes) return;
+  const { spawnSync } = await import("node:child_process");
+  spawnSync(process.execPath, [path.join(REMOTION_DIR, "node_modules", "tsx", "dist", "cli.mjs"), path.join(REMOTION_DIR, "scripts", "editor.ts"), "--project", name], { stdio: "inherit", cwd: REMOTION_DIR, windowsHide: false });
 }
 
 if (process.argv[1]?.match(/mv\.ts$/)) run(process.argv.slice(2)).catch(fail);

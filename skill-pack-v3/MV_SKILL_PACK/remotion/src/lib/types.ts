@@ -61,6 +61,9 @@ export interface Shot {
   kind: "image" | "video";
   focus?: [number, number]; // 0..1 saliency centre used for smart crop
   move: string; // camera move name
+  camStrength?: "weak" | "normal" | "strong"; // 弱め/普通/強め (camfx)
+  camSync?: "off" | "beat" | "beat2" | "bar" | "accent"; // ビートに乗せる
+  fx?: { id: string; amount?: "weak" | "normal" | "strong"; sync?: "off" | "beat" | "beat2" | "bar" | "accent" }[]; // per-shot effects (SceneFx)
   section?: string;
   clipFrom?: number; // seconds into a video source
   lyricStyle?: StyleSpec;
@@ -100,6 +103,8 @@ export interface VisualFx {
 export interface FinishFx { glow?: number; halation?: number; letterbox?: number; grain?: number; vignette?: number; chroma?: number; lut?: string }
 export interface Layout { textY?: number; textSize?: number; plate?: boolean }
 export interface RenderProps {
+  effectRanges?: { id: string; start: number; end: number; amount?: "weak" | "normal" | "strong"; sync?: "off" | "beat" | "beat2" | "bar" | "accent" }[];
+  accents?: number[];
   [key: string]: unknown;
   preset?: string;
   width: number; height: number; fps: number;

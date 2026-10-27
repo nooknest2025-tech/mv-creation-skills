@@ -1,3 +1,4 @@
+import { resolveCamFx } from "./camfx";
 // Pure pipeline: Song + config + media -> RenderProps (runs in Node scripts AND in Remotion Studio).
 import { ASPECTS, type MVConfig } from "./config";
 import { planShots, type MediaItem } from "./cuts";
@@ -96,6 +97,8 @@ export function buildProps(song0: Song, cfg: MVConfig, media: MediaItem[], o: { 
   const ls = Object.fromEntries(Object.entries(T.perShot ?? {}).filter(([, v]) => v?.lipsync).map(([k, v]) => [k, v!.lipsync]));
   let lipsyncNotes: string[] = [];
   if (Object.keys(ls).length) { const r = applyLipsync(shots, ls, fps); shots = r.shots; lipsyncNotes = r.notes; }
+  // camera strength / beat sync / effects per shot (auto per section + mode; config and per-shot edits win)
+  shots = shots.map((s) => { const m: any = T.perShot?.[s.id] ?? {}; const c = resolveCamFx((cfg as any).camfx, s, { ...(m.camStrength ? { camStrength: m.camStrength } : {}), ...(m.camSync ? { camSync: m.camSync } : {}), ...(m.fx ? { fx: m.fx } : {}) }); return { ...s, ...(c.move && !m.move ? { move: c.move } : {}), camStrength: c.camStrength, camSync: c.camSync, fx: c.fx }; });
   const lyricCfg = { ...(preset.lyric ?? {}), ...(cfg.lyrics ?? {}), sections: { ...(preset.lyric.sections ?? {}), ...(cfg.lyrics?.sections ?? {}), ...(cfg.sectionStyles ?? {}) } };
   if (cfg.lyrics?.default === undefined && preset.lyric.default !== undefined) lyricCfg.default = preset.lyric.default;
   if (genre.id) { // genre recipe drives auto styles: drop the preset's lyric table (user tables stay)
@@ -130,6 +133,7 @@ export function buildProps(song0: Song, cfg: MVConfig, media: MediaItem[], o: { 
     overlayOnly: !!o.overlayOnly, textSize: lyricCfg.size ?? preset.textSize ?? 1, textY: defY,
     safeBottom: asp.safeBottom, preset: preset.id, presetWhy: why, genre: genre.id ?? undefined, genreWhy: genre.why,
     energy: downsample(song.energy, song.energyHz, 10), energyHz: song.energy.length ? 10 : 0,
+    effectRanges: (cfg as any).camfx?.ranges, accents: (cfg as any).mograph?.accents?.length && typeof (cfg as any).mograph.accents[0] === "number" ? (cfg as any).mograph.accents : undefined,
     visuals: { ...preset.visuals, ...(cfg.visuals ?? {}) }, ...(mog ? { mograph: mog } : {}), finish: { ...preset.finish, ...(cfg.finish ?? {}) },
   };
   const lb = letterboxPx(props.finish, props.width, props.height);

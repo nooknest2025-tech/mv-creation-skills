@@ -1,6 +1,9 @@
 import React from 'react';
 import {STYLES} from '../src/styles/styles';
 import {CATALOG} from '../src/lib/catalog';
+import {cameraPose,FxStage,activeFx,CAMERA_MOVES,EFFECT_FX,STRENGTH,SYNC} from '../src/render/SceneFx';
+export {CAMERA_MOVES,EFFECT_FX,STRENGTH,SYNC};
+export const sceneMove=(s:any)=>s.cameraMove??(s.camera===false?'none':'sway');
 import FONT_OPTIONS from './font-options.json';
 export {FONT_OPTIONS};
 export const POSITIONS:any={manual:'自由（現在位置）',tl:'左上',tc:'上中央',tr:'右上',ml:'左中央',mc:'中央',mr:'右中央',bl:'左下',bc:'下中央',br:'右下'};
@@ -20,11 +23,15 @@ export {CATALOG};
 export function Scene({data,t,base=''}:{data:any;t:number;base?:string}) {
  const W=data.width??1280,H=data.height??720; const scenes=data.scenes;const assets=data.assets.map((a:any)=>typeof a==='string'?a:a.src);
  let idx=scenes.findIndex((s:any,i:number)=>t>=s.start&&t<(scenes[i+1]?.start??data.duration)); if(idx<0)idx=scenes.length-1;
- const bg=(i:number)=>{const s=scenes[i],end=scenes[i+1]?.start??data.duration,p=Math.max(0,Math.min(1,(t-s.start)/(end-s.start)));const zoom=s.zoom??1,maxX=(1.11*zoom-1)*W/2,maxY=(1.11*zoom-1)*H/2;const dx=(s.camera===false?0:22*(i%2?-1:1)*Math.sin((p-.5)*1.4)),dy=(s.camera===false?0:7*Math.sin(p*2+i));const x=Math.max(-maxX,Math.min(maxX,dx+(s.x??0)/100*maxX)),y=Math.max(-maxY,Math.min(maxY,dy+(s.y??0)/100*maxY));return <img key={i} src={base+assets[s.asset]} style={{position:'absolute',width:'111%',height:'111%',left:'-5.5%',top:'-5.5%',objectFit:'cover',transform:`translate(${x}px,${y}px) scale(${zoom})`}}/>};
+ const beat={bpm:data.bpm??120,phase:data.phase??0,beatsPerBar:4};
+ const bg=(i:number)=>{const s=scenes[i],end=scenes[i+1]?.start??data.duration,dur=Math.max(.1,end-s.start),p=Math.max(0,Math.min(1,(t-s.start)/dur));const zoom=s.zoom??1;
+  const m=cameraPose(sceneMove(s),{p,t,t0:s.start,dur,beat,seed:i*7+1,W,sync:s.cameraSync,accents:data.accents},s.cameraStrength);
+  const sc=zoom*m.s,maxX=(1.11*sc-1)*W/2,maxY=(1.11*sc-1)*H/2;const x=Math.max(-maxX,Math.min(maxX,m.x*W+(s.x??0)/100*(1.11*zoom-1)*W/2)),y=Math.max(-maxY,Math.min(maxY,m.y*H+(s.y??0)/100*(1.11*zoom-1)*H/2));const bl=m.blur+(m.focus??0);
+  return <img key={i} src={base+assets[s.asset]} style={{position:'absolute',width:'111%',height:'111%',left:'-5.5%',top:'-5.5%',objectFit:'cover',transform:`perspective(1400px) translate(${x}px,${y}px) scale(${sc}) rotate(${m.r}deg) rotateY(${m.ry??0}deg)`,filter:bl>.2?`blur(${bl.toFixed(2)}px)`:undefined}}/>};
  const fade=scenes[idx].transition??1.1;let blend=idx&&fade>0?Math.max(0,Math.min(1,(t-scenes[idx].start)/fade)):1;blend=blend*blend*(3-2*blend);
  const active=data.lyrics.filter((l:any)=>t>=l.start&&t<l.end&&t<data.duration-1);
  return <div style={{position:'relative',width:W,height:H,overflow:'hidden',background:'#19221c','--lyric-fill':'#f8f3e6','--lyric-stroke':'#1f271f','--lyric-accent':'#e6aa96','--lyric-font':"'Noto Serif JP'"} as any}>
- {idx>0&&blend<1&&bg(idx-1)}<div style={{position:'absolute',inset:0,opacity:blend}}>{bg(idx)}</div>
+ <FxStage W={W} H={H} t={t} frame={Math.round(t*(data.fps??24))} fx={activeFx(scenes[idx].effects,data.effectRanges,t)} t0={scenes[idx].start} t1={scenes[idx+1]?.start??data.duration} seed={idx*13+5} beat={beat} accents={data.accents} picture={()=><>{idx>0&&blend<1&&bg(idx-1)}<div style={{position:'absolute',inset:0,opacity:blend}}>{bg(idx)}</div></>}>
  <svg width={W} height={H} style={{position:'absolute',inset:0}}>{Array.from({length:12},(_,k)=>{const gain=Math.min(1,Math.max(0,(t-(data.particleStart??0))/Math.max(1,data.duration*.18)))*Math.min(1,Math.max(0,(data.duration-t)/5));let x=(k*151+t*(7+k%3))%(W+100)-50,y=90+(k*79+t*4)%420+12*Math.sin(t*.5+k);return <ellipse key={k} cx={x} cy={y} rx={5+k%4} ry={(5+k%4)*.43} transform={`rotate(${(t*.4+k)*180/Math.PI} ${x} ${y})`} fill={['#da9782','#9eb4a3','#b5a4bf','#c7ae77'][k%4]} opacity={gain*.57}/>})}</svg>
  {active.length>0&&<div style={{position:'absolute',inset:0,background:'linear-gradient(transparent 68%,rgba(15,25,21,.35))'}}/>}
  {active.map((l:any)=>{let style=l.motion??'simple';const defaults=CATALOG[style]?.defaults??{};const chars=Array.from(l.text as string).map((ch,ci)=>({ch,idx:ci,t0:l.start+(l.end-l.start)*ci/Array.from(l.text).length,t1:l.start+(l.end-l.start)*(ci+1)/Array.from(l.text).length}));const duration=l.motionDuration??.8;const charsTimed=chars.map((c,ci)=>({...c,t0:l.start+Math.min(l.end-l.start-.1,duration)*ci/chars.length,t1:l.start+Math.min(l.end-l.start-.1,duration)*(ci+1)/chars.length}));
@@ -45,6 +52,7 @@ export function Scene({data,t,base=''}:{data:any;t:number;base?:string}) {
  {(effect==='double'||effect==='rgb')&&<div style={{position:'absolute',inset:0,transform:`translate(${offset}px,${offset}px)`,opacity:.5,'--lyric-fill':effect==='rgb'?'#58dce6':undefined,'--lyric-accent':effect==='rgb'?'#58dce6':undefined} as any}>{out}</div>}
  {effect==='rgb'&&<div style={{position:'absolute',inset:0,transform:`translate(${-offset}px,0)`,opacity:.5,'--lyric-fill':'#ff75ad','--lyric-accent':'#ff75ad'} as any}>{out}</div>}
  {out}</div></div>})}
+ </FxStage>
  <div style={{position:'absolute',inset:0,background:'#19221c',opacity:Math.max(0,Math.min(.8,(t-(data.duration-2.2))/2.2*.8))}}/>
  </div>
 }

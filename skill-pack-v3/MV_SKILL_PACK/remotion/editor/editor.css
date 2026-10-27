@@ -3,3 +3,5 @@
 summary,input,select,td button{scroll-margin-top:470px}#panels{min-width:0}
 button{scroll-margin-top:470px}#gallery{max-height:220px;overflow:auto}
 .lookControls{display:flex;flex-wrap:wrap;gap:12px;margin:14px 0}.lookControls label{display:flex;flex-direction:column;gap:5px}#positionGrid{display:grid;grid-template-columns:repeat(3,minmax(90px,1fr));gap:7px;max-width:420px}#positionGrid button:first-child{grid-column:1/-1}button[aria-pressed=true]{background:#60745d;border-color:#f1dfb4}#appearance{padding:12px 0 24px;border-bottom:1px solid #435547}#lookLine{max-width:320px}
+.fxList{display:grid;gap:4px;max-height:320px;overflow:auto;margin:6px 0}
+.fxRow{display:grid;grid-template-columns:auto 1fr 1fr;gap:4px 6px;align-items:center;font-size:13px;padding:4px 0;border-bottom:1px solid #ffffff14}.fxRow span{grid-column:2/4}.fxRow select{grid-column:auto;min-width:0}.fxRow input+span{grid-column:2/4}.fxRow select:first-of-type{grid-column:2}

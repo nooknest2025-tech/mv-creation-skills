@@ -1,3 +1,4 @@
+import { CAMERA_MOVES, EFFECT_FX, STRENGTH, SYNC } from "../render/SceneFx";
 import { parseRestore, restoreCut } from "./lipsync";
 import { parsePlanTier } from "./estimate";
 import PLANS_JSON from "./plans.gen.json";
@@ -61,6 +62,7 @@ export function applyInstruction(cfg0: MVConfig, text: string): { cfg: MVConfig;
   for (const t of parts.length ? parts : [text]) {
     const T = (cfg.timing ??= {});
     { const r = parseRestore(t); if (r) { const x = restoreCut(cfg, r); Object.assign(cfg, x.cfg); changes.push(...x.changes); continue; } }
+    { const r = camFxFromText(cfg, t); if (r) { changes.push(r); continue; } }
     // ---- plan tier: 「KlingはProプラン」「RunwayはAPI」「Klingの残り1200クレジット」 ----
     { const pt = planTierFromText(t); if (pt) { const G = (cfg.gen ??= {}); G.plans ??= {}; const cur = G.plans[pt.provider]; const prev = typeof cur === "string" ? { plan: cur } : cur ?? { plan: "api" };
       const nv = { plan: pt.plan ?? prev.plan, ...(pt.remaining != null ? { remaining: pt.remaining } : (prev as any).remaining != null ? { remaining: (prev as any).remaining } : {}) };
@@ -239,4 +241,25 @@ export function applyInstruction(cfg0: MVConfig, text: string): { cfg: MVConfig;
     changes.push(`？ 解釈できませんでした: 「${t}」（例: 「サビはグリッチで」「画は0.1秒前から切り替え」「縦型で」）`);
   }
   return { cfg, changes };
+}
+
+// ---- camera moves / effects / beat sync: 「サビはクラッシュズームで」「Aメロのカメラは固定」「サビに光芒」「カメラはビートに乗せない」「エフェクト強め」 ----
+const CAM_WORDS: [RegExp, string][] = [[/固定|動かさない/, "none"], [/ドリーズーム|めまい/, "dolly_zoom"], [/オービット|回り込/, "orbit"], [/アーク|弧/, "arc"], [/手持ち|ハンドヘルド/, "handheld"], [/クラッシュズーム/, "crash_zoom"], [/ウィップ/, "whip_in"], [/クレーン|ジブ/, "crane_reveal"], [/顔.*(寄|プッシュ)/, "face_in"], [/2\.?5D|奥行き/, "depth_25d"], [/スピードランプ/, "speed_ramp"], [/ピント送り.*寄/, "focus_move"], [/ピント送り/, "rack_focus"], [/ロール|ダッチ|傾け/, "dutch"], [/ズーム脈動|拍でズーム/, "beat_pulse"], [/ゆっくり回転/, "slow_rotate"], [/斜め/, "diag_push"], [/ゆっくり寄|ケンバーンズ/, "kb_in"], [/引いて|引く/, "kb_out"], [/押し込/, "push"]];
+const FX_WORDS: [RegExp, string][] = [[/アナモ|レンズフレア|フレア/, "anamorphic"], [/光芒|ゴッドレイ/, "god_rays"], [/ティール|オレンジ/, "teal_orange"], [/ブリーチ/, "bleach"], [/フィルム調|フィルムっぽ/, "film_look"], [/フィルムバーン/, "film_burn"], [/被写界深度|周辺ぼけ/, "dof"], [/プリズム|分光/, "prism"], [/ガラス|屈折/, "glass"], [/ボケ|ダスト/, "bokeh"], [/光のスイープ|スイープ/, "light_sweep"], [/ブルーム/, "bloom"], [/ハレーション/, "halation"], [/粒子|グレイン/, "grain"], [/ビネット|周辺減光/, "vignette"], [/レターボックス|シネマ帯/, "letterbox"], [/光漏れ|ライトリーク/, "leak"], [/VHS|走査線/, "vhs"], [/フラッシュ|ストロボ/, "flash"], [/反転/, "invert"], [/画面シェイク|画面を揺ら/, "shake"], [/RGBずれ|色ずれエフェクト/, "glitch"]];
+function camFxFromText(cfg: MVConfig, t: string): string | null {
+  const isCam = /カメラ/.test(t), isFx = /エフェクト/.test(t);
+  const cam = CAM_WORDS.find(([re]) => re.test(t))?.[1];
+  const fx = FX_WORDS.find(([re]) => re.test(t))?.[1];
+  const sync = /ビートに乗せない|ビートなし|なめらか/.test(t) ? "off" : /小節ごと/.test(t) ? "bar" : /2拍ごと/.test(t) ? "beat2" : /アクセント/.test(t) ? "accent" : /ビートに乗せ|毎拍|ビートに合わせ/.test(t) ? "beat" : null;
+  const amt = /弱め|控えめ|自然/.test(t) ? "weak" : /強め|強く/.test(t) ? "strong" : /普通/.test(t) ? "normal" : null;
+  if (!(cam && (isCam || !fx)) && !fx && !((isCam || isFx) && (sync || amt))) return null;
+  if (cam && !isCam && !/で$|に$|して|ワーク/.test(t)) return null; // avoid eating unrelated phrases
+  const C: any = ((cfg as any).camfx ??= {}); C.sections ??= {};
+  const k = sectionKey(t) ?? "all"; const S = (C.sections[k] ??= {}); const where = k === "all" ? "全体" : k.replace(/^chorus/, "サビ").replace(/^verse/, "Aメロ").replace(/^pre_chorus/, "Bメロ").replace(/^intro/, "イントロ").replace(/^outro/, "アウトロ").replace(/^bridge/, "間奏/Cメロ");
+  const out: string[] = [];
+  if (cam) { S.move = cam; out.push(`カメラ → ${CAMERA_MOVES[cam]?.label ?? cam}`); }
+  if (fx) { S.fx = [...(S.fx ?? []).filter((e: any) => e.id !== fx), { id: fx, amount: amt ?? "weak", sync: sync ?? "off" }]; out.push(`エフェクト「${EFFECT_FX[fx]?.label ?? fx}」${amt ? `（${STRENGTH[amt as "weak"].label}）` : ""}`); }
+  if (!fx && sync) { if (isFx && S.fx) S.fx = S.fx.map((e: any) => ({ ...e, sync })); else S.camSync = sync; out.push(`${isFx ? "エフェクト" : "カメラ"}のビート同期 → ${SYNC[sync as "off"]}`); }
+  if (!fx && amt) { if (isFx && S.fx) S.fx = S.fx.map((e: any) => ({ ...e, amount: amt })); else S.camStrength = amt; out.push(`${isFx ? "エフェクト" : "カメラ"}の強さ → ${STRENGTH[amt as "weak"].label}`); }
+  return `${where}: ${out.join("・")}`;
 }
