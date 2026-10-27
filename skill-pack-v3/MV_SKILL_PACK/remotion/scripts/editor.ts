@@ -26,7 +26,7 @@ export function prepareProject(o:Record<string,any>){
  const manifestFile=o.manifest?path.resolve(String(o.manifest)):path.join(project,'out','editor-input.json');
  const manifest=fs.existsSync(manifestFile)?read(manifestFile):{};
  const stateFile0=path.join(runtime,'editor-state.json');
- if(fs.existsSync(stateFile0)){const st=read(stateFile0);const merged=Array.isArray(st.data.scenes)?mergeSceneSlivers(st.data.scenes,st.data.duration):st.data.scenes;const fix=merged?.length!==st.data.scenes?.length;if(fix)st.data.scenes=merged;if(fix||(!st.data.sections&&manifest.sections)){if(!st.data.sections&&manifest.sections)st.data.sections=manifest.sections;fs.writeFileSync(stateFile0,JSON.stringify(st,null,2))}return {project,runtime,reused:true};}
+ if(fs.existsSync(stateFile0)){const st=read(stateFile0);const merged=Array.isArray(st.data.scenes)?mergeSceneSlivers(st.data.scenes,st.data.duration):st.data.scenes;const fix=merged?.length!==st.data.scenes?.length;if(fix)st.data.scenes=merged;{const srcFile=path.join(path.dirname(stateFile0),'original-source.json');if(fs.existsSync(srcFile)){const src=read(srcFile);if(Array.isArray(src.scenes)){const m=mergeSceneSlivers(src.scenes,src.duration);if(m.length!==src.scenes.length){src.scenes=m;fs.writeFileSync(srcFile,JSON.stringify(src,null,2))}}}}if(fix||(!st.data.sections&&manifest.sections)){if(!st.data.sections&&manifest.sections)st.data.sections=manifest.sections;fs.writeFileSync(stateFile0,JSON.stringify(st,null,2))}return {project,runtime,reused:true};}
  let data:any,sourceLyrics:any[];
  if(o.demo){data=writeDemo(runtime);sourceLyrics=data.lyrics.map((l:any)=>({text:l.text}));}
  else{
