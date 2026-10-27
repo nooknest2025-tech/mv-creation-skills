@@ -1,4 +1,5 @@
 // ONE command: npm run mv [-- --song song.mp3 --lyrics lyrics.json --input ../input --preset auto --aspect 16:9 --yes]
+import { mergeSceneSlivers } from "../src/lib/sceneSlivers";
 // Detects inputs, fills gaps (analysis / Whisper / alignment / abstract visuals), shows a Japanese summary,
 // renders preview stills, then the MP4 (+ Drive variant, DaVinci package, highlight) and a QA report.
 import { needsStills, TASTE_JA } from "../src/lib/stills";
@@ -169,9 +170,9 @@ export async function run(argv: string[]) {
   // A per-project manifest lets the shared editor (npm run editor -- --project <name>) reopen the exact source files.
   if (det.images.length || (det.videos ?? []).length) writeJson(path.join(dir, "out", "editor-input.json"), {
     title, audio: det.audio, lyrics: path.join(dir, "song.json"), images: det.images, videos: det.videos ?? [],
-    scenes: first.shots.map((s, i) => ({ id: s.id, start: s.start, end: s.end,
+    scenes: mergeSceneSlivers(first.shots.map((s, i) => ({ id: s.id, start: s.start, end: s.end,
       asset: Math.max(0, media.findIndex((m) => m.src === s.src)), transition: i ? Math.min(0.7, s.end - s.start) : 0,
-      label: s.section ?? `シーン ${i + 1}` })),
+      label: s.section ?? `シーン ${i + 1}` })), song.duration),
     sections: song.sections.map((x) => ({ type: x.type, label: x.label, start: x.start, end: x.end })),
     lyricStyles: first.lines.map((l) => ({ motion: l.style, params: l.params })),
     width: first.width, height: first.height, fps: first.fps,

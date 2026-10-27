@@ -3,6 +3,7 @@ import fs from 'node:fs';import path from 'node:path';import {spawn,spawnSync} f
 import {PACK_DIR,REMOTION_DIR,PROJECTS_DIR,parseArgs,UserError,fail} from './common';
 import {buildEditor} from '../editor/build.mjs';
 import {ensureEditorFonts} from './editor_fonts';
+import {mergeSceneSlivers} from '../src/lib/sceneSlivers';
 
 const read=(p:string)=>JSON.parse(fs.readFileSync(p,'utf8').replace(/^\uFEFF/,''));
 export function normalizeLyrics(raw:any,duration:number){const lines=raw.lines??raw.lyrics??raw;return lines.map((l:any,i:number)=>({...l,id:l.id??`L${String(i+1).padStart(3,'0')}`,start:Number(l.start??l.startSeconds),end:Math.min(duration-1,Number(l.end??l.endSeconds)),motion:l.motion??'simple',scale:l.scale??.72,y:l.y??.8,motionDuration:l.motionDuration??.8}));}
@@ -25,7 +26,7 @@ export function prepareProject(o:Record<string,any>){
  const manifestFile=o.manifest?path.resolve(String(o.manifest)):path.join(project,'out','editor-input.json');
  const manifest=fs.existsSync(manifestFile)?read(manifestFile):{};
  const stateFile0=path.join(runtime,'editor-state.json');
- if(fs.existsSync(stateFile0)){const st=read(stateFile0);if(!st.data.sections&&manifest.sections){st.data.sections=manifest.sections;fs.writeFileSync(stateFile0,JSON.stringify(st,null,2))}return {project,runtime,reused:true};}
+ if(fs.existsSync(stateFile0)){const st=read(stateFile0);const merged=Array.isArray(st.data.scenes)?mergeSceneSlivers(st.data.scenes,st.data.duration):st.data.scenes;const fix=merged?.length!==st.data.scenes?.length;if(fix)st.data.scenes=merged;if(fix||(!st.data.sections&&manifest.sections)){if(!st.data.sections&&manifest.sections)st.data.sections=manifest.sections;fs.writeFileSync(stateFile0,JSON.stringify(st,null,2))}return {project,runtime,reused:true};}
  let data:any,sourceLyrics:any[];
  if(o.demo){data=writeDemo(runtime);sourceLyrics=data.lyrics.map((l:any)=>({text:l.text}));}
  else{
@@ -43,7 +44,7 @@ export function prepareProject(o:Record<string,any>){
   const assets=[...images,...videos].map((file:string,i:number)=>assetFor(file,i,runtime));
   const lyrics=normalizeLyrics(imported?.data?.lyrics??raw,duration);
   if(!imported&&manifest.lyricStyles)lyrics.forEach((l:any,i:number)=>Object.assign(l,manifest.lyricStyles[i]??{}));
-  const scenes=imported?.data?.scenes??manifest.scenes??assets.map((_:any,i:number)=>({id:`S${String(i+1).padStart(3,'0')}`,start:i*duration/assets.length,end:(i+1)*duration/assets.length,asset:i,transition:i?.7:0,label:`シーン ${i+1}`}));
+  const scenes0=imported?.data?.scenes??manifest.scenes??assets.map((_:any,i:number)=>({id:`S${String(i+1).padStart(3,'0')}`,start:i*duration/assets.length,end:(i+1)*duration/assets.length,asset:i,transition:i?.7:0,label:`シーン ${i+1}`}));const scenes=mergeSceneSlivers(scenes0,duration);
   data={...(imported?.data??{}),title:manifest.title??raw.title??raw.projectName??path.basename(project),duration,fps:imported?.data?.fps??manifest.fps??raw.fps??24,width:imported?.data?.width??manifest.width??1280,height:imported?.data?.height??manifest.height??720,bpm:raw.bpm||120,phase:raw.phase??0,lyrics,scenes,assets,audioFile,sections:imported?.data?.sections??manifest.sections??raw.sections?.map((x:any)=>({type:x.type,label:x.label,start:x.start,end:x.end}))};
   const sourceFile=o['source-lyrics']?String(o['source-lyrics']):manifest.sourceLyrics;
   const original=sourceFile?read(sourceFile):raw;sourceLyrics=(original.lines??original.lyrics??original).map((l:any)=>({text:l.text}));

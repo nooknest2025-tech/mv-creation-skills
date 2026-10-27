@@ -64,7 +64,7 @@ function group(c: Ctx, items: PItem[], ox: number, oy: number, els: React.ReactN
 }
 const exitDy = (c: Ctx, p: PItem) => -exitOut(exitP(c.L, c.t)) * p.px * 1.4;
 const decoLabel = (c: Ctx, box: Box, a: number) => {
-  const sz = U(c) * 0.014, txt = `${c.L.section.normalize("NFKC").replace(/[^\x20-\x7e]/g, "").toUpperCase() || c.L.sectionType.toUpperCase()} — ${String(c.L.li + 1).padStart(2, "0")}`;
+  const sz = U(c) * 0.014, txt = `${String(c.L.section ?? "").normalize("NFKC").replace(/[^\x20-\x7e]/g, "").toUpperCase() || String(c.L.sectionType ?? "").toUpperCase()} — ${String(c.L.li + 1).padStart(2, "0")}`;
   return <div style={{ position: "absolute", left: box[0], top: box[1] - sz * 2.6, fontFamily: "'Noto Sans JP', monospace", fontSize: sz, letterSpacing: sz * 0.5, color: FG, opacity: 0.55 * a, whiteSpace: "pre" }}>{txt}</div>;
 };
 

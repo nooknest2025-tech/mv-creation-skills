@@ -5,6 +5,11 @@ import {cameraPose,FxStage,activeFx,CAMERA_MOVES,EFFECT_FX,STRENGTH,SYNC} from '
 export {CAMERA_MOVES,EFFECT_FX,STRENGTH,SYNC};
 export const sceneMove=(s:any)=>s.cameraMove??(s.camera===false?'none':'sway');
 import FONT_OPTIONS from './font-options.json';
+import {sectionTypeOf} from '../src/lib/song';
+/** section label/type for a lyric (pro_* styles print them); never undefined. */
+export function sectionFor(sections:any[]|undefined,t:number){const s=(sections??[]).find((x:any)=>t>=x.start&&t<x.end)??(sections??[])[0];const label=String(s?.label??'');return {section:label,sectionType:s?.type??(label?sectionTypeOf(label):'other')}}
+/** one broken lyric style must not blank the whole preview (pictures included). */
+class LyricGuard extends React.Component<{children:any;id:string},{err:boolean}>{state={err:false};static getDerivedStateFromError(){return {err:true}}componentDidCatch(e:any){console.warn('lyric render failed',this.props.id,e)}render(){return this.state.err?null:this.props.children}}
 export {FONT_OPTIONS};
 export const POSITIONS:any={manual:'自由（現在位置）',tl:'左上',tc:'上中央',tr:'右上',ml:'左中央',mc:'中央',mr:'右中央',bl:'左下',bc:'下中央',br:'右下'};
 export const EFFECTS:any={none:'なし',double:'二重文字',shadow:'影',glow:'光彩',rgb:'色ずれ（二重）'};
@@ -44,7 +49,8 @@ export function Scene({data,t,base='',video}:{data:any;t:number;base?:string;vid
  <svg width={W} height={H} style={{position:'absolute',inset:0}}>{Array.from({length:12},(_,k)=>{const gain=Math.min(1,Math.max(0,(t-(data.particleStart??0))/Math.max(1,data.duration*.18)))*Math.min(1,Math.max(0,(data.duration-t)/5));let x=(k*151+t*(7+k%3))%(W+100)-50,y=90+(k*79+t*4)%420+12*Math.sin(t*.5+k);return <ellipse key={k} cx={x} cy={y} rx={5+k%4} ry={(5+k%4)*.43} transform={`rotate(${(t*.4+k)*180/Math.PI} ${x} ${y})`} fill={['#da9782','#9eb4a3','#b5a4bf','#c7ae77'][k%4]} opacity={gain*.57}/>})}</svg>
  {active.length>0&&<div style={{position:'absolute',inset:0,background:'linear-gradient(transparent 68%,rgba(15,25,21,.35))'}}/>}
  {active.map((l:any)=>{let style=l.motion??'simple';const defaults=CATALOG[style]?.defaults??{};const chars=Array.from(l.text as string).map((ch,ci)=>({ch,idx:ci,t0:l.start+(l.end-l.start)*ci/Array.from(l.text).length,t1:l.start+(l.end-l.start)*(ci+1)/Array.from(l.text).length}));const duration=l.motionDuration??.8;const charsTimed=chars.map((c,ci)=>({...c,t0:l.start+Math.min(l.end-l.start-.1,duration)*ci/chars.length,t1:l.start+Math.min(l.end-l.start-.1,duration)*(ci+1)/chars.length}));
- const L={...l,li:(parseInt(l.id?.replace(/[^0-9]/g,'')?.slice(0,8)??'0',10)||0),style,chars:charsTimed,words:[{i0:0,i1:chars.length,t:l.start}],params:{...defaults,enter:duration,lead:0,...l.params,...(l.fill?{color:l.fill}:{}),...(l.accent?{sung_color:l.accent,fill_color:l.accent,colors:[l.accent]}:{})},kw:[],seed:(parseInt(l.id?.replace(/[^0-9]/g,'')?.slice(0,8)??'0',10)||0)*7919+13,tOn:l.start,tOff:Math.max(l.start,l.end-.3),tEnd:l.end,exit:.3};
+ const L={...l,...sectionFor(data.sections,l.start),li:Math.max(0,data.lyrics.indexOf(l)),style,chars:charsTimed,words:[{i0:0,i1:chars.length,t:l.start}],params:{...defaults,enter:duration,lead:0,...l.params,...(l.fill?{color:l.fill}:{}),...(l.accent?{sung_color:l.accent,fill_color:l.accent,colors:[l.accent]}:{})},kw:[],seed:(parseInt(l.id?.replace(/[^0-9]/g,'')?.slice(0,8)??'0',10)||0)*7919+13,tOn:l.start,tOff:Math.max(l.start,l.end-.3),tEnd:l.end,exit:.3};
+ L.lead=Number(L.params.lead??0)||0;L.exit=Number(L.params.exit??.3);/* same fields the final render's resolve() fills; pro_* styles read them */
  const fn=STYLES[style];const rendered=fn?fn({L,t,P:L.params,W,H,beat:{bpm:data.bpm??120,phase:data.phase??0,beatsPerBar:4},k:l.scale??.72,textY:l.y??.84} as any):null;
  const boxes=rendered?.boxes?.filter(b=>b.every(Number.isFinite))??[];
  const x0=boxes.length?Math.min(...boxes.map(b=>b[0])):W*.1,y0=boxes.length?Math.min(...boxes.map(b=>b[1])):H*.7;
@@ -55,12 +61,12 @@ export function Scene({data,t,base='',video}:{data:any;t:number;base?:string;vid
  const position=l.position??'manual',fit=position==='manual'?1:Math.min(1,(W-128)/Math.max(1,rw),(H-100)/Math.max(1,rh));
  const tx=position==='manual'?cx:position[1]==='l'?64+rw*fit/2:position[1]==='r'?W-64-rw*fit/2:W/2;
  const ty=position==='manual'?cy:position[0]==='t'?50+rh*fit/2:position[0]==='b'?H-50-rh*fit/2:H/2;
- const family=FONT_OPTIONS.find(f=>f.id===l.font)?.family??'Noto Serif JP';const effect=l.effect??'none',offset=l.effectOffset??6;
- return <div key={l.id} style={{position:'absolute',inset:0,opacity:Math.max(0,Math.min(1,(t-l.start)/.1,(l.end-t)/.15)),'--lyric-font':`'${family}'`,'--lyric-fill':l.fill??'#f8f3e6','--lyric-accent':l.accent??'#e6aa96','--lyric-stroke':l.stroke??'#1f271f'} as any}>
+ const family=FONT_OPTIONS.find(f=>f.id===(l.font??l.params?.font))?.family??'Noto Serif JP';const effect=l.effect??'none',offset=l.effectOffset??6;
+ return <LyricGuard key={l.id} id={l.id}><div style={{position:'absolute',inset:0,opacity:Math.max(0,Math.min(1,(t-l.start)/.1,(l.end-t)/.15)),'--lyric-font':`'${family}'`,'--lyric-fill':l.fill??l.params?.palette?.fill??'#f8f3e6','--lyric-accent':l.accent??l.params?.palette?.accent??'#e6aa96','--lyric-stroke':l.stroke??l.params?.palette?.stroke??'#1f271f'} as any}>
  <div style={{position:'absolute',inset:0,transformOrigin:`${cx}px ${cy}px`,transform:`translate(${tx-cx}px,${ty-cy}px) rotate(${angle}deg) scale(${fit})`,filter:effect==='shadow'?`drop-shadow(${offset}px ${offset}px 3px #101310)`:effect==='glow'?`drop-shadow(0 0 ${offset+2}px #f4dfb0) drop-shadow(0 0 ${offset*2+3}px #e6aa96)`:undefined}}>
  {(effect==='double'||effect==='rgb')&&<div style={{position:'absolute',inset:0,transform:`translate(${offset}px,${offset}px)`,opacity:.5,'--lyric-fill':effect==='rgb'?'#58dce6':undefined,'--lyric-accent':effect==='rgb'?'#58dce6':undefined} as any}>{out}</div>}
  {effect==='rgb'&&<div style={{position:'absolute',inset:0,transform:`translate(${-offset}px,0)`,opacity:.5,'--lyric-fill':'#ff75ad','--lyric-accent':'#ff75ad'} as any}>{out}</div>}
- {out}</div></div>})}
+ {out}</div></div></LyricGuard>})}
  </FxStage>
  <div style={{position:'absolute',inset:0,background:'#19221c',opacity:Math.max(0,Math.min(.8,(t-(data.duration-2.2))/2.2*.8))}}/>
  </div>
