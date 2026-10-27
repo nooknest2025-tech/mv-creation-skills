@@ -11,6 +11,18 @@ export function resizeBoundary(scenes: { start: number }[], i: number, t: number
   const lo = scenes[i - 1].start + MIN_SCENE, hi = (scenes[i + 1]?.start ?? duration) - MIN_SCENE;
   const v = +Math.max(lo, Math.min(hi, t)).toFixed(3); scenes[i].start = v; return v;
 }
+/** which edges a scene block shows: left = its start (not for the first scene, which starts at 0),
+ *  right = its end (not for the last scene, which always ends with the song). */
+export function sceneEdges(i: number, n: number): ("start" | "end")[] {
+  const e: ("start" | "end")[] = []; if (i > 0) e.push("start"); if (i < n - 1) e.push("end"); return e;
+}
+/** scenes are back-to-back: scene i's right edge IS the boundary in front of scene i+1. */
+export const sceneBoundaryIndex = (i: number, edge: "start" | "end") => (edge === "start" ? i : i + 1);
+/** pin preview+timeline? saved choice wins ("1"/"0"); otherwise only on tall screens (>= 900px). */
+export const PIN_MIN_HEIGHT = 900;
+export function pinDefault(saved: string | null, viewportH: number): boolean {
+  return saved === "1" ? true : saved === "0" ? false : viewportH >= PIN_MIN_HEIGHT;
+}
 /** drag a lyric's start or end edge (stays inside 0..duration-1 and keeps >= MIN_LYRIC). */
 export function moveLyricEdge(l: { start: number; end: number }, edge: "start" | "end", t: number, duration: number): number {
   if (edge === "start") l.start = +Math.max(0, Math.min(l.end - MIN_LYRIC, t)).toFixed(3);
@@ -28,3 +40,11 @@ export function slideInPoint(from0: number, dragSeconds: number, rate: number, c
   return +Math.max(0, Math.min(max, from0 - dragSeconds * (rate || 1))).toFixed(3);
 }
 export const fmt = (t: number) => `${Math.floor(t / 60)}:${(t % 60).toFixed(2).padStart(5, "0")}`;
+
+/** when a scene's material is swapped: drop the old clip trim/speed. A video starts in 「自動で合わせる」(fit) mode. */
+export function resetClipForAsset(s: any, isVideo: boolean) {
+  for (const k of ["clipFrom", "clipTo", "speed", "segments", "solve", "ease", "tail", "fit"]) delete s[k];
+  if (isVideo) s.fit = true; return s;
+}
+export const ADD_ASSET_EXT = /\.(png|jpe?g|webp|gif|svg|mp4|mov|m4v|webm)$/i;
+export const isVideoName = (n: string) => /\.(mp4|mov|m4v|webm)$/i.test(n);

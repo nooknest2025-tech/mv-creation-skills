@@ -14,6 +14,7 @@ STATE=ROOT/'editor-state.json'
 LOCK=threading.RLock(); JOB={'status':'idle'}
 if not STATE.exists():raise SystemExit('編集データがありません。npm run editor -- --project ... から起動してください')
 
+ADD_EXT={'.png','.jpg','.jpeg','.webp','.gif','.svg','.mp4','.mov','.m4v','.webm'};VIDEO_EXT={'.mp4','.mov','.m4v','.webm'};ADD_MAX=2*1024**3
 def read():return json.loads(STATE.read_text(encoding='utf-8'))
 def validate(d):
     orig=json.loads((ROOT/'original-source.json').read_text(encoding='utf-8'))
@@ -110,12 +111,41 @@ class Handler(SimpleHTTPRequestHandler):
                 if job['status']=='idle' and (ROOT/'last-export.json').exists():job=json.loads((ROOT/'last-export.json').read_text(encoding='utf-8'))
                 return self.respond(job)
         super().do_GET()
+    def add_asset(self,size):
+        """add an image/video from the user's PC (raw body). Appended to assets in BOTH the state and original-source
+        so the 'assets are preserved' check keeps passing; existing assets are never changed or removed."""
+        from urllib.parse import urlparse,parse_qs
+        q=parse_qs(urlparse(self.path).query);name=Path(q.get('name',[''])[0]).name
+        ext=Path(name).suffix.lower()
+        if ext not in ADD_EXT:return self.respond({'error':'追加できるのは mp4 / mov / webm / png / jpg / webp / gif / svg です'},400)
+        if not 0<size<=ADD_MAX:return self.respond({'error':'ファイルが大きすぎるか空です（2GBまで）'},400)
+        with LOCK:
+            folder=ROOT/'assets';folder.mkdir(exist_ok=True)
+            dest=folder/f'added-{time.time_ns()}{ext}';left=size
+            with open(dest,'wb') as f:
+                while left>0:
+                    b=self.rfile.read(min(left,1<<20))
+                    if not b:break
+                    f.write(b);left-=len(b)
+            if left:dest.unlink(missing_ok=True);return self.respond({'error':'アップロードが途中で切れました'},400)
+            asset={'src':'assets/'+dest.name,'label':name+('（動画）' if ext in VIDEO_EXT else '')}
+            if ext in VIDEO_EXT:
+                asset['kind']='video'
+                try:
+                    dur=float(q.get('duration',['0'])[0])
+                    if math.isfinite(dur) and dur>0:asset['duration']=round(dur,3)
+                except ValueError:pass
+            origp=ROOT/'original-source.json';orig=json.loads(origp.read_text(encoding='utf-8'));orig['assets'].append(asset)
+            origp.write_text(json.dumps(orig,ensure_ascii=False,indent=2),encoding='utf-8')
+            cur=read();cur['data']['assets'].append(asset);STATE.write_text(json.dumps(cur,ensure_ascii=False,indent=2),encoding='utf-8')
+            return self.respond({'asset':asset,'index':len(orig['assets'])-1})
     def do_POST(self):
         global JOB
         try:
             origin=self.headers.get('Origin','')
             if origin and origin not in [f'http://127.0.0.1:{self.server.server_address[1]}',f'http://localhost:{self.server.server_address[1]}']:return self.respond({'error':'別のページからは保存できません'},403)
             size=int(self.headers.get('Content-Length','0'))
+            if self.path.startswith('/api/add-asset'):return self.add_asset(size)
             if not 0<size<200000:return self.respond({'error':'入力サイズを確認してください'},400)
             body=json.loads(self.rfile.read(size))
             with LOCK:
