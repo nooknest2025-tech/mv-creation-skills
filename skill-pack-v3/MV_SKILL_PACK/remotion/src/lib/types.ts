@@ -77,6 +77,8 @@ export interface Shot {
   textY?: number; // picture-aware lyric row for this shot
   textWhy?: string;
   locked?: boolean; // edited by the user
+  muted?: boolean; // generated clip audio is never used (master song only)
+  lipsync?: boolean; // placed exactly on its lip-sync/dance audio window
 }
 export interface FaceRig {
   eyes: [number, number, number, number][]; // x, y, rx, ry (fractions of the image)

@@ -15,7 +15,8 @@ import { adapt, recommendModel, priceAt } from "../src/lib/videoModels";
 import { selectRefs, ROLE_JA } from "../src/lib/assets";
 import { estimate as estimateCost, estimateMd, confirmRun, type PlansFile } from "../src/lib/estimate";
 import { planCut, needsAudio } from "../src/lib/audiocut";
-import { cutAudio, validateCut } from "./audiotrim";
+import { shortShotAdvice, autoMerge, type ShortAdvice } from "../src/lib/lipsync";
+import { cutAudio, validateCut, probeDur } from "./audiotrim";
 import { saveLib, loadLib, planImages, addAsset, setApproval, parseAssetCmd, ORDER_JA } from "./assets_lib";
 
 const GEN_DIR = path.join(PACK_DIR, "gen");
@@ -72,6 +73,18 @@ export function makePlan(dir: string, o: Record<string, any>) {
   const shotReview = reviewShotList(allSpecs, locked);
   const specOf = (id: string) => allSpecs.find((x) => x.shot === id)!;
   const legacy = !!(o.provider ?? cfg.gen?.provider);
+  // short lip-sync/dance shots: warn when a model would stretch them by >1s; auto (unlocked) shots are merged with a same-singer neighbour
+  const pickFor = (id: string) => { const sp = specOf(id); if (!sp) return null; const ov = o.model ?? cfg.gen?.perShot?.[id] ?? cfg.gen?.model; if (legacy) return recommend(props.shots.find((x) => x.id === id)!, preset.id, models, ov, o.provider ?? cfg.gen?.provider).model; return recommendModel(sp, models, { res, refs: selectRefs(lib, { shot: id, role: sp.role, size: sp.size, performance: sp.performance }), override: ov, verifiedOnly: true, budgetPerShot: cfg.gen?.budgetPerShot }).model; };
+  const shortIn = props.shots.map((s) => ({ id: s.id, start: s.start, end: s.end, performance: specOf(s.id)?.performance, singer: specOf(s.id)?.continuity?.character ?? cfg.subject ?? "", locked: s.locked }));
+  const shortAdv: ShortAdvice[] = shortShotAdvice(shortIn, pickFor, models).filter((a) => shots.some((s) => s.id === a.shot));
+  let merged: string[] = [];
+  if (cfg.gen?.autoMerge !== false && !o.noMerge) {
+    const am = autoMerge(shortIn, shortAdv, cfg.gen?.keepCut ?? []);
+    merged = am.merged;
+    shots = shots.map((s) => { const m = am.shots.find((x) => x.id === s.id); return m ? { ...s, start: m.start, end: m.end } : s; });
+    const gone = new Set(shortIn.map((x) => x.id).filter((id) => !am.shots.some((x) => x.id === id)));
+    shots = shots.filter((s) => !gone.has(s.id));
+  }
   const rows = shots.map((s) => {
     const sp = specOf(s.id);
     const refs = selectRefs(lib, { shot: s.id, role: sp.role, size: sp.size, performance: sp.performance });
@@ -96,8 +109,9 @@ export function makePlan(dir: string, o: Record<string, any>) {
   const imgT = readJson<any>(path.join(dir, "image_tasks.json"), null);
   const imageUSD = imgT?.total_usd ?? 0;
   const total = +(rows.reduce((a, r) => a + (r.cost ?? 0), 0) + (imageUSD ?? 0)).toFixed(3);
-  const plan = { shotReview, createdAt: new Date().toISOString(), project: path.basename(dir), res, takes, total, unknownCost: rows.some((r) => r.cost === null) || !!(imgT && imgT.total_usd == null), imageUSD, imageTasks: imgT?.tasks?.length ?? 0, rows };
+  const plan = { shortShots: shortAdv, merged, shotReview, createdAt: new Date().toISOString(), project: path.basename(dir), res, takes, total, unknownCost: rows.some((r) => r.cost === null) || !!(imgT && imgT.total_usd == null), imageUSD, imageTasks: imgT?.tasks?.length ?? 0, rows };
   const est = estimateFor(dir, rows, models);
+  (est as any).shortShots = shortAdv; (est as any).merged = merged;
   (plan as any).estimate = est; plan.total = est.usdTotal; (plan as any).unknownCost = !est.complete;
   fs.mkdirSync(GEN_DIR, { recursive: true });
   writeJson(path.join(dir, "gen_plan.json"), plan);
@@ -106,6 +120,7 @@ export function makePlan(dir: string, o: Record<string, any>) {
     "| ショット | セクション | 秒 | モデル | 理由 | $/秒 | 見積もり |", "|---|---|---|---|---|---|---|",
     ...rows.map((r) => `| ${r.shot} | ${r.section} | ${r.sec} | ${r.model} | ${r.why} | ${r.price_per_sec ?? "未確認"} | ${r.cost === null ? "不明" : "$" + r.cost} |`), "",
     `## ショットリスト批評（スコア ${shotReview.score}）`, ...(shotReview.issues.length ? shotReview.issues.map((i) => `- ${i.fixed ? "🔧" : "💡"} ${i.msg}`) : ["- 問題なし"]), "",
+    ...(shortAdv.length ? ["## ⚠ 短い口パク/ダンスショット（対応尺に1秒以上伸びる）", ...shortAdv.flatMap((a) => [`- ${a.msg}`, ...a.options.map((x) => `  - 案: ${x}`)]), ...(merged.length ? [`- 🔧 自動モードで結合: ${merged.join("、")}（あなたが指定したカットは変えていません）`] : []), ""] : []),
     "## 口パク・ダンスの音声（元の曲から切り出し）", ...(rows.filter((r: any) => r.audioCut).map((r: any) => `- **${r.shot}**: ${r.audioCut.start.toFixed(3)}s から ${r.audioCut.dur}s（${r.audioCut.adjustJa}）→ ${r.audioCut.file ?? "未作成: " + r.audioCut.error} / ${r.audioCut.note}`)), "",
     "## 参照素材の割り当て", ...rows.map((r: any) => `- **${r.shot}**: ${[r.refs.first && "開始画", r.refs.last && "終了画", r.refs.refs.length && `参照${r.refs.refs.length}枚`, r.refs.composite && "合成開始画（要作成）", r.refs.audio && "音声"].filter(Boolean).join(" / ") || "なし"}${r.dropped.length ? `（使えない素材: ${r.dropped.join("、")}）` : ""}${r.warnings.length ? ` ⚠ ${r.warnings.join("、")}` : ""}`), "",
     "## 無料の代わり", "- **静止画モード**（このまま npm run mv）: 画像だけで Ken Burns・疑似2.5D・光・粒子・拍揺れ。API 料金ゼロ。",
@@ -279,7 +294,13 @@ export function reviewAction(dir: string, a: { shot: string; file: string; actio
     fs.mkdirSync(path.dirname(dst), { recursive: true });
     fs.copyFileSync(path.join(GEN_DIR, "takes", a.shot, a.file), dst);
     const cfg = loadConfig(dir); cfg.timing ??= {}; cfg.timing.perShot ??= {};
-    cfg.timing.perShot[a.shot] = { ...(cfg.timing.perShot[a.shot] ?? {}), src: `project/gen/${a.shot}/${a.file}`, kind: "video", clipFrom: 0 };
+    const prev = { ...(cfg.timing.perShot[a.shot] ?? {}) }; delete prev.lipsync;
+    cfg.timing.perShot[a.shot] = { ...prev, src: `project/gen/${a.shot}/${a.file}`, kind: "video", clipFrom: 0 };
+    // lip-sync/dance: record the audio window + measured lengths so the render places the clip exactly and checks it (<=1 frame)
+    const row = readJson<any>(path.join(dir, "gen_plan.json"), null)?.rows?.find((r: any) => r.shot === a.shot);
+    if (row?.audioCut) { const ac = row.audioCut, wav = ac.file ? path.join(dir, ac.file) : null;
+      const sec = (f: string | null) => { try { return f && fs.existsSync(f) ? probeDur(f) : null; } catch { return null; } };
+      cfg.timing.perShot[a.shot].lipsync = { start: ac.start, dur: ac.dur, origStart: ac.origStart, origEnd: ac.origEnd, adjust: ac.adjust, at: new Date().toISOString(), wav: ac.file ?? null, wavSec: sec(wav), clipSec: sec(dst), attach: !!ac.attach }; }
     saveConfig(dir, cfg);
   }
   writeJson(f, review);
@@ -309,7 +330,7 @@ async function main() {
   if (cmd === "run") return runPlan(dir, o);
   if (cmd === "assets") return assetsCmd(dir, rest.slice(1), o);
   if (cmd === "qa") return clipQA(dir, o);
-  if (cmd === "estimate") { const p = readJson<any>(path.join(dir, "gen_plan.json"), null) ?? makePlan(dir, o).plan; const e = estimateFor(dir, p.rows); log(estimateMd(e)); log(`\n▶ 実行: npm run gen -- run （確認あり）/ 非対話: --confirm ${e.usdTotal}`); return e; }
+  if (cmd === "estimate") { const p = readJson<any>(path.join(dir, "gen_plan.json"), null) ?? makePlan(dir, o).plan; const e = estimateFor(dir, p.rows); Object.assign(e, { shortShots: p.shortShots ?? [], merged: p.merged ?? [] }); log(estimateMd(e)); log(`\n▶ 実行: npm run gen -- run （確認あり）/ 非対話: --confirm ${e.usdTotal}`); return e; }
   if (cmd === "plan-tier") { const { applyInstruction } = await import("../src/lib/nl"); const r = applyInstruction(loadConfig(dir), rest.slice(1).join(" ")); saveConfig(dir, r.cfg); r.changes.forEach((c) => log("✏️ " + c)); if (!r.changes.length) log("プランを読み取れませんでした。例: KlingはProプラン / RunwayはAPI / Klingの残り1200クレジット"); return r; }
   if (cmd === "import") {
     if (!rest[1]) throw new UserError("取り込むファイル・フォルダ・URLを指定してください", "例: npm run gen -- import ~/Downloads/clip.mp4 --shot S012 --from pollo");

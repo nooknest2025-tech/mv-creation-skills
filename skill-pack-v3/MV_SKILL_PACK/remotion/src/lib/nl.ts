@@ -1,3 +1,4 @@
+import { parseRestore, restoreCut } from "./lipsync";
 import { parsePlanTier } from "./estimate";
 import PLANS_JSON from "./plans.gen.json";
 export const planTierFromText = (t: string) => /(プラン|API|従量|クレジット)/i.test(t) ? parsePlanTier(t, PLANS_JSON as any) : null;
@@ -53,6 +54,7 @@ export function applyInstruction(cfg0: MVConfig, text: string): { cfg: MVConfig;
   const parts = text.normalize("NFKC").split(/[。\n]|、(?=.*(で|に|して))/).map((s) => s?.trim()).filter(Boolean) as string[];
   for (const t of parts.length ? parts : [text]) {
     const T = (cfg.timing ??= {});
+    { const r = parseRestore(t); if (r) { const x = restoreCut(cfg, r); Object.assign(cfg, x.cfg); changes.push(...x.changes); continue; } }
     // ---- plan tier: 「KlingはProプラン」「RunwayはAPI」「Klingの残り1200クレジット」 ----
     { const pt = planTierFromText(t); if (pt) { const G = (cfg.gen ??= {}); G.plans ??= {}; const cur = G.plans[pt.provider]; const prev = typeof cur === "string" ? { plan: cur } : cur ?? { plan: "api" };
       const nv = { plan: pt.plan ?? prev.plan, ...(pt.remaining != null ? { remaining: pt.remaining } : (prev as any).remaining != null ? { remaining: (prev as any).remaining } : {}) };

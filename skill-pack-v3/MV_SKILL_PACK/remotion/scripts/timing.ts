@@ -67,4 +67,14 @@ async function main() {
     } catch (e) { res.writeHead(500); res.end(String((e as Error).message)); }
   }).listen(port, "127.0.0.1", () => log(`⏱  タイミングエディタ: http://127.0.0.1:${port}/ をブラウザで開いてください（${name}）。保存すると mv.config.json の timing に記録され、再解析しても消えません。Ctrl+C で終了。`));
 }
-if (process.argv[1]?.match(/timing\.ts$/)) main().catch(fail);
+import { restoreCut } from "../src/lib/lipsync";
+// npm run timing -- restore S005 [S006 ...] | restore all  → 口パク/ダンスの尺調整を取り消して元のカットに戻す（ファイルは消さない）
+export function restoreCmd(dir: string, args: string[]) {
+  const ids = !args.length || args.includes("all") || args.includes("全部") ? "all" as const : args;
+  const r = restoreCut(loadConfig(dir), ids); saveConfig(dir, r.cfg); return r.changes;
+}
+const argv = process.argv.slice(2);
+if (process.argv[1]?.match(/timing\.ts$/)) {
+  if (argv[0] === "restore") { try { const name = (o.project as string) ?? latest(); for (const c of restoreCmd(path.join(PROJECTS_DIR, name), argv.slice(1).filter((a) => !a.startsWith("--") && a !== name))) log("↩ " + c); } catch (e) { fail(e); } }
+  else main().catch(fail);
+}

@@ -7,6 +7,7 @@ import { HYBRIDS, HYBRID_IDS, applyHybrid, pickHybrid } from "./hybrids";
 import { placeText } from "./visual";
 import { review, type Review } from "./critic";
 import type { RenderProps, Song } from "./types";
+import { applyLipsync } from "./lipsync";
 
 export function applyTiming(song: Song, cfg: MVConfig): Song {
   const T = cfg.timing ?? {};
@@ -56,6 +57,7 @@ export function pickGenre(song: Song, cfg: MVConfig): { id: string | null; why: 
 }
 import { letterboxPx } from "./finish";
 export function buildProps(song0: Song, cfg: MVConfig, media: MediaItem[], o: { overlayOnly?: boolean; audio?: string; aspect?: string } = {}): RenderProps & { presetWhy: string; genre?: string; genreWhy?: string; structure?: string; structureWhy?: string; sectionNotes?: string[]; review?: Review } {
+  if (o.audio && /_lipsync\.(wav|mp3)$/i.test(o.audio)) throw new Error("口パク用に切り出した音声は最終ミックスに使えません（元の曲を1本だけ使います）");
   const song = applyTiming(song0, cfg);
   const { preset, why } = pickPreset(song, cfg, media.some((m) => m.kind === "video"));
   const asp = ASPECTS[(o.aspect ?? cfg.aspect ?? "16:9") as keyof typeof ASPECTS] ?? ASPECTS["16:9"];
@@ -80,6 +82,10 @@ export function buildProps(song0: Song, cfg: MVConfig, media: MediaItem[], o: { 
   const st = sel === "none" ? null : sel === "auto" ? pickHybrid(genre.id, faceRatio, media.length) : HYBRIDS[sel] ? { id: sel, why: `${HYBRIDS[sel].ja}（指定）: ${HYBRIDS[sel].why}` } : (() => { throw new Error(`構成「${sel}」は未知です: ${HYBRID_IDS.join(", ")}`); })();
   shots.forEach((s) => { if (T.perShot?.[s.id]) s.locked = true; });
   if (st) shots = applyHybrid(shots, st.id, { keepMouth: cfg.puppet?.mouth !== undefined, pool: media.filter((m) => m.kind === "image").map((m) => ({ ...m })) });
+  // lip-sync / dance takes: fixed on their audio window (respects extended/shifted in/out from the gen plan)
+  const ls = Object.fromEntries(Object.entries(T.perShot ?? {}).filter(([, v]) => v?.lipsync).map(([k, v]) => [k, v!.lipsync]));
+  let lipsyncNotes: string[] = [];
+  if (Object.keys(ls).length) { const r = applyLipsync(shots, ls, fps); shots = r.shots; lipsyncNotes = r.notes; }
   const lyricCfg = { ...(preset.lyric ?? {}), ...(cfg.lyrics ?? {}), sections: { ...(preset.lyric.sections ?? {}), ...(cfg.lyrics?.sections ?? {}), ...(cfg.sectionStyles ?? {}) } };
   if (cfg.lyrics?.default === undefined && preset.lyric.default !== undefined) lyricCfg.default = preset.lyric.default;
   if (genre.id) { // genre recipe drives auto styles: drop the preset's lyric table (user tables stay)
@@ -108,6 +114,7 @@ export function buildProps(song0: Song, cfg: MVConfig, media: MediaItem[], o: { 
   if (lb > 0 && (lyricCfg as any).textY === undefined) props.textY = 1 - (lb / props.height) * 0.42; // subtitles live in the lower bar
   props.structure = st?.id; props.structureWhy = st?.why ?? "構成なし（素材を順に使う）";
   props.sectionNotes = notesOf(allLines).map((n) => n.why);
+  (props as any).lipsyncNotes = lipsyncNotes;
   if (cfg.critic !== false) {
     const calm = !!genre.id && ["ballad", "acoustic", "ambient"].includes(genre.id) || song.bpm < 90;
     const rv = review({ shots, lines, beat: props.beat, genre: genre.id, calm, textY: props.textY, movesAlt: [...new Set(Object.values(preset.moves).flat())] });

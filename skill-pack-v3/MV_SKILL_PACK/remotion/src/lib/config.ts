@@ -18,7 +18,7 @@ export interface Timing {
   beatShiftBeats?: number; // shift the beat grid in beats (e.g. 0.5 = half a beat)
   sections?: Section[]; // manual section boundaries (locked)
   perSection?: Record<string, { cutLead?: number; lyricIn?: number; lyricOut?: number; cutBeats?: number }>;
-  perShot?: Record<string, { start?: number; end?: number; src?: string; kind?: "image" | "video"; clipFrom?: number; move?: string; transition?: string; ramp?: string; puppet?: Partial<import("./types").PuppetCfg> }>;
+  perShot?: Record<string, { start?: number; end?: number; src?: string; kind?: "image" | "video"; clipFrom?: number; move?: string; transition?: string; ramp?: string; puppet?: Partial<import("./types").PuppetCfg>; lipsync?: import("./lipsync").LipsyncMeta; lipsyncHistory?: any[] }>;
   perLine?: Record<string, { start?: number; end?: number; text?: string }>;
   locked?: string[]; // which analysis fields are manual (kept on re-analysis): "bpm" | "beatShift" | "sections" | "lines"
 }
@@ -49,7 +49,7 @@ export interface MVConfig {
   visuals?: import("./types").VisualFx; // audio-reactive layers
   finish?: import("./types").FinishFx; // in-Remotion finishing
   ramps?: Record<string, string>; // section -> speed ramp
-  gen?: { model?: string; perShot?: Record<string, string>; resolution?: string; takes?: number; capUSD?: number; provider?: string; budgetPerShot?: number; imageModel?: string; plans?: Record<string, string | { plan: string; remaining?: number }>; audio?: boolean };
+  gen?: { model?: string; perShot?: Record<string, string>; resolution?: string; takes?: number; capUSD?: number; provider?: string; budgetPerShot?: number; imageModel?: string; plans?: Record<string, string | { plan: string; remaining?: number }>; audio?: boolean; autoMerge?: boolean; keepCut?: string[] };
   /** continuity sheet for AI video (character / wardrobe / locations / props) */
   continuity?: { character?: string; wardrobe?: string; location?: string; locations?: string[]; props?: string[]; refImages?: string[] };
 }

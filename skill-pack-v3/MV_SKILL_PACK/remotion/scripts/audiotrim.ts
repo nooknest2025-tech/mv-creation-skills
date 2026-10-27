@@ -14,6 +14,8 @@ export function cutAudio(song: string, c: CutPlan, outDir: string): string {
   fs.mkdirSync(outDir, { recursive: true });
   const out = path.join(outDir, `${c.shot}_lipsync.${c.format}`);
   if (path.resolve(out) === path.resolve(song)) throw new Error("出力先が元の曲と同じです");
+  // never overwrite: keep the previous trim as <shot>_lipsync.vN.<ext>
+  if (fs.existsSync(out)) { let n = 1; const v = (k: number) => path.join(outDir, `${c.shot}_lipsync.v${k}.${c.format}`); while (fs.existsSync(v(n))) n++; fs.renameSync(out, v(n)); }
   const sr = 48000, s0 = Math.round(c.start * sr), n = Math.round(c.dur * sr);
   const af = [`aresample=${sr}`, `atrim=start_sample=${s0}:end_sample=${s0 + n}`, "asetpts=PTS-STARTPTS", ...(c.fadeMs ? [`afade=t=in:d=${c.fadeMs / 1000}`, `afade=t=out:st=${c.dur - c.fadeMs / 1000}:d=${c.fadeMs / 1000}`] : []), `apad=whole_len=${n}`].join(",");
   execFileSync("ffmpeg", ["-v", "error", "-y", "-i", song, "-af", af, "-ar", String(sr), ...(c.format === "mp3" ? ["-c:a", "libmp3lame", "-b:a", "192k"] : ["-c:a", "pcm_s16le"]), out]);

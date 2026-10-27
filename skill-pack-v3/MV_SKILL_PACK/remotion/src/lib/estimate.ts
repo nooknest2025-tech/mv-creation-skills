@@ -73,6 +73,8 @@ export function estimateMd(e: Estimate): string {
   const adj = e.lines.filter((l) => l.adjustJa); if (adj.length) L.push("", "## 尺の調整（口パク/ダンス）", ...adj.map((l) => `- ${l.shot}: ${l.adjustJa}`));
   if (e.images.length) L.push("", "## 参照・開始画の画像", ...e.images.map((i) => `- ${i.model} × ${i.count} 枚: ${i.usd == null ? "未確認" : "$" + i.usd}`));
   for (const c of Object.values(e.credits)) L.push("", `## ${c.ja}（サブスク）`, `- 使用 ${c.used} クレジット / 残り ${c.remaining} → **実行後 ${c.after}**${c.after < 0 ? `（${c.overCredits} 不足: 追加 ${c.overUsd == null ? "単価未確認" : "$" + c.overUsd}）` : ""}${c.verified ? "" : " ※未確認の値を含む"}`, `- 出典: ${c.source}`);
+  const sh = (e as any).shortShots as import("./lipsync").ShortAdvice[] | undefined;
+  if (sh?.length) L.push("", "## ⚠ 短い口パク/ダンスショット", ...sh.flatMap((a) => [`- ${a.msg}`, ...a.options.map((x) => `  - 案: ${x}`)]), ...(((e as any).merged ?? []).length ? [`- 🔧 自動で結合: ${(e as any).merged.join("、")}`] : []));
   L.push("", `## 合計（確認済みの金額）: **$${e.usdTotal}**`);
   if (e.unknown.length) L.push("", "⚠️ 次の項目は未確認のため合計に入っていません（推測しません）:", ...e.unknown.map((u) => `- ${u.shot}: ${u.why}`));
   return L.join("\n");
