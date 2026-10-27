@@ -23,12 +23,27 @@ export function applyTiming(song: Song, cfg: MVConfig): Song {
     const ps = (sec && (T.perSection?.[sec.label] ?? T.perSection?.[`${sec.type}#${inst}`] ?? T.perSection?.[sec.type])) || {};
     const pl = T.perLine?.[String(i)] ?? {};
     const dIn = (T.lyricIn ?? 0) + (ps.lyricIn ?? 0), dOut = (T.lyricOut ?? 0) + (ps.lyricOut ?? 0);
-    const shift = pl.start !== undefined ? pl.start - L.start : dIn;
-    const n = { ...L, start: L.start + shift, end: (pl.end ?? L.end + dOut + (pl.start !== undefined ? 0 : 0)), chars: L.chars.map((c) => ({ ...c, t0: c.t0 + shift, t1: c.t1 + shift })), words: L.words.map((w) => ({ ...w, t: w.t + shift })) };
+    const lo = pl.start === undefined && Number.isFinite(pl.offset) ? pl.offset! : 0; // 個別 offset は全体に上乗せ（行ごと前後に動かす）
+    const shift = pl.start !== undefined ? pl.start - L.start : dIn + lo;
+    const n = { ...L, start: L.start + shift, end: (pl.end ?? L.end + dOut + lo), chars: L.chars.map((c) => ({ ...c, t0: c.t0 + shift, t1: c.t1 + shift })), words: L.words.map((w) => ({ ...w, t: w.t + shift })) };
     if (pl.end === undefined && pl.start !== undefined) n.end = L.end + shift;
     return n;
   });
   return s;
+}
+
+/** 個別の「画の切替」ずらし (perShot[id].offset 秒, マイナス=早く) を全体設定の上に足す。
+ * カットは境界なので、そのシーンの開始と直前シーンの終わりを一緒に動かす（最短0.1秒は残す）。 */
+export function applyShotOffsets<S extends { id: string; start: number; end: number }>(shots: S[], T: { perShot?: Record<string, { offset?: number }> }, t0 = 0): S[] {
+  const out = shots.map((s) => ({ ...s }));
+  for (let i = 1; i < out.length; i++) {
+    const o = T.perShot?.[out[i].id]?.offset;
+    if (!o || !Number.isFinite(o)) continue;
+    const lo = Math.max(t0, out[i - 1].start + 0.1), hi = out[i].end - 0.1;
+    const nb = Math.min(hi, Math.max(lo, out[i].start + o));
+    out[i].start = nb; out[i - 1].end = nb;
+  }
+  return out;
 }
 
 export function analysisSummary(song: Song) {
@@ -98,7 +113,8 @@ export function buildProps(song0: Song, cfg: MVConfig, media: MediaItem[], o: { 
   const sel = cfg.structure ?? "auto";
   const faceRatio = media.length ? media.filter((m) => m.face?.eyes?.length).length / media.length : 0;
   const st = sel === "none" ? null : comboModes && (cfg.combo?.length || sel === "auto") && mog?.combo ? { id: mog.combo.id, why: `${HYBRIDS[mog.combo.id].ja}${cfg.combo?.length ? "（指定）" : "（自動提案）"}: ${mog.combo.notes.join("｜")}` } : sel === "auto" ? pickHybrid(genre.id, faceRatio, media.length) : HYBRIDS[sel] ? { id: sel, why: `${HYBRIDS[sel].ja}（指定）: ${HYBRIDS[sel].why}` } : (() => { throw new Error(`構成「${sel}」は未知です: ${HYBRID_IDS.join(", ")}`); })();
-  shots.forEach((s) => { if (T.perShot?.[s.id]) s.locked = true; });
+  shots = applyShotOffsets(shots, T, start);
+  shots.forEach((s) => { const m = T.perShot?.[s.id]; if (m && Object.keys(m).some((k) => k !== "offset")) s.locked = true; });
   if (st) shots = applyHybrid(shots, st.id, { keepMouth: cfg.puppet?.mouth !== undefined, pool: media.filter((m) => m.kind === "image").map((m) => ({ ...m })) });
   // lip-sync / dance takes: fixed on their audio window (respects extended/shifted in/out from the gen plan)
   const ls = Object.fromEntries(Object.entries(T.perShot ?? {}).filter(([, v]) => v?.lipsync).map(([k, v]) => [k, v!.lipsync]));

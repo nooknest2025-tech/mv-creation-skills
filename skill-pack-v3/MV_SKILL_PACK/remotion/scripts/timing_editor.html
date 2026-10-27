@@ -1,77 +1,145 @@
-<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>タイミングエディタ</title>
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>タイミング調整</title>
 <style>
-body{margin:0;background:#15131a;color:#eee;font-family:"Noto Sans JP",system-ui,sans-serif}
-header{display:flex;gap:12px;align-items:center;padding:10px 14px;background:#221e2a;flex-wrap:wrap}
-header label{font-size:13px;opacity:.9} input{width:70px;background:#111;color:#fff;border:1px solid #555;border-radius:4px;padding:3px}
-button{background:#ff46a0;color:#fff;border:0;border-radius:6px;padding:6px 12px;font-weight:700;cursor:pointer} button.sub{background:#444}
-#wrap{overflow-x:auto;position:relative} canvas{display:block} #help{font-size:12px;opacity:.75;padding:6px 14px} #msg{color:#7f7}
+body{margin:0;background:#15131a;color:#eee;font-family:"Noto Sans JP",system-ui,sans-serif;font-size:14px}
+header{display:flex;gap:10px;align-items:center;padding:8px 14px;background:#221e2a;flex-wrap:wrap}
+button{background:#ff46a0;color:#fff;border:0;border-radius:6px;padding:6px 12px;font-weight:700;cursor:pointer} button.sub{background:#444;font-weight:400;padding:4px 9px} button.on{background:#2a9dff}
+input[type=number]{width:72px;background:#111;color:#fff;border:1px solid #555;border-radius:4px;padding:3px}
+#top{display:grid;grid-template-columns:minmax(260px,360px) 1fr 1fr;gap:10px;padding:10px 14px}
+.box{background:#1e1b25;border:1px solid #333;border-radius:8px;padding:8px 10px}
+.box h3{margin:0 0 6px;font-size:14px} .ctl{margin:6px 0} .ctl b{display:block;font-size:13px} .ctl small{display:block;opacity:.7;font-size:11.5px;margin:1px 0 3px}
+#pv{position:relative;aspect-ratio:16/9;background:#000;border-radius:6px;overflow:hidden} #pv img{width:100%;height:100%;object-fit:cover} #pvLyric{position:absolute;left:0;right:0;bottom:8%;text-align:center;font-size:20px;font-weight:700;text-shadow:0 0 6px #000,0 0 3px #000} #pvInfo{position:absolute;left:6px;top:4px;font-size:11px;background:#0008;padding:1px 6px;border-radius:4px}
+#wrap{overflow-x:auto;position:relative;margin:0 14px;border:1px solid #333;border-radius:6px} canvas{display:block;cursor:pointer}
+#help{font-size:12px;opacity:.75;padding:6px 14px} #msg{color:#7f7} #selNone{opacity:.6;font-size:12.5px}
 </style></head><body>
-<header><b id="title">…</b>
-<button id="play">▶ 再生</button>
-<label>BPM <input id="bpm" type="number" step="0.1"></label>
-<label>拍ずらし(秒) <input id="shift" type="number" step="0.01" value="0"></label>
-<label>カット前倒し(秒) <input id="lead" type="number" step="0.01" value="0"></label>
-<label>歌詞の出(秒) <input id="lin" type="number" step="0.01" value="0"></label>
-<label>ズーム <input id="zoom" type="range" min="20" max="400" value="80" style="width:120px"></label>
+<header><b id="title">読み込み中…</b><button id="play">▶ 再生</button><span id="clock">0.00s</span>
+<label>ズーム <input id="zoom" type="range" min="20" max="400" value="80" style="width:110px"></label>
 <button id="save">💾 保存</button><span id="msg"></span></header>
-<div id="help">ドラッグ: 歌詞の行（青）を左右に動かす / 右端をドラッグで終わりを変更 / セクション境界（黄色の線）を動かす。クリックでその位置から再生。保存すると mv.config.json → timing に書き込まれ、再解析しても保持されます。</div>
+<div id="top">
+ <div class="box"><h3>① 全体（ぜんぶにまとめて効く）</h3>
+  <div class="ctl"><b>拍の位置合わせ（キックと動きがずれるとき）</b><small>白い縦線（拍）を曲のドンに合わせます。マイナス＝早く／プラス＝遅く（秒）</small><button class="sub" data-n="shift" data-d="-0.01">−</button> <input id="shift" type="number" step="0.01"> <button class="sub" data-n="shift" data-d="0.01">＋</button></div>
+  <div class="ctl"><b>画の切替を早める・遅らせる</b><small>全部のカット（ピンクの線）をまとめて動かします。マイナス＝早く切り替わる（秒）</small><button class="sub" data-n="cut" data-d="-0.01">−</button> <input id="cut" type="number" step="0.01"> <button class="sub" data-n="cut" data-d="0.01">＋</button></div>
+  <div class="ctl"><b>歌詞を早める・遅らせる</b><small>全部の歌詞（青い帯）をまとめて動かします。マイナス＝早く出る（秒）</small><button class="sub" data-n="lin" data-d="-0.05">−</button> <input id="lin" type="number" step="0.05"> <button class="sub" data-n="lin" data-d="0.05">＋</button></div>
+  <div class="ctl"><b>BPM（曲の速さ）</b><small>拍の線の間隔。自動で測った値が違うときだけ直します</small><input id="bpm" type="number" step="0.1"></div>
+ </div>
+ <div class="box"><h3>② 個別（えらんだものだけ）</h3>
+  <div id="selNone">下のタイムラインで<b>カット（画像）</b>か<b>歌詞の帯</b>をクリックすると、ここで個別に調整できます。<br>個別の値は①全体の値に<b>足されます</b>（全体＋個別）。</div>
+  <div id="selBox" hidden>
+   <div id="selName" style="font-weight:700;margin-bottom:4px"></div>
+   <div>効く範囲：<button class="sub on" id="scOne">この1つだけ</button> <button class="sub" id="scSec">このセクション全部</button></div>
+   <div class="ctl"><small id="selHint"></small>
+    <button class="sub" data-s="-0.1">−0.1</button> <button class="sub" data-s="-0.02">−0.02</button>
+    <input id="selVal" type="number" step="0.01"> 秒
+    <button class="sub" data-s="0.02">＋0.02</button> <button class="sub" data-s="0.1">＋0.1</button>
+    <button class="sub" id="selReset">0に戻す</button></div>
+   <small style="opacity:.7">ドラッグでも動かせます。キーボードの ← → でも0.02秒ずつ。</small>
+  </div>
+ </div>
+ <div class="box"><h3>プレビュー（再生位置の画と歌詞）</h3><div id="pv"><img id="pvImg" alt=""><div id="pvInfo"></div><div id="pvLyric"></div></div></div>
+</div>
+<div id="help">上から：波形と拍（太線＝小節の頭）／セクション（黄色の線はドラッグで移動）／カット（画像の切替。ピンク線＝切替の瞬間）／歌詞。何もない所をクリックでそこから再生。保存すると mv.config.json の timing に記録され、次の npm run mv に反映されます。</div>
 <div id="wrap"><canvas id="cv"></canvas></div>
 <audio id="au"></audio>
 <script>
-let D, pxs = 80, drag = null, edits = {}, secs = [];
-const cv = document.getElementById("cv"), g = cv.getContext("2d"), au = document.getElementById("au");
-const H = 360, ROW = { wave: [30, 130], sec: [140, 170], lyr: [180, 260], cut: [270, 300] };
+let D, pxs = 80, drag = null, edits = {}, secs = [], sel = null, scope = "one";
+let lineOff = {}, shotOff = {}, secOff = {}; // 個別（新しい値）
+const imgs = {};
+const $ = (id) => document.getElementById(id);
+const cv = $("cv"), g = cv.getContext("2d"), au = $("au");
+const H = 420, ROW = { wave: [24, 104], sec: [114, 140], cut: [150, 250], lyr: [262, 342] };
 const X = (t) => t * pxs + 10, T = (x) => (x - 10) / pxs;
+const v = (id) => +$(id).value || 0;
+const r3 = (x) => Math.round(x * 1000) / 1000;
 fetch("/data").then((r) => r.json()).then((d) => {
   D = d; secs = d.sections.map((s) => ({ ...s }));
-  document.getElementById("title").textContent = d.title;
-  document.getElementById("bpm").value = d.bpm; document.getElementById("shift").value = d.timing.beatShift ?? 0;
-  document.getElementById("lead").value = d.timing.cutLead ?? 0; document.getElementById("lin").value = d.timing.lyricIn ?? 0;
+  $("title").textContent = d.title + `（カット ${d.shots.length} / 歌詞 ${d.lines.length}行）`;
+  $("bpm").value = d.bpm; $("shift").value = d.timing.beatShift ?? 0; $("cut").value = d.cutShift ?? 0; $("lin").value = d.timing.lyricIn ?? 0;
+  d.shots.forEach((s) => { if (s.offset) shotOff[s.id] = s.offset; if (s.thumb && !imgs[s.thumb]) { const im = new Image(); im.onload = draw; im.src = s.thumb; imgs[s.thumb] = im; } });
+  lineOff = { ...(d.lineOffsets || {}) };
+  for (const [k, p] of Object.entries(d.perSection || {})) secOff[k] = { cut: p.cutLead ? -p.cutLead : 0, lyric: p.lyricIn || 0 };
+  D.secSaved = JSON.parse(JSON.stringify(secOff)); D.lineSaved = { ...lineOff }; D.shotSaved = { ...shotOff };
   if (d.audio) au.src = d.audio;
   draw();
-});
-function lines() { return D.lines.map((L, i) => ({ ...L, ...(edits[i] ?? {}) })); }
+}).catch((e) => { $("title").textContent = "読み込み失敗: " + e; });
+const so = (k, f, saved) => ((saved ? D.secSaved : secOff)[k]?.[f] ?? 0);
+function shotsNow() { const dG = v("cut") - (D.cutShift ?? 0);
+  const a = D.shots.map((s, i) => ({ ...s, i, start: s.start, end: s.end }));
+  // 境界（カット）を動かす：開始と直前の終わりを一緒に
+  a.forEach((s, i) => { if (i === 0) return; const d = dG + so(s.section, "cut") - so(s.section, "cut", true) + (shotOff[s.id] ?? 0) - (D.shotSaved[s.id] ?? 0); s.start += d; a[i - 1].end = s.start; });
+  return a; }
+function linesNow() { const dG = v("lin") - (D.timing.lyricIn ?? 0);
+  return D.lines.map((L, i) => { const d = dG + so(L.section, "lyric") - so(L.section, "lyric", true) + (lineOff[i] ?? 0) - (D.lineSaved[i] ?? 0); const e = edits[i]; return { ...L, i, start: (e?.start ?? L.start) + d, end: (e?.end ?? L.end) + d }; }); }
 function draw() {
+  if (!D) return;
   cv.width = X(D.duration) + 20; cv.height = H;
   g.fillStyle = "#15131a"; g.fillRect(0, 0, cv.width, H);
-  // waveform
   g.fillStyle = "#6a5a8a"; const mid = (ROW.wave[0] + ROW.wave[1]) / 2, amp = (ROW.wave[1] - ROW.wave[0]) / 2;
   (D.peaks || []).forEach((p, i) => { const x = X(i / D.peaksHz); g.fillRect(x, mid - p * amp, Math.max(1, pxs / D.peaksHz), p * amp * 2); });
-  // beat grid
-  const bpm = +document.getElementById("bpm").value || D.bpm, sh = +document.getElementById("shift").value - (D.timing.beatShift ?? 0), B = 60 / bpm;
-  for (let k = 0, t = D.phase + sh; t < D.duration; k++, t = D.phase + sh + k * B) { g.fillStyle = k % 4 === 0 ? "rgba(255,255,255,0.35)" : "rgba(255,255,255,0.12)"; g.fillRect(X(t), 20, 1, 290); }
-  // sections
-  secs.forEach((s, i) => { g.fillStyle = ["#3a2f55", "#2f4555"][i % 2]; g.fillRect(X(s.start), ROW.sec[0], X(s.end) - X(s.start), 30); g.fillStyle = "#ffd63c"; g.fillRect(X(s.start) - 1, ROW.sec[0] - 6, 3, 42); g.fillStyle = "#fff"; g.font = "12px sans-serif"; g.fillText(s.label, X(s.start) + 5, ROW.sec[0] + 19); });
-  // lyrics
-  lines().forEach((L, i) => { const y = ROW.lyr[0] + (i % 2) * 40; g.fillStyle = edits[i] ? "#2a9dff" : "#1f5fa0"; g.fillRect(X(L.start), y, Math.max(4, X(L.end) - X(L.start)), 34); g.fillStyle = "#fff"; g.font = "13px sans-serif"; g.fillText(L.text, X(L.start) + 4, y + 22);
-    (L.words || []).forEach((w) => { g.fillStyle = "rgba(255,255,255,0.5)"; g.fillRect(X(w.t + (L.start - D.lines[i].start)), y, 1, 6); }); });
-  // cuts
-  const lead = +document.getElementById("lead").value - (D.timing.cutLead ?? 0);
-  D.shots.forEach((s) => { g.fillStyle = "#ff46a0"; g.fillRect(X(s.start - lead), ROW.cut[0], 2, 30); });
-  g.fillStyle = "#aaa"; g.font = "11px sans-serif"; g.fillText("波形 / 拍", 12, 14); g.fillText("カット", 12, ROW.cut[1] + 14);
+  const bpm = v("bpm") || D.bpm, sh = v("shift") - (D.timing.beatShift ?? 0), B = 60 / bpm, ph = D.phase + sh;
+  let k0 = Math.ceil(-ph / B);
+  for (let k = k0, t = ph + k * B; t < D.duration; k++, t = ph + k * B) { const bar = ((k % 4) + 4) % 4 === 0; g.fillStyle = bar ? "rgba(255,255,255,0.5)" : "rgba(255,255,255,0.13)"; g.fillRect(X(t), 18, bar ? 2 : 1, H - 50); }
+  secs.forEach((s, i) => { g.fillStyle = ["#3a2f55", "#2f4555"][i % 2]; g.fillRect(X(s.start), ROW.sec[0], X(s.end) - X(s.start), 26); g.fillStyle = "#ffd63c"; g.fillRect(X(s.start) - 1, ROW.sec[0] - 4, 3, 34); g.fillStyle = "#fff"; g.font = "12px sans-serif"; g.fillText(s.label, X(s.start) + 5, ROW.sec[0] + 17); });
+  // cuts with thumbnails
+  shotsNow().forEach((s) => { const x0 = X(s.start), w = Math.max(2, X(s.end) - x0), h = ROW.cut[1] - ROW.cut[0];
+    const isSel = sel && sel.kind === "shot" && (sel.i === s.i || (scope === "sec" && D.shots[sel.i].section === s.section));
+    g.fillStyle = "#2a2433"; g.fillRect(x0, ROW.cut[0], w, h);
+    const im = s.thumb && imgs[s.thumb]; if (im && im.complete && im.naturalWidth) { g.save(); g.beginPath(); g.rect(x0, ROW.cut[0], w, h); g.clip(); const tw = h * im.naturalWidth / im.naturalHeight; for (let x = x0; x < x0 + w; x += tw + 2) g.drawImage(im, x, ROW.cut[0], tw, h); g.restore(); }
+    g.fillStyle = "rgba(0,0,0,.55)"; g.fillRect(x0, ROW.cut[1] - 16, Math.min(w, 90), 16); g.fillStyle = "#fff"; g.font = "11px sans-serif"; g.fillText(s.id + ((shotOff[s.id] ?? 0) ? ` ${shotOff[s.id] > 0 ? "+" : ""}${shotOff[s.id]}` : ""), x0 + 3, ROW.cut[1] - 4);
+    g.fillStyle = "#ff46a0"; g.fillRect(x0 - 1, ROW.cut[0] - 4, 3, h + 8);
+    if (isSel) { g.strokeStyle = "#2a9dff"; g.lineWidth = 3; g.strokeRect(x0 + 1, ROW.cut[0] + 1, w - 2, h - 2); } });
+  linesNow().forEach((L) => { const y = ROW.lyr[0] + (L.i % 2) * 40; const isSel = sel && sel.kind === "line" && (sel.i === L.i || (scope === "sec" && D.lines[sel.i].section === L.section));
+    g.fillStyle = isSel ? "#2a9dff" : (lineOff[L.i] || edits[L.i]) ? "#2a7fd0" : "#1f5fa0"; g.fillRect(X(L.start), y, Math.max(4, X(L.end) - X(L.start)), 34);
+    g.fillStyle = "#fff"; g.font = "13px sans-serif"; g.fillText(L.text, X(L.start) + 4, y + 22);
+    (L.words || []).forEach((w) => { g.fillStyle = "rgba(255,255,255,0.5)"; g.fillRect(X(w.t + (L.start - D.lines[L.i].start)), y, 1, 6); }); });
+  g.fillStyle = "#aaa"; g.font = "11px sans-serif"; g.fillText("波形・拍", 12, 12); g.fillText("カット", 12, ROW.cut[0] - 6 + 4); g.fillText("歌詞", 12, ROW.lyr[0] - 4);
   for (let s = 0; s < D.duration; s += 5) g.fillText(`${s}s`, X(s), H - 6);
-  // playhead
-  g.fillStyle = "#7f7"; g.fillRect(X(au.currentTime || 0), 0, 2, H);
+  const t = au.currentTime || 0; g.fillStyle = "#7f7"; g.fillRect(X(t), 0, 2, H);
+  $("clock").textContent = t.toFixed(2) + "s";
+  const cs = shotsNow().find((s) => t >= s.start && t < s.end) || D.shots[0]; if (cs) { if (cs.thumb && $("pvImg").getAttribute("src") !== cs.thumb) $("pvImg").src = cs.thumb; $("pvImg").style.visibility = cs.thumb ? "visible" : "hidden"; $("pvInfo").textContent = `${cs.id}${cs.section ? "・" + cs.section : ""}`; }
+  const cl = linesNow().find((L) => t >= L.start && t < L.end); $("pvLyric").textContent = cl ? cl.text : "";
 }
 function hit(x, y) {
-  for (let i = 0; i < secs.length; i++) if (Math.abs(X(secs[i].start) - x) < 6 && y > ROW.sec[0] - 8 && y < ROW.sec[1] + 8) return { kind: "sec", i };
-  const Ls = lines();
-  for (let i = 0; i < Ls.length; i++) { const yy = ROW.lyr[0] + (i % 2) * 40; if (y >= yy && y <= yy + 34 && x >= X(Ls[i].start) - 2 && x <= X(Ls[i].end) + 4) return { kind: Math.abs(x - X(Ls[i].end)) < 8 ? "end" : "line", i, x0: x, s0: Ls[i].start, e0: Ls[i].end }; }
+  for (let i = 0; i < secs.length; i++) if (Math.abs(X(secs[i].start) - x) < 6 && y > ROW.sec[0] - 6 && y < ROW.sec[1] + 6) return { kind: "sec", i };
+  if (y >= ROW.cut[0] - 4 && y <= ROW.cut[1]) { const S = shotsNow(); for (let i = 1; i < S.length; i++) if (Math.abs(X(S[i].start) - x) < 8) return { kind: "shot", i, x0: x, o0: shotOff[S[i].id] ?? 0 }; for (let i = 0; i < S.length; i++) if (x >= X(S[i].start) && x < X(S[i].end)) return { kind: "shot", i, x0: x, o0: shotOff[S[i].id] ?? 0, click: true }; }
+  const Ls = linesNow();
+  for (let i = 0; i < Ls.length; i++) { const yy = ROW.lyr[0] + (i % 2) * 40; if (y >= yy && y <= yy + 34 && x >= X(Ls[i].start) - 2 && x <= X(Ls[i].end) + 4) return Math.abs(x - X(Ls[i].end)) < 6 ? { kind: "end", i, x0: x, e0: edits[i]?.end ?? D.lines[i].end } : { kind: "line", i, x0: x, o0: lineOff[i] ?? 0 }; }
   return null;
 }
-cv.onmousedown = (e) => { const r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top; drag = hit(x, y); if (!drag) { au.currentTime = Math.max(0, T(x)); draw(); } };
-cv.onmousemove = (e) => { if (!drag) return; const r = cv.getBoundingClientRect(), x = e.clientX - r.left;
-  if (drag.kind === "sec") { const t = +T(x).toFixed(3); secs[drag.i].start = t; if (drag.i > 0) secs[drag.i - 1].end = t; }
-  else { const dt = +((x - drag.x0) / pxs).toFixed(3); edits[drag.i] = drag.kind === "line" ? { start: +(drag.s0 + dt).toFixed(3), end: +(drag.e0 + dt).toFixed(3) } : { start: drag.s0, end: +(drag.e0 + dt).toFixed(3) }; }
+function select(kind, i) { sel = { kind, i }; $("selNone").hidden = true; $("selBox").hidden = false; refreshSel(); draw(); }
+function secOf() { return sel.kind === "shot" ? D.shots[sel.i].section : D.lines[sel.i].section; }
+function curVal() { if (!sel) return 0; const f = sel.kind === "shot" ? "cut" : "lyric";
+  if (scope === "sec") return secOff[secOf()]?.[f] ?? 0; return sel.kind === "shot" ? shotOff[D.shots[sel.i].id] ?? 0 : lineOff[sel.i] ?? 0; }
+function setVal(x) { x = r3(Math.max(-5, Math.min(5, x))); const f = sel.kind === "shot" ? "cut" : "lyric";
+  if (scope === "sec") { const k = secOf(); if (!k) return; secOff[k] = { ...(secOff[k] || {}), [f]: x }; }
+  else if (sel.kind === "shot") { if (sel.i === 0) return; shotOff[D.shots[sel.i].id] = x; } else lineOff[sel.i] = x;
+  refreshSel(); draw(); }
+function refreshSel() { if (!sel) return; const sec = secOf();
+  $("selName").textContent = sel.kind === "shot" ? `カット ${D.shots[sel.i].id}（${sec || "セクションなし"}）` : `歌詞 ${sel.i + 1}行目「${D.lines[sel.i].text}」（${sec || "セクションなし"}）`;
+  $("scOne").classList.toggle("on", scope === "one"); $("scSec").classList.toggle("on", scope === "sec"); $("scSec").disabled = !sec;
+  $("selHint").textContent = (sel.kind === "shot" ? (sel.i === 0 && scope === "one" ? "最初のカットは曲の頭に固定です。" : "この切替のタイミングだけを動かします。") : "この行の出るタイミングだけを動かします。") + (scope === "sec" ? `（${sec} 全部に効く）` : "") + " マイナス＝早く／プラス＝遅く。全体の値に足されます。";
+  $("selVal").value = curVal(); }
+cv.onmousedown = (e) => { const r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top; drag = hit(x, y);
+  if (!drag) { au.currentTime = Math.max(0, T(x)); draw(); return; }
+  if (drag.kind === "shot" || drag.kind === "line") { scope = "one"; select(drag.kind, drag.i); if (drag.kind === "shot" && drag.i === 0) drag = null; } };
+cv.onmousemove = (e) => { if (!drag) return; const r = cv.getBoundingClientRect(), x = e.clientX - r.left, dt = r3((x - drag.x0) / pxs);
+  if (drag.kind === "sec") { const t = r3(T(x)); secs[drag.i].start = t; if (drag.i > 0) secs[drag.i - 1].end = t; }
+  else if (drag.kind === "shot") { if (Math.abs(x - drag.x0) > 3) setVal(drag.o0 + dt); }
+  else if (drag.kind === "line") { if (Math.abs(x - drag.x0) > 3) setVal(drag.o0 + dt); }
+  else if (drag.kind === "end") edits[drag.i] = { start: edits[drag.i]?.start ?? D.lines[drag.i].start, end: r3(drag.e0 + dt) };
   draw(); };
 window.onmouseup = () => (drag = null);
-document.getElementById("zoom").oninput = (e) => { pxs = +e.target.value; draw(); };
-["bpm", "shift", "lead", "lin"].forEach((id) => (document.getElementById(id).oninput = draw));
-document.getElementById("play").onclick = () => { if (au.paused) au.play(); else au.pause(); };
-setInterval(() => { if (!au.paused) draw(); }, 50);
-document.getElementById("save").onclick = async () => {
-  const body = { bpm: +document.getElementById("bpm").value, beatShift: +document.getElementById("shift").value, cutLead: +document.getElementById("lead").value, lyricIn: +document.getElementById("lin").value, sections: secs, lines: Object.fromEntries(Object.entries(edits).map(([i, v]) => [i, v])) };
-  const r = await fetch("/save", { method: "POST", body: JSON.stringify(body) }).then((x) => x.json());
-  document.getElementById("msg").textContent = r.ok ? "✅ 保存しました（npm run preview で確認）" : "保存失敗";
+window.onkeydown = (e) => { if (!sel || e.target.tagName === "INPUT") return; if (e.key === "ArrowLeft") { setVal(curVal() - 0.02); e.preventDefault(); } if (e.key === "ArrowRight") { setVal(curVal() + 0.02); e.preventDefault(); } if (e.key === " ") { $("play").click(); e.preventDefault(); } };
+document.querySelectorAll("[data-n]").forEach((b) => (b.onclick = () => { const el = $(b.dataset.n); el.value = r3((+el.value || 0) + +b.dataset.d); draw(); }));
+document.querySelectorAll("[data-s]").forEach((b) => (b.onclick = () => setVal(curVal() + +b.dataset.s)));
+$("selVal").oninput = () => setVal(+$("selVal").value || 0); $("selReset").onclick = () => setVal(0);
+$("scOne").onclick = () => { scope = "one"; refreshSel(); draw(); }; $("scSec").onclick = () => { scope = "sec"; refreshSel(); draw(); };
+$("zoom").oninput = (e) => { pxs = +e.target.value; draw(); };
+["bpm", "shift", "cut", "lin"].forEach((id) => ($(id).oninput = draw));
+$("play").onclick = () => { if (au.paused) { au.play(); $("play").textContent = "⏸ 停止"; } else { au.pause(); $("play").textContent = "▶ 再生"; } };
+setInterval(() => { if (!au.paused) { draw(); const w = $("wrap"), x = X(au.currentTime); if (x < w.scrollLeft || x > w.scrollLeft + w.clientWidth - 40) w.scrollLeft = x - 60; } }, 50);
+$("save").onclick = async () => {
+  const sectionOffsets = {}; for (const [k, o] of Object.entries(secOff)) sectionOffsets[k] = { cut: o.cut || 0, lyric: o.lyric || 0 };
+  const body = { bpm: v("bpm"), beatShift: v("shift"), cutShift: v("cut"), lyricIn: v("lin"), sections: secs, lines: edits, lineOffsets: lineOff, shotOffsets: shotOff, sectionOffsets };
+  try { const r = await fetch("/save", { method: "POST", body: JSON.stringify(body) }).then((x) => x.json());
+    $("msg").style.color = r.ok ? "#7f7" : "#f77"; $("msg").textContent = r.ok ? "✅ 保存しました（次の npm run mv に反映）" : "保存できません: " + r.error; } catch (e) { $("msg").textContent = "保存失敗: " + e; }
 };
 </script></body></html>
