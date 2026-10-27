@@ -146,7 +146,9 @@ export function directPro(song: Song, o: DirectOpts = {}): MoGraphPlan {
     const transition: Transition = i === 0 ? "cut" : o.transition ?? R.tr[(i + seed) % R.tr.length];
     const ad = o.accents === false ? 0 : R.acc[k];
     if (ad) accents.push(...beatAccents({ bpm: song.bpm, phase: song.phase, beatsPerBar: song.beatsPerBar || 4 }, s.start, s.end, ad, R.kinds, seed + i));
-    const cutBeats = Math.max(0.5, R.cut[k] * dens * ((o.nMedia ?? 10) < 8 && R.cut[k] < 1 ? 2 : 1));
+    let cutBeats = Math.max(0.5, R.cut[k] * dens * ((o.nMedia ?? 10) < 8 && R.cut[k] < 1 ? 2 : 1));
+    // 「ゆったり」 is the user's choice and beats the genre's fast cutting: >= ~5 s per cut, the chorus only mildly faster (>= ~2.5 s)
+    if (o.density === "slow") { const B = 60 / Math.max(40, song.bpm || 120), minSec = k === 2 ? 2.5 : 5; let b = 1; while (b * B < minSec) b *= 2; cutBeats = Math.max(cutBeats, b); }
     const why = [`${s.label}: ${MOOD_JA[mood]}→${LOOKS[look]}・${palette.ja}・転換=${TRANSITIONS_JA[transition]}`, k === 2 ? R.why : "", lit?.why ?? "", ad ? `拍アクセント(${ad === 3 ? "8分" : ad === 2 ? "毎拍" : "小節頭"})` : "アクセント控えめ", tm && tm !== "overlay" ? `この区間は${tm === "typo" ? "全画面タイポ" : "モーショングラフィックス"}あり` : ""].filter(Boolean).join("｜");
     return { label: s.label, type: s.type, start: s.start, end: s.end, look, palette, transition, textures: R.tex, accentDensity: ad, parallax: look === "hud" || look === "mono" || k === 2, particlesOnBeat: look === "burst" || (k === 2 && mood !== "ballad"), lyricPrefer: R.lyric[k], cutBeats, mono: lit?.mono, why };
   });

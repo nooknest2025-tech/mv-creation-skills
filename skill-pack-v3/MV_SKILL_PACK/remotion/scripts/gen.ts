@@ -20,6 +20,12 @@ import { cutAudio, validateCut, probeDur } from "./audiotrim";
 import { saveLib, loadLib, planImages, addAsset, setApproval, parseAssetCmd, ORDER_JA } from "./assets_lib";
 
 const GEN_DIR = path.join(PACK_DIR, "gen");
+export const resJa = (r: string) => (r === "720p" ? "標準(720p)" : r === "1080p" ? "高画質(1080p)" : r === "480p" ? "軽量(480p)" : r);
+/** user-facing model name: brand + grade (no raw ids). */
+export function modelJa(id: string) {
+  const s = String(id).toLowerCase(), b = /grok|xai/.test(s) ? "Grok" : /kling/.test(s) ? "Kling" : /runway|gen4/.test(s) ? "Runway" : /hailuo|minimax/.test(s) ? "Hailuo" : /luma|ray/.test(s) ? "Luma" : /wan/.test(s) ? "Wan" : /veo/.test(s) ? "Veo" : /seedance/.test(s) ? "Seedance" : /pollo/.test(s) ? "Pollo" : /gemini/.test(s) ? "Gemini" : /flux/.test(s) ? "Flux" : /manual|local/.test(s) ? "手動・ローカル" : "その他のAI";
+  return `${b}${/lite|fast|turbo|mini/.test(s) ? "（軽量版）" : /pro|master|2\.0|1\.5/.test(s) ? "（上位版）" : ""}`;
+}
 export interface Model { id: string; provider: string; kind: string; price_per_sec: Record<string, number> | null; input_extra?: string; max_res?: string | null; max_sec?: number | null; aspects?: string[] | null; strengths?: string; verified: boolean; verified_at?: string | null; source: string; deprecated?: boolean }
 export const loadPlans = (): PlansFile => YAML.parse(fs.readFileSync(path.join(GEN_DIR, "plans.yaml"), "utf8"));
 export const loadModels = (): Model[] => YAML.parse(fs.readFileSync(path.join(GEN_DIR, "models.yaml"), "utf8")).models;
@@ -49,7 +55,8 @@ export function priceOf(m: Model, res: string): number | null {
 }
 export function estimate(sec: number, takes: number, price: number | null) { return price === null ? null : +(Math.ceil(sec) * takes * price).toFixed(3); }
 
-function latestProject() {
+export function latestProject() {
+  if (!fs.existsSync(PROJECTS_DIR)) throw new UserError("まだ曲のプロジェクトがありません", "先に npm run mv -- --stills-only を1回実行してください（曲と歌詞を読み込んでプロジェクトを作ります。動画の書き出しはしないのですぐ終わります）。");
   const name = fs.readdirSync(PROJECTS_DIR).filter((d) => fs.existsSync(path.join(PROJECTS_DIR, d, "song.json"))).sort((a, b) => fs.statSync(path.join(PROJECTS_DIR, b)).mtimeMs - fs.statSync(path.join(PROJECTS_DIR, a)).mtimeMs)[0];
   if (!name) throw new UserError("プロジェクトがありません", "先に npm run mv（--stills-only でもOK）を1回実行してください。");
   return path.join(PROJECTS_DIR, name);
@@ -75,7 +82,9 @@ export function makePlan(dir: string, o: Record<string, any>) {
   const aspect = props.width > props.height ? "16:9" : props.width === props.height ? "1:1" : "9:16";
   const lib = loadLib(dir), locked = new Set<string>(props.shots.filter((s) => s.locked).map((s) => s.id));
   const allSpecs = buildSpecs(props.shots, { subject: withTaste(cfg.subject, cfg.taste), continuity: cfg.continuity, bpm: song.bpm, textY: (props as any).textY });
-  const shotReview = reviewShotList(allSpecs, locked);
+  const SEC_JA: Record<string, string> = { intro: "イントロ", verse: "Aメロ", pre_chorus: "Bメロ", chorus: "サビ", bridge: "Cメロ", outro: "アウトロ" };
+  const names: Record<string, string> = Object.fromEntries(props.shots.map((s, i) => [s.id, `シーン${i + 1}（${SEC_JA[s.sectionType ?? ""] ?? s.section ?? ""} ${Math.floor(s.start / 60)}:${String(Math.floor(s.start % 60)).padStart(2, "0")}〜）`]));
+  const shotReview = reviewShotList(allSpecs, locked, names);
   const specOf = (id: string) => allSpecs.find((x) => x.shot === id)!;
   const legacy = !!(o.provider ?? cfg.gen?.provider);
   // short lip-sync/dance shots: warn when a model would stretch them by >1s; auto (unlocked) shots are merged with a same-singer neighbour
@@ -121,16 +130,16 @@ export function makePlan(dir: string, o: Record<string, any>) {
   fs.mkdirSync(GEN_DIR, { recursive: true });
   writeJson(path.join(dir, "gen_plan.json"), plan);
   fs.writeFileSync(path.join(dir, "gen_estimate.md"), estimateMd(est));
-  const md = [`# 生成プラン — ${plan.project}`, "", `解像度 ${res} / 1カット ${takes} テイク / **見積もり合計（確認済み）$${plan.total}**（うち参照画像 ${plan.imageTasks}枚 $${imageUSD ?? "未確認"}）${plan.unknownCost ? "（未確認価格のモデルを含むため一部不明）" : ""}`, "",
-    "| ショット | セクション | 秒 | モデル | 理由 | $/秒 | 見積もり |", "|---|---|---|---|---|---|---|",
-    ...rows.map((r) => `| ${r.shot} | ${r.section} | ${r.sec} | ${r.model} | ${r.why} | ${r.price_per_sec ?? "未確認"} | ${r.cost === null ? "不明" : "$" + r.cost} |`), "",
-    `## ショットリスト批評（スコア ${shotReview.score}）`, ...(shotReview.issues.length ? shotReview.issues.map((i) => `- ${i.fixed ? "🔧" : "💡"} ${i.msg}`) : ["- 問題なし"]), "",
+  const md = [`# 生成プラン — ${plan.project}`, "", `画質 ${resJa(res)} / 1シーン ${takes} 回生成 / **動画の見積もり合計（確認済み）$${plan.total}**（うち参照画像 ${plan.imageTasks}枚 $${imageUSD ?? "未確認"}）${plan.unknownCost ? "（料金が未確認のAIを含むため一部不明）" : ""}`, "",
+    ...(rows.length ? ["| シーン | 秒 | 動画AI | 理由 | 1秒あたり | 見積もり |", "|---|---|---|---|---|---|",
+    ...rows.map((r) => `| ${names[r.shot] ?? r.shot} | ${r.sec} | ${modelJa(r.model)} | ${r.why} | ${r.price_per_sec == null ? "未確認" : "$" + r.price_per_sec} | ${r.cost === null ? "不明" : "$" + r.cost} |`)] : ["動画にするシーンはありません（静止画のみの設定）。静止画をAIで作る計画は stills_plan.md（npm run gen -- stills）を見てください。"]), "",
+    `## 画づくりのチェック（スコア ${shotReview.score}）`, ...(shotReview.issues.length ? shotReview.issues.map((i) => `- ${i.fixed ? "🔧" : "💡"} ${i.msg}`) : ["- 問題なし"]), "",
     ...(shortAdv.length ? ["## ⚠ 短い口パク/ダンスショット（対応尺に1秒以上伸びる）", ...shortAdv.flatMap((a) => [`- ${a.msg}`, ...a.options.map((x) => `  - 案: ${x}`)]), ...(merged.length ? [`- 🔧 自動モードで結合: ${merged.join("、")}（あなたが指定したカットは変えていません）`] : []), ""] : []),
-    "## 口パク・ダンスの音声（元の曲から切り出し）", ...(rows.filter((r: any) => r.audioCut).map((r: any) => `- **${r.shot}**: ${r.audioCut.start.toFixed(3)}s から ${r.audioCut.dur}s（${r.audioCut.adjustJa}）→ ${r.audioCut.file ?? "未作成: " + r.audioCut.error} / ${r.audioCut.note}`)), "",
-    "## 参照素材の割り当て", ...rows.map((r: any) => `- **${r.shot}**: ${[r.refs.first && "開始画", r.refs.last && "終了画", r.refs.refs.length && `参照${r.refs.refs.length}枚`, r.refs.composite && "合成開始画（要作成）", r.refs.audio && "音声"].filter(Boolean).join(" / ") || "なし"}${r.dropped.length ? `（使えない素材: ${r.dropped.join("、")}）` : ""}${r.warnings.length ? ` ⚠ ${r.warnings.join("、")}` : ""}`), "",
+    "## 口パク・ダンスの音声（元の曲から切り出し）", ...(rows.filter((r: any) => r.audioCut).map((r: any) => `- **${names[r.shot] ?? r.shot}**: ${r.audioCut.start.toFixed(3)}s から ${r.audioCut.dur}s（${r.audioCut.adjustJa}）→ ${r.audioCut.file ?? "未作成: " + r.audioCut.error} / ${r.audioCut.note}`)), "",
+    "## 参照素材の割り当て", ...rows.map((r: any) => `- **${names[r.shot] ?? r.shot}**: ${[r.refs.first && "開始画", r.refs.last && "終了画", r.refs.refs.length && `参照${r.refs.refs.length}枚`, r.refs.composite && "合成開始画（要作成）", r.refs.audio && "音声"].filter(Boolean).join(" / ") || "なし"}${r.dropped.length ? `（使えない素材: ${r.dropped.join("、")}）` : ""}${r.warnings.length ? ` ⚠ ${r.warnings.join("、")}` : ""}`), "",
     "## 無料の代わり", "- **静止画モード**（このまま npm run mv）: 画像だけで Ken Burns・疑似2.5D・光・粒子・拍揺れ。API 料金ゼロ。",
-    "- **Grok アプリ / grok.com で手動生成**: 下の prompts.csv をコピペ → できた mp4 を `gen/takes/<ショットID>/` か `input/` に入れる → `npm run gallery` で採用。", "",
-    "## プロンプト", ...rows.map((r) => `- **${r.shot}** (${r.sec}s): ${r.prompt}`), "",
+    "- **Grok アプリ / grok.com で手動生成**: 下の prompts.csv をコピペ → できた mp4 を `gen/takes/<シーン番号 例 S002>/` か `input/` に入れる → `npm run gallery` で採用。", "",
+    "## プロンプト", ...rows.map((r) => `- **${names[r.shot] ?? r.shot}**（${r.sec}秒）: ${r.prompt}`), "",
     estimateMd(est), "",
     `価格の出典は gen/models.yaml の source（確認日つき）。価格は変わるので、実行前に公式ページを再確認してください。`].join("\n");
   fs.writeFileSync(path.join(dir, "gen_plan.md"), md);
@@ -331,7 +340,17 @@ async function main() {
     return;
   }
   const dir = o.project ? path.join(PROJECTS_DIR, String(o.project)) : latestProject();
-  if (cmd === "plan") { const { md } = makePlan(dir, o); log(md); log(`\n💾 ${path.join(dir, "gen_plan.md")} / prompts.csv\n▶ 実行するなら（有料）: npm run gen -- run --confirm <合計金額>`); return; }
+  if (!fs.existsSync(path.join(dir, "song.json"))) throw new UserError(`プロジェクト「${path.basename(dir)}」がまだありません`, "先に npm run mv -- --stills-only を1回実行してください。");
+  if (cmd === "stills") {
+    const S = await import("./stills"), sub = rest[1] ?? "plan";
+    if (sub === "import") { const r = S.importStills(dir, rest[2] ?? (o.from ? String(o.from) : undefined)); log(`✅ 取り込みました: シーン画像 ${r.scene} 枚（→ ${r.to}）／キャラクターシート ${r.character} 枚・背景 ${r.background} 枚（参照素材）\n▶ 次: npm run mv で画像を使ったMVを作ります`); return; }
+    if (sub === "run") { const r = await S.runStills(dir, o); log(`✅ 生成して取り込みました: シーン画像 ${r.scene} 枚 → npm run mv`); return; }
+    const { plan, md } = S.writeStillsPlan(dir, o); log(md); log(`\n${S.stillsSummary(plan)}\n💾 ${path.join(dir, "stills_plan.md")} / stills_prompts.csv\n📥 画像の置き場所: ${S.stillsInbox(dir)}`); return;
+  }
+  if (cmd === "plan") {
+    const S = await import("./stills"), cfg0: any = loadConfig(dir), nImg = (readJson<any[]>(path.join(dir, "media.json"), []) ?? []).filter((m: any) => m.kind === "image").length;
+    if (S.needsStills(cfg0.taste, nImg)) { const { plan } = S.writeStillsPlan(dir, o); log(`\n⚠️ 画像がまだありません（テイスト: ${({ anime: "アニメ", photo: "実写風", illust: "イラスト" } as any)[cfg0.taste]}）。先に静止画を作ります:\n${S.stillsSummary(plan)}\n   詳しい手順と画像リスト: ${path.join(dir, "stills_plan.md")}（npm run gen -- stills でも表示）\n`); }
+    const { md } = makePlan(dir, o); log(md); log(`\n💾 ${path.join(dir, "gen_plan.md")} / prompts.csv\n▶ 実行するなら（有料）: npm run gen -- run --confirm <合計金額>`); return; }
   if (cmd === "run") return runPlan(dir, o);
   if (cmd === "assets") return assetsCmd(dir, rest.slice(1), o);
   if (cmd === "qa") return clipQA(dir, o);

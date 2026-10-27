@@ -1,4 +1,7 @@
 // Prerequisite checker (pure part: catalogue + report). Probing lives in doctor.ts; tests feed fake probe results.
+/** only known video-generation MCP servers count (ace-studio etc. are music tools, not video). */
+export const VIDEO_MCP_RE = /pollo|grok|xai|runway|kling|luma|dream-?machine|hailuo|minimax|pika|veo|sora|seedance|wan(x|-?video)?\b|higgsfield|vidu|\bfal\b|replicate/i;
+export const videoMcps = (names: string[]) => names.filter((n) => VIDEO_MCP_RE.test(n));
 export type Need = "必須" | "推奨" | "任意";
 export type Cost = "無料" | "無料枠あり" | "有料";
 export interface Tool {

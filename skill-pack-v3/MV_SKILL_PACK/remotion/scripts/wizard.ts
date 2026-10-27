@@ -56,7 +56,7 @@ async function main() {
       if (a.trim()) ans[qq.id] = parsePick(a, qq);
     }
     const plan = semiToPlan(ans, ctx);
-    log("\n📋 この内容で作ります:"); plan.plan.forEach((l) => log(`  ${l}`));
+    log("\n📋 この内容で作ります:"); plan.plan.forEach((l) => log(`  ${l}`)); plan.warnings.forEach((w) => log(`  ⚠️ ${w}`));
     if ((await q("\n  この計画でよいですか？ [Y/n] ", "y")).toLowerCase().startsWith("n")) { log("やめました。もう一度 start で選び直せます。"); rl.close(); return; }
     sayParts.push(...plan.say);
   }

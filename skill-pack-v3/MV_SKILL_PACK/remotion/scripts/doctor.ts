@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import os from "node:os";
 import readline from "node:readline/promises";
 import { REMOTION_DIR, fs, log, path, run as runCmd } from "./common";
-import { TOOLS, report, type OS, type Probe } from "./doctor_lib";
+import { TOOLS, report, videoMcps, type OS, type Probe } from "./doctor_lib";
 
 const WIN = process.platform === "win32";
 const run = (c: string, a: string[] = ["--version"]) => { const r = runCmd(c, a, { encoding: "utf8", timeout: 20000 }); return { ok: r.status === 0, out: `${r.stdout ?? ""}${r.stderr ?? ""}`.trim().split("\n")[0] }; };
@@ -35,7 +35,8 @@ export function probeAll(): Probe {
   P.davinci = { ok: dv };
   const cfg = path.join(os.homedir(), ".codex", "config.toml");
   const mcp = fs.existsSync(cfg) ? (fs.readFileSync(cfg, "utf8").match(/^\[mcp_servers\.([^\]]+)\]/gm) ?? []).map((x) => x.slice(13, -1)) : [];
-  P.video_mcp = { ok: mcp.length > 0, detail: mcp.length ? `Codex に登録済み: ${mcp.join(", ")}` : "（未登録: 無料ルートで作ります）" };
+  const vm = videoMcps(mcp);
+  P.video_mcp = { ok: vm.length > 0, detail: vm.length ? `Codex に登録済み: ${vm.join(", ")}` : `未検出（無料ルートで作ります）${mcp.length ? `。ほかの MCP（${mcp.join(", ")}）は動画生成用ではないため数えていません` : ""}` };
   // simulated missing tools (tests / demos)
   for (const id of (process.env.MVPACK_DOCTOR_MISSING ?? "").split(",").filter(Boolean)) P[id] = { ok: false, detail: "（擬似的に未インストール）" };
   return P;

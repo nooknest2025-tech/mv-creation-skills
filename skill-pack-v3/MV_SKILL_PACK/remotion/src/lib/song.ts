@@ -149,7 +149,7 @@ export function parseLyricJson(d: any, fallbackTitle = "song"): Song {
   const srcHz = energyRaw.length && duration ? energyRaw.length / duration : 20;
   const markers: any[] = a.markers ?? [];
   const downbeats = markers.filter((m) => m.type === "downbeat").map((m) => +m.time);
-  const bpm = Number(a.bpm) || 120;
+  const bpm = Number(a.bpm ?? d.bpm ?? d.audio?.bpm) || 120;
   return {
     title: String(d.projectName ?? fallbackTitle), duration, fps: Number(d.fps) || 30, bpm,
     phase: downbeats[0] ?? 0, beatsPerBar: Number(a.beatsPerBar) || 4,

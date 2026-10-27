@@ -156,5 +156,5 @@ export function resolveLines(song: Song, cfg: LyricStyleConfig = {}, shots: Shot
 export function styleSummary(lines: ResolvedLine[]): string {
   const c: Record<string, number> = {};
   lines.forEach((l) => (c[l.style] = (c[l.style] ?? 0) + 1));
-  return Object.entries(c).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k}×${v}`).join(", ");
+  return Object.entries(c).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${CATALOG[k]?.short ?? k}×${v}`).join("、");
 }

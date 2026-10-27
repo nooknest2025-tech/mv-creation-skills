@@ -2,6 +2,9 @@
 // Answers become a natural-language instruction list (same path as Codex / --say) + a plan summary to confirm.
 import { MODE_IDS, SHOW_MODES, composeCombo, moodOf, proposeCombo, type Mood } from "./mograph";
 import { PARTS_PRESETS } from "./rig";
+import { STILL_TASTES, TASTE_JA, SEC_PER_IMAGE } from "./stills";
+const PICTURE_MODES = ["story", "lipsync", "dance", "live"];
+const isStillTaste = (t?: string) => !!t && (STILL_TASTES as readonly string[]).includes(t);
 
 export interface SemiOpt { key: string; label: string; say: string; why: string }
 export interface SemiQ { id: string; title: string; multi?: boolean; options: SemiOpt[]; recommend: string[] }
@@ -28,7 +31,7 @@ export function semiQuestions(c: SemiCtx = {}): SemiQ[] {
   const n = c.nImages ?? 0;
   const rec = proposeCombo(mood, c.faceRatio ?? 0, n);
   const modes: SemiOpt[] = MODE_IDS.map((id) => ({ key: id, label: SHOW_MODES[id].ja, say: "", why: SHOW_MODES[id].desc }));
-  modes.push({ key: "mix", label: "ミックス（おすすめの組み合わせ）", say: "", why: `${rec.map((m) => SHOW_MODES[m].ja).join("＋")}` });
+  modes.push({ key: "mix", label: "ミックス（おすすめの組み合わせ）", say: "", why: n > 0 ? `${rec.map((m) => SHOW_MODES[m].ja).join("＋")}` : `${rec.map((m) => SHOW_MODES[m].ja).join("＋")}（次の質問で画像テイストをアニメ・実写風・イラストにすると、画像を作って「物語＋リリックモーション」にします）` });
   const cut = (k: string) => (c.cuts?.[k] !== undefined ? `（約${c.cuts[k]}カット）` : "");
   const vc = (k: string) => (c.videoCost?.[k] ? `（目安 ${c.videoCost[k]}）` : "");
   return [
@@ -55,11 +58,17 @@ export function parsePick(input: string, q: SemiQ): string[] {
   return keys.length ? (q.multi ? keys : keys.slice(0, 1)) : q.recommend;
 }
 /** answers -> instruction text (applyInstruction) + plan lines to show before building. */
-export function semiToPlan(ans: Record<string, string[]>, c: SemiCtx = {}): { say: string[]; plan: string[]; combo: string[] } {
-  const qs = semiQuestions(c), say: string[] = [], plan: string[] = [];
+export function semiToPlan(ans: Record<string, string[]>, c: SemiCtx = {}): { say: string[]; plan: string[]; combo: string[]; warnings: string[] } {
+  const qs = semiQuestions(c), say: string[] = [], plan: string[] = [], warnings: string[] = [];
+  const taste = (ans.taste ?? [])[0] ?? semiQuestions(c)[1].recommend[0], n = c.nImages ?? 0, isMix = (ans.show ?? ["mix"]).includes("mix");
   const mood = moodOf(c.genre, c.bpm ?? 120);
   let combo = (ans.show ?? ["mix"]).includes("mix") ? proposeCombo(mood, c.faceRatio ?? 0, c.nImages ?? 0) : ans.show!.filter((k) => SHOW_MODES[k]);
   if ((ans.taste ?? [])[0] === "graphic" && !combo.includes("mograph")) combo = [...combo.filter((m) => SHOW_MODES[m].kind === "text"), "mograph"];
+  // picture tastes need pictures: mix -> story + lyric motion (images are generated when input has none)
+  if (isMix && isStillTaste(taste) && !combo.some((m) => PICTURE_MODES.includes(m))) combo = ["story", "lyric_motion", ...combo.filter((m) => m === "typography")];
+  if (!isMix && isStillTaste(taste) && !combo.some((m) => PICTURE_MODES.includes(m))) warnings.push(`画像テイスト「${TASTE_JA[taste]}」を選びましたが、見せ方が文字・図形だけなので画像が使われません。→ 見せ方に「物語」を足す（例: 「物語＋リリックモーションで」）か、テイストを「図形中心」にしてください。`);
+  if (taste === "own" && n === 0) warnings.push("テイスト「手持ち画像」ですが、input フォルダに画像・動画がありません。→ input に画像を入れるか、テイストを「アニメ」などにすると画像を作る計画を用意します。");
+  if (taste === "graphic" && combo.some((m) => PICTURE_MODES.includes(m)) && n === 0) warnings.push("テイスト「図形中心」ですが、見せ方に画像を使うもの（物語など）が入っています。画像がないので図形と文字で作ります。");
   say.push(`${combo.map((m) => SHOW_MODES[m].ja).join("＋")}で`);
   const cb = composeCombo(combo);
   plan.push(`見せ方: ${cb.hybrid.ja}${(ans.show ?? ["mix"]).includes("mix") ? "（おまかせ提案）" : ""}`, ...cb.notes.map((n) => `   ${n}`));
@@ -68,6 +77,10 @@ export function semiToPlan(ans: Record<string, string[]>, c: SemiCtx = {}): { sa
     if (o.say && !(q.id === "taste" && k === "graphic")) say.push(o.say);
     plan.push(`${q.title.replace(/（.*$/, "")}: ${o.label}${ans[q.id] ? "" : "（おすすめ）"} — ${o.why}`);
   }
+  if (isStillTaste(taste) && n === 0 && combo.some((m) => PICTURE_MODES.includes(m))) {
+    const dens = ((ans.density ?? [])[0] ?? "normal") as keyof typeof SEC_PER_IMAGE, scenes = c.duration ? Math.round(c.duration / (SEC_PER_IMAGE[dens] ?? 7)) : null;
+    plan.push(`画像: input に画像がないため、${TASTE_JA[taste]}の静止画${scenes ? `（キャラクターシート1枚＋背景数枚＋シーン約${scenes}枚）` : ""}を作る計画を自動で用意します。無料（Grok アプリ等で手動）なら0円。npm run gen -- stills で枚数と費用を確認できます`);
+  }
   plan.push("選ばなかった項目は、曲調・セクション・素材からプロの組み合わせを自動で決めます（直線フェードや中央固定の字幕は使いません）。");
-  return { say, plan, combo };
+  return { say, plan, combo, warnings };
 }

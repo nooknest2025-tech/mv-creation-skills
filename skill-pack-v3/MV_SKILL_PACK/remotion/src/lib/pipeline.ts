@@ -42,6 +42,13 @@ export function pickPreset(song: Song, cfg: MVConfig, hasVideo: boolean) {
   if (cfg.preset && cfg.preset !== "auto" && PRESETS[cfg.preset]) return { preset: PRESETS[cfg.preset], why: "指定" };
   const g = cfg.genre && GENRES[cfg.genre];
   if (g && g.preset && PRESETS[g.preset]) return { preset: PRESETS[g.preset], why: `ジャンル「${g.ja}」から` };
+  // the chosen show mode (見せ方) wins over the BPM-based guess, and the wording matches it
+  if (cfg.combo?.length) {
+    const pic = cfg.combo.find((m) => ["story", "dance", "lipsync", "live"].includes(m));
+    const names = cfg.combo.map((m) => SHOW_MODES[m]?.ja ?? m).join("＋");
+    const id = pic ?? (cfg.combo.includes("typography") || cfg.combo.includes("lyric_motion") ? "vocaloid" : "story");
+    if (PRESETS[id]) return { preset: PRESETS[id], why: `見せ方「${names}」に合わせて` };
+  }
   const a = autoPreset({ ...analysisSummary(song), hasVideo });
   return { preset: PRESETS[a.id], why: a.why };
 }
@@ -57,7 +64,7 @@ export function pickGenre(song: Song, cfg: MVConfig): { id: string | null; why: 
   return { ...autoGenre(song), explicit: false };
 }
 import { letterboxPx } from "./finish";
-import { directPro, moodOf, proposeCombo } from "./mograph";
+import { directPro, moodOf, proposeCombo, SHOW_MODES } from "./mograph";
 import { autoPartsPreset } from "./rig";
 export function buildProps(song0: Song, cfg: MVConfig, media: MediaItem[], o: { overlayOnly?: boolean; audio?: string; aspect?: string } = {}): RenderProps & { presetWhy: string; genre?: string; genreWhy?: string; structure?: string; structureWhy?: string; sectionNotes?: string[]; review?: Review } {
   if (o.audio && /_lipsync\.(wav|mp3)$/i.test(o.audio)) throw new Error("口パク用に切り出した音声は最終ミックスに使えません（元の曲を1本だけ使います）");

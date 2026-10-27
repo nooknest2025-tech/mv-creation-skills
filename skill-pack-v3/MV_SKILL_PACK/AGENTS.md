@@ -67,6 +67,7 @@
 | 承認（ロック） | `npm run approve -- 2` |
 | 動画素材の自動カット検出 | `npm run scenes` |
 | 生成AIの計画・見積もり | `npm run models` / `npm run gen -- plan [--provider pollo]` / `npm run gallery` |
+| 画像がない曲の静止画づくり | `npm run gen -- stills`（枚数・方法・費用）→ 画像を作る → `npm run gen -- stills import` → `npm run mv` |
 | MCP・アプリで作った動画の取り込み | `npm run gen -- import <ファイル/URL> --shot S012 --from <サービス名>` |
 | 目・口の位置を手で指定 | `npm run faces` |
 | プリセット比較動画 | `npm run presets-demo -- --project <曲名>` |
@@ -93,3 +94,13 @@
 - モデルの能力や価格は `gen/models.yaml` と `videoModels.ts` の CAPS だけを根拠にする。書かれていないことは「未確認」と言う。
 - 参照素材は承認されてから使う。足りない素材は `assets` の画像タスクで作る（キャラシート → 背景 → 開始画の順）。
 - 生成したクリップは `npm run gen -- qa` で検査し、🔁 が付いたものは再生成を提案する。
+
+## 画像がない曲（テイスト: アニメ / 実写風 / イラスト）
+
+input に画像・動画が無く、テイストがアニメ・実写風・イラストのときは、抽象映像で済ませずに静止画を用意する。
+
+1. `npm run mv -- --stills-only`（プロジェクト作成。静止画の生成プラン `stills_plan.md` / `stills_prompts.csv` も自動で作られる）
+2. `npm run gen -- stills` で「何枚・どの方法・合計いくら」をタクさんに見せる（キャラクターシート → 背景 → シーン画像の順。枚数は「シーンの細かさ」で変わる）
+3. おすすめは無料ルート: Grok アプリ / grok.com などで stills_prompts.csv を上から順に生成し、`gen/stills/<曲名>/` に保存
+   - 有料APIは、タクさんが金額を確認してから `npm run gen -- stills run --image <方法のID> --confirm <合計金額>` のみ（AI が勝手に実行しない）
+4. `npm run gen -- stills import` → `npm run mv`（シーン画像は `input/AI生成画像/` に入り、そのまま使われる）

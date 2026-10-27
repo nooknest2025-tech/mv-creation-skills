@@ -87,6 +87,7 @@ export function applyInstruction(cfg0: MVConfig, text: string): { cfg: MVConfig;
     { const cm = comboFromText(t); if (cm) { cfg.combo = cm; cfg.structure = "auto"; const c = composeCombo(cm); changes.push(`見せ方 → ${cm.map((m) => SHOW_MODES[m].ja).join("＋")}（セクションごとの配分: ${c.notes.join("｜")}）`); continue; } }
     if (/(プロ演出|モーショングラフィックス|図形演出)(を)?(オフ|なし|使わない|やめ)/.test(t)) { (cfg.mograph ??= {}).off = true; changes.push("図形・トランジション演出 → オフ（文字のプロ動きは残す）"); continue; }
     if (/(従来|昔|前)の(見た目|動き)に戻|プロ(モード)?(オフ|なし)/.test(t)) { cfg.pro = false; changes.push("プロ演出 → オフ（従来の見た目）"); continue; }
+    if (/シーン|カット|場面/.test(t) && /(標準|普通|おまかせ)/.test(t) && !/(ゆったり|テンポ)/.test(t)) { delete cfg.density; changes.push("シーンの細かさ → 標準（曲調に合わせて自動）"); continue; }
     if (/シーン|カット|場面/.test(t) && /(ゆったり|少なめ|長め|ゆっくり)/.test(t)) { cfg.density = "slow"; changes.push("シーンの細かさ → ゆったり（カット長め）"); continue; }
     if (/シーン|カット|場面/.test(t) && /(テンポよく|多め|細かく|速く|刻)/.test(t)) { cfg.density = "fast"; changes.push("シーンの細かさ → テンポよく（カット短め）"); continue; }
     { const tr = (Object.entries({ circle: /円(で|の)?(トランジション|転換|ワイプ)/, ripple: /波紋/, cloud: /雲(みたい|の)?(ワイプ|トランジション)/, glyph_zoom: /文字の中に(ズーム|入)/, push_text: /巨大(な)?文字(で|が)?押/, diag_sweep: /斜め(線|の線)?(スイープ|ワイプ)/, rect: /四角(で|の)?(トランジション|ワイプ)/ }) as [string, RegExp][]).find(([, re]) => re.test(t));
