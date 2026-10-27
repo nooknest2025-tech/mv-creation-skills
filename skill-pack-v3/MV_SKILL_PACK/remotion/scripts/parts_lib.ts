@@ -4,10 +4,10 @@ import { REMOTION_DIR, fs, path } from "./common";
 import { layersToRig, rigIssues, type Rig } from "../src/lib/rig";
 import type { MVConfig } from "../src/lib/config";
 
-export function py(): string | null { for (const p of [process.env.MVPACK_PYTHON ?? "", "python3", "python", "py"].filter(Boolean)) { const r = spawnSync(p, ["--version"], { shell: process.platform === "win32" }); if (r.status === 0) return p; } return null; }
+export function py(): string | null { for (const p of [process.env.MVPACK_PYTHON ?? "", "python3", "python", "py"].filter(Boolean)) { const r = spawnSync(p, ["--version"], { shell: false }); if (r.status === 0) return p; } return null; }
 export function runPy(args: string[]): any {
   const p = py(); if (!p) throw new Error("Python が必要です（npm run doctor で確認）");
-  const r = spawnSync(p, [path.join(REMOTION_DIR, "scripts", "parts.py"), ...args], { encoding: "utf8", shell: process.platform === "win32", maxBuffer: 1 << 26 });
+  const r = spawnSync(p, [path.join(REMOTION_DIR, "scripts", "parts.py"), ...args], { encoding: "utf8", shell: false, maxBuffer: 1 << 26 });
   if (r.status !== 0) throw new Error((r.stderr || r.stdout || "parts.py 失敗").trim().split("\n").pop());
   return JSON.parse(r.stdout.trim().split("\n").pop() || "{}");
 }

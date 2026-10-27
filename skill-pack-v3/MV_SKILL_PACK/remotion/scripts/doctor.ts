@@ -20,11 +20,11 @@ export function probeAll(): Probe {
   const g = run("git"); P.git = { ok: g.ok, detail: g.out };
   const py = process.env.MVPACK_PYTHON ?? ["python3", "python", "py"].find((c) => run(c).ok);
   P.python = { ok: !!py, detail: py ? run(py).out : undefined };
-  const imp = (m: string) => !!py && spawnSync(py, ["-c", `import ${m}`], { shell: WIN }).status === 0;
+  const imp = (m: string) => !!py && spawnSync(py, ["-c", `import ${m}`], { shell: false }).status === 0;
   P.pillow = { ok: imp("PIL") && imp("numpy") };
   P.psd_tools = { ok: imp("psd_tools") };
   P.rembg = { ok: imp("rembg") };
-  P.opencv = { ok: !!py && spawnSync(py, ["-c", "import cv2,sys; sys.exit(0 if hasattr(cv2,'CascadeClassifier') else 1)"], { shell: WIN }).status === 0 };
+  P.opencv = { ok: !!py && spawnSync(py, ["-c", "import cv2,sys; sys.exit(0 if hasattr(cv2,'CascadeClassifier') else 1)"], { shell: false }).status === 0 };
   P.whisper = { ok: imp("faster_whisper") };
   let free = Infinity; try { const s = (fs as any).statfsSync(REMOTION_DIR); free = (s.bavail * s.bsize) / 1e9; } catch { /* old node */ }
   P.disk = { ok: free >= 5, detail: Number.isFinite(free) ? `空き ${free.toFixed(1)}GB` : "" };

@@ -28,7 +28,7 @@ function parseAss(src: string) {
   return out.join("\n");
 }
 
-function python() { for (const p of [process.env.MVPACK_PYTHON ?? "", "python3", "python", "py"].filter(Boolean)) { const r = spawnSync(p, ["--version"], { shell: process.platform === "win32" }); if (r.status === 0) return p; } return null; }
+function python() { for (const p of [process.env.MVPACK_PYTHON ?? "", "python3", "python", "py"].filter(Boolean)) { const r = spawnSync(p, ["--version"], { shell: false }); if (r.status === 0) return p; } return null; }
 
 export async function buildSong(det: ReturnType<typeof detectInput>, dir: string, o: Record<string, any>): Promise<{ song: Song; notes: string[] }> {
   const notes: string[] = [];
@@ -53,7 +53,7 @@ export async function buildSong(det: ReturnType<typeof detectInput>, dir: string
       log(det.lyricsKind === "txt" ? "🎤 歌詞テキストを音声に位置合わせ中（faster-whisper・無料）…" : "🎤 歌詞を自動で書き起こし中（faster-whisper・無料）…");
       const vocals = det.stems.find((s) => /vocal|ボーカル/i.test(path.basename(s)) && !/inst|off/i.test(path.basename(s)));
       const args = [path.join(REMOTION_DIR, "scripts", "transcribe.py"), audio, "--out", outJson, "--model", String(o.whisper ?? "small"), ...(det.lyricsKind === "txt" ? ["--text", det.lyrics!] : []), ...(vocals ? ["--vocals", vocals] : [])];
-      const r = spawnSync(py, args, { stdio: "inherit", shell: process.platform === "win32" });
+      const r = spawnSync(py, args, { stdio: "inherit", shell: false });
       if (r.status !== 0) throw new UserError("歌詞の自動処理に失敗しました", "pip install faster-whisper を実行してから再試行。急ぐなら歌詞なし（--no-lyrics）でも作れます。");
     } else notes.push("歌詞の自動処理結果を再利用（やり直すなら --reanalyze）");
     song = parseLyricJson(JSON.parse(fs.readFileSync(outJson, "utf8")), path.basename(audio).replace(/\.[^.]+$/, ""));
@@ -124,7 +124,7 @@ export async function run(argv: string[]) {
   if (det.images.length && !o["no-faces"]) {
     const py = python(), fdir = path.join(PUBLIC_PROJECT, "faces");
     fs.rmSync(fdir, { recursive: true, force: true });
-    const r = py ? spawnSync(py, [path.join(REMOTION_DIR, "scripts", "faces.py"), "--out", fdir, "--manual", path.join(dir, "faces_manual.json"), ...det.images], { encoding: "utf8", shell: process.platform === "win32" }) : null;
+    const r = py ? spawnSync(py, [path.join(REMOTION_DIR, "scripts", "faces.py"), "--out", fdir, "--manual", path.join(dir, "faces_manual.json"), ...det.images], { encoding: "utf8", shell: false }) : null;
     const fj = path.join(fdir, "faces.json");
     if (r && r.status === 0 && fs.existsSync(fj)) {
       const faces = readJson<Record<string, any>>(fj, {});
@@ -137,7 +137,7 @@ export async function run(argv: string[]) {
   { const py = python(), files = [...det.images, ...(det.videos ?? [])];
     if (py && files.length) {
       const vf = path.join(dir, "visfeat.json");
-      const r = spawnSync(py, [path.join(REMOTION_DIR, "scripts", "visfeat.py"), "--out", vf, ...files], { encoding: "utf8", shell: process.platform === "win32" });
+      const r = spawnSync(py, [path.join(REMOTION_DIR, "scripts", "visfeat.py"), "--out", vf, ...files], { encoding: "utf8", shell: false });
       if (r.status === 0 && fs.existsSync(vf)) { const V = readJson<Record<string, any>>(vf, {}); const byName = Object.fromEntries(Object.entries(V).map(([k, v]) => [path.basename(k), v]));
         let n = 0; for (const m of media) { const v = byName[m.orig]; if (v) { (m as any).vis = v; n++; } }
         const arts = [...new Set(Object.values(V).map((v: any) => v.art))];

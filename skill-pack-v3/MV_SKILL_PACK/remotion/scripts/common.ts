@@ -19,6 +19,16 @@ export function fail(e: unknown): never {
 }
 export const log = (s: string) => console.log(s);
 
+// ---------- Windows-safe process launch ----------
+// npx/npm are .cmd shims on Windows and need a shell; with shell:true Node joins args with spaces
+// unquoted, so paths like "C:\Users\a b\MV創作" would split. Quote for cmd.exe in that case only.
+export const isShim = (cmd: string) => /^(npx|npm|pnpm|yarn)(\.cmd)?$/i.test(cmd);
+export function winArg(a: string): string { return a === "" ? '""' : /[\s"&|<>^()%!,;=]/.test(a) ? `"${a.replace(/"/g, '""')}"` : a; }
+export function shellOpts(cmd: string, args: string[], platform = process.platform): { args: string[]; shell: boolean } {
+  const shell = platform === "win32" && isShim(cmd);
+  return { args: shell ? args.map(winArg) : args, shell };
+}
+
 // ---------- ffmpeg (system, else Remotion's bundled ffmpeg via `npx remotion ffmpeg`) ----------
 let FF: { ff: string[]; probe: string[] } | null = null;
 export function ffmpegCmd() {
@@ -30,13 +40,15 @@ export function ffmpegCmd() {
 }
 export function ff(args: string[], o: { input?: Buffer; maxBuffer?: number } = {}) {
   const [cmd, ...pre] = ffmpegCmd().ff;
-  const r = spawnSync(cmd, [...pre, "-hide_banner", "-y", ...args], { input: o.input, maxBuffer: o.maxBuffer ?? 1 << 30, shell: process.platform === "win32" && cmd === "npx", cwd: REMOTION_DIR });
+  const so = shellOpts(cmd, [...pre, "-hide_banner", "-y", ...args]);
+  const r = spawnSync(cmd, so.args, { input: o.input, maxBuffer: o.maxBuffer ?? 1 << 30, shell: so.shell, cwd: REMOTION_DIR });
   if (r.status !== 0) throw new UserError(`ffmpeg が失敗しました: ${String(r.stderr).split("\n").slice(-4).join(" ")}`, "ffmpeg が無い場合は README の「ffmpeg」節（winget install Gyan.FFmpeg か、何もしなくても Remotion 同梱版が使われます）を見てください。");
   return r;
 }
 export function probe(file: string): any {
   const [cmd, ...pre] = ffmpegCmd().probe;
-  const r = spawnSync(cmd, [...pre, "-v", "error", "-print_format", "json", "-show_format", "-show_streams", file], { encoding: "utf8", shell: process.platform === "win32" && cmd === "npx", cwd: REMOTION_DIR });
+  const so = shellOpts(cmd, [...pre, "-v", "error", "-print_format", "json", "-show_format", "-show_streams", file]);
+  const r = spawnSync(cmd, so.args, { encoding: "utf8", shell: so.shell, cwd: REMOTION_DIR });
   if (r.status !== 0) throw new UserError(`ファイルを読めません: ${file}`, "壊れていないか、対応形式（mp3/wav/m4a/flac, mp4/mov, png/jpg/webp）か確認してください。");
   return JSON.parse(r.stdout);
 }
@@ -174,7 +186,8 @@ export function parseArgs(argv: string[]) {
   return { o, rest };
 }
 export function npx(args: string[], opts: { quiet?: boolean } = {}) {
-  const r = spawnSync("npx", args, { cwd: REMOTION_DIR, stdio: opts.quiet ? "pipe" : "inherit", shell: process.platform === "win32", encoding: "utf8" });
+  const so = shellOpts("npx", args);
+  const r = spawnSync("npx", so.args, { cwd: REMOTION_DIR, stdio: opts.quiet ? "pipe" : "inherit", shell: so.shell, encoding: "utf8" });
   if (r.status !== 0) throw new UserError(`レンダリングに失敗しました（npx ${args.slice(0, 3).join(" ")} …）。${opts.quiet ? String(r.stderr).slice(-600) : ""}`, "npm run setup で環境チェック → それでもダメならエラー全文を Codex に貼ってください。");
   return r;
 }
