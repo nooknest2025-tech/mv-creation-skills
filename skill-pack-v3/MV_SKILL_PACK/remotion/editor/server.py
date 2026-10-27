@@ -33,6 +33,12 @@ def validate(d):
         if not isinstance(s.get('camera',True),bool):raise ValueError('自動カメラの設定を確認してください')
         for key in ['cameraMove','cameraStrength','cameraSync']:
             if key in s and not (isinstance(s[key],str) and len(s[key])<40):raise ValueError('カメラの設定を確認してください')
+        if 'speed' in s and not (finite(s['speed']) and .25<=s['speed']<=4):raise ValueError('動画の速さは0.25〜4倍です')
+        if 'fit' in s and not isinstance(s['fit'],bool):raise ValueError('「場面の長さに合わせる」の設定を確認してください')
+        if s.get('tail','auto') not in ['auto','hold','loop']:raise ValueError('動画が足りないときの動きを確認してください')
+        if 'clipFrom' in s:
+            a=orig['assets'][s['asset']];clip=a.get('duration') if isinstance(a,dict) else None
+            if not finite(s['clipFrom']) or s['clipFrom']<0 or (finite(clip) and s['clipFrom']>=clip):raise ValueError('動画の開始位置は0秒以上・動画の長さ未満です')
         if not isinstance(s.get('effects',[]),list) or len(s.get('effects',[]))>40 or any(not isinstance(e,dict) or not isinstance(e.get('id'),str) for e in s.get('effects',[])):raise ValueError('エフェクトの設定を確認してください')
     for r in d.get('effectRanges',[]) or []:
         if not isinstance(r,dict) or not isinstance(r.get('id'),str) or not finite(r.get('start')) or not finite(r.get('end')) or not r['end']>r['start']:raise ValueError('範囲エフェクトの開始・終了秒を確認してください')

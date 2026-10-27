@@ -2,3 +2,25 @@ body{height:100vh;overflow:hidden;font-size:13px}main{max-width:none;margin:0;pa
 .editorTabs{display:flex;gap:5px;margin-bottom:15px}.editorTabs button{flex:1}#sceneAppearance{padding:0}#sceneAppearance h2{margin-bottom:10px}#sceneAppearance .lookControls{display:grid}#sceneList .lyricItem{display:flex;flex-direction:column}.sceneTime{color:#a8b8a1}#appearance{padding:0!important}[hidden]{display:none!important}.joinControls{padding:12px 0;border-top:1px solid #435547}.joinControls select,.joinControls input{max-width:100%}.joinControls button{margin-top:7px}
 .lineRow{display:flex;align-items:flex-start;gap:4px}.lineRow>input[type=checkbox]{margin:16px 0 0;accent-color:#aec49a;flex-shrink:0}.lineRow>.lyricItem{min-width:0;flex:1}.colorControls{display:flex;gap:15px}.colorControls label{display:flex;flex-direction:column;gap:5px}.colorControls input{height:35px;width:62px;padding:3px}.bulkControls{margin-top:16px;padding:12px;border:1px solid #78916d;border-radius:8px;background:#293e2c}.bulkControls label{display:block;margin:10px 0}.bulkControls select{display:block;width:100%;margin-top:5px}.bulkControls button{margin:5px 4px 5px 0}#gallery>select{flex-basis:100%;max-width:100%}#fontCategory{margin-bottom:7px}#fontSample{font-size:22px;color:#f4efdf;line-height:1.5;padding:10px;background:#17241f;border-radius:5px;overflow-wrap:anywhere}.advancedControls{border-top:1px solid #435547;padding-top:6px}
 #catalogCount{font-size:11px;color:#c4d3b4}#refreshCatalog{font-size:11px}@media(max-width:1000px){#catalogCount{display:none}#refreshCatalog{font-size:10px;padding:6px}}
+
+/* --- timeline (mouse editing) --- */
+#timeline{margin-top:10px;background:#1c2c23;border:1px solid #435547;border-radius:8px;padding:6px 8px}
+.tlBar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12px}.tlBar input[type=range]{width:110px;vertical-align:middle}.hint{font-size:11px;color:#afbea8}
+#tlScroll{overflow-x:auto;overflow-y:hidden;margin-top:6px;touch-action:none;user-select:none}
+#tlInner{position:relative;height:96px;min-width:100%}
+#tlBeats i{position:absolute;top:0;bottom:0;width:1px;background:#ffffff14}#tlBeats i.bar{background:#ffffff40}
+.tlRow{position:absolute;left:0;right:0;height:40px}#tlScenes{top:4px}#tlLyrics{top:50px}
+.tlScene,.tlLyric{position:absolute;top:0;height:100%;box-sizing:border-box;border:1px solid #6d7b68;border-radius:4px;padding:3px 6px;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;background:#35473c}
+.tlScene.video{background:#3d3550;cursor:grab}.tlLyric{background:#2c4a5a;height:32px;top:4px}
+.tlScene.sel,.tlLyric.sel{outline:2px solid #f1dfb4;z-index:2}
+.edge{position:absolute;top:0;bottom:0;width:8px;cursor:ew-resize;background:#f1dfb455}.edge.left{left:-1px}.edge.right{right:-1px}.edge:hover{background:#f1dfb4}
+#tlHead{position:absolute;top:0;bottom:0;width:2px;background:#ff6b6b;pointer-events:none;z-index:3}
+#tlTip{position:fixed;z-index:60;background:#000d;color:#fff;padding:4px 8px;border-radius:5px;font-size:12px;pointer-events:none;white-space:nowrap}
+.clipBox{border:1px solid #78916d;border-radius:8px;padding:8px 10px;margin:12px 0;background:#293e2c}.clipBox label.wide,.clipBox label.check{display:block;margin:8px 0}.clipBox input[type=range]{width:70%;vertical-align:middle}
+/* --- responsive: nothing clipped at 1024x640 / 1280x720 / 1366x768 --- */
+.centerWorkspace{display:flex;flex-direction:column}
+#screen{max-width:min(100%,calc((100vh - 380px) * 16 / 9))!important;margin:0 auto!important}
+.workspaceHeader{flex-wrap:wrap;height:auto;min-height:56px;padding:8px 16px}.workspaceHeader h1{font-size:17px}
+@media(max-width:1280px){.workspace{grid-template-columns:170px minmax(0,1fr) 290px}.inspector,.lineSidebar{padding:10px}}
+@media(max-width:1000px){.workspace{grid-template-columns:150px minmax(0,1fr) 260px}}
+@media(max-width:900px){body,main{height:auto;min-height:100vh;overflow:auto}.workspace{grid-template-columns:1fr;grid-template-rows:auto}.lineSidebar{grid-row:auto;max-height:220px;border-right:0}.centerWorkspace{order:-1;overflow:visible}.inspector{grid-column:auto;overflow:visible;border-left:0}#screen{max-width:100%!important}.lineSidebar #lineList,.lineSidebar #sceneList{display:flex;flex-wrap:wrap;gap:4px}.lineSidebar .lineRow{flex:1 1 180px}}

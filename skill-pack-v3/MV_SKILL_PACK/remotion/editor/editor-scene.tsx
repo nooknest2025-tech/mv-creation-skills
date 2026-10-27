@@ -6,6 +6,8 @@ export {CAMERA_MOVES,EFFECT_FX,STRENGTH,SYNC};
 export const sceneMove=(s:any)=>s.cameraMove??(s.camera===false?'none':'sway');
 import FONT_OPTIONS from './font-options.json';
 import {sectionTypeOf} from '../src/lib/song';
+import {clipPlan,clipSourceTime} from '../src/lib/clipspeed';
+export {clipPlan,clipSourceTime};
 /** section label/type for a lyric (pro_* styles print them); never undefined. */
 export function sectionFor(sections:any[]|undefined,t:number){const s=(sections??[]).find((x:any)=>t>=x.start&&t<x.end)??(sections??[])[0];const label=String(s?.label??'');return {section:label,sectionType:s?.type??(label?sectionTypeOf(label):'other')}}
 /** one broken lyric style must not blank the whole preview (pictures included). */
@@ -26,11 +28,14 @@ function combined(el:React.ReactNode,l:any,t:number,cx:number,cy:number,W:number
 export {CATALOG};
 export const VIDEO_EXT=/\.(mp4|mov|m4v|webm)$/i;
 export const isVideoAsset=(a:any)=>!!a&&(a.kind==='video'||VIDEO_EXT.test(typeof a==='string'?a:a.src??''));
-/** browser preview: a muted <video> kept in sync with the editor clock (seeks only when it drifts). */
+/** browser preview: a MUTED <video> that only shows the clip frame the shared mapping asks for (seeks when it drifts). Its own sound is never played. */
 function PreviewVideo({src,time,style}:{src:string;time:number;style:any}){const ref=React.useRef<HTMLVideoElement>(null);
- React.useEffect(()=>{const v=ref.current;if(!v)return;const d=v.duration;const want=Number.isFinite(d)&&d>0?time%d:time;if(Math.abs(v.currentTime-want)>.2)try{v.currentTime=want}catch{}});
+ React.useEffect(()=>{const v=ref.current;if(!v)return;v.muted=true;v.volume=0;const d=v.duration;const want=Number.isFinite(d)&&d>0?Math.min(time,d-.04):time;if(Math.abs(v.currentTime-want)>.06)try{v.currentTime=want}catch{}});
  return <video ref={ref} src={src} muted playsInline preload="auto" style={style}/>}
-export type VideoRenderer=(src:string,sceneStart:number,localT:number,style:any,key:any)=>React.ReactNode;
+/** srcTime = seconds inside the clip (already speed / in-point / tail mapped by clipPlan). */
+export type VideoRenderer=(src:string,srcTime:number,style:any,key:any)=>React.ReactNode;
+/** where a scene's clip is at `t` (shared by preview + export). */
+export function sceneClipTime(data:any,i:number,t:number){const s=data.scenes[i],end=data.scenes[i+1]?.start??data.duration,a=data.assets[s.asset];return clipSourceTime(clipPlan(s,end-s.start,typeof a==='object'?a.duration:undefined),t-s.start)}
 
 export function Scene({data,t,base='',video}:{data:any;t:number;base?:string;video?:VideoRenderer}) {
  const W=data.width??1280,H=data.height??720; const scenes=data.scenes;const assets=data.assets.map((a:any)=>typeof a==='string'?a:a.src);const kinds=data.assets.map((a:any)=>isVideoAsset(a));
@@ -40,7 +45,7 @@ export function Scene({data,t,base='',video}:{data:any;t:number;base?:string;vid
   const m=cameraPose(sceneMove(s),{p,t,t0:s.start,dur,beat,seed:i*7+1,W,sync:s.cameraSync,accents:data.accents},s.cameraStrength);
   const sc=zoom*m.s,maxX=(1.11*sc-1)*W/2,maxY=(1.11*sc-1)*H/2;const x=Math.max(-maxX,Math.min(maxX,m.x*W+(s.x??0)/100*(1.11*zoom-1)*W/2)),y=Math.max(-maxY,Math.min(maxY,m.y*H+(s.y??0)/100*(1.11*zoom-1)*H/2));const bl=m.blur+(m.focus??0);
   const st={position:'absolute',width:'111%',height:'111%',left:'-5.5%',top:'-5.5%',objectFit:'cover',transform:`perspective(1400px) translate(${x}px,${y}px) scale(${sc}) rotate(${m.r}deg) rotateY(${m.ry??0}deg)`,filter:bl>.2?`blur(${bl.toFixed(2)}px)`:undefined};
-  if(kinds[s.asset]){const local=Math.max(0,t-s.start);return video?<React.Fragment key={i}>{video(base+assets[s.asset],s.start,local,st,i)}</React.Fragment>:<PreviewVideo key={i} src={base+assets[s.asset]} time={local} style={st}/>}
+  if(kinds[s.asset]){const at=sceneClipTime(data,i,t);return video?<React.Fragment key={i}>{video(base+assets[s.asset],at,st,i)}</React.Fragment>:<PreviewVideo key={i} src={base+assets[s.asset]} time={at} style={st}/>}
   return <img key={i} src={base+assets[s.asset]} style={st as any}/>};
  const fade=scenes[idx].transition??1.1;let blend=idx&&fade>0?Math.max(0,Math.min(1,(t-scenes[idx].start)/fade)):1;blend=blend*blend*(3-2*blend);
  const active=data.lyrics.filter((l:any)=>t>=l.start&&t<l.end&&t<data.duration-1);

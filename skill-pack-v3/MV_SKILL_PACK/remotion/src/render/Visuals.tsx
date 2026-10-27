@@ -1,6 +1,7 @@
 // Visual layer: beat-synced montage of stills/clips with camera moves, pseudo-2.5D parallax, light leaks,
 // particles, beat shake, transitions and per-section grade. Falls back to generative abstract visuals.
 import React from "react";
+import { clipPlan, clipSourceTime } from "../lib/clipspeed";
 import { AbsoluteFill, Freeze, Img, OffthreadVideo, Sequence, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import { PuppetImage } from "./Puppet";
 import { Reactive } from "./AudioReactive";
@@ -46,6 +47,10 @@ const Media: React.FC<{ shot: Shot; W: number; H: number; fps: number; p: number
   if (!shot.src) return <AbsoluteFill style={{ background: "#000" }} />;
   if (shot.kind === "video") {
     const rate = shot.rate ?? 1, dur = shot.end - shot.start;
+    if (shot.speed !== undefined || shot.fit || shot.tail) { // user speed/stretch/in-point: identical mapping to the editor (audio untouched; clip muted)
+      const at = clipSourceTime(clipPlan(shot, dur, shot.clipDur), p * dur);
+      return <Freeze frame={Math.max(0, Math.round(at * fps))}><OffthreadVideo src={src(shot.src)} muted volume={0} style={style} /></Freeze>;
+    }
     if (shot.ramp && shot.ramp !== "none") {
       // time remap: show the source frame at clipFrom + F(u) * dur * rate
       const sf = Math.round(((shot.clipFrom ?? 0) + q * dur * rate) * fps);

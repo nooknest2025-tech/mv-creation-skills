@@ -70,6 +70,7 @@ export interface Shot {
   prompt?: string;
   transition?: string; // transition INTO this shot
   rate?: number; // playback rate for video shots
+  speed?: number; fit?: boolean; tail?: "auto" | "hold" | "loop"; clipDur?: number; // user clip speed (clipspeed.ts; same mapping as the editor)
   z0?: number; // starting zoom (match-cut chain)
   sectionType?: SectionType;
   grade?: Grade;

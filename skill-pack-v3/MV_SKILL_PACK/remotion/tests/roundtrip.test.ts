@@ -125,8 +125,8 @@ describe("editor: video clips", () => {
     expect(renderToStaticMarkup(React.createElement(Scene, { data, t: 5 }))).toMatch(/<video[^>]*src="assets\/v.mp4"/);
     expect(renderToStaticMarkup(React.createElement(Scene, { data, t: 1 }))).toMatch(/<img[^>]*assets\/a.png/);
     const seen: any[] = [];
-    renderToStaticMarkup(React.createElement(Scene, { data, t: 5, video: (src: string, start: number, local: number) => { seen.push([src, start, local]); return null; } }));
-    expect(seen[0]).toEqual(["assets/v.mp4", 4, 1]);
+    renderToStaticMarkup(React.createElement(Scene, { data, t: 5, video: (src: string, srcTime: number) => { seen.push([src, srcTime]); return null; } }));
+    expect(seen[0]).toEqual(["assets/v.mp4", 1]); // 1s into the scene at normal speed = 1s into the clip
   });
   it("rejects unsupported files with a Japanese message", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mv-v-")); const f = path.join(dir, "a.gif"); fs.writeFileSync(f, "x");
