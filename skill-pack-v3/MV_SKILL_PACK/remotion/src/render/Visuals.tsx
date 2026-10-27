@@ -47,7 +47,7 @@ const Media: React.FC<{ shot: Shot; W: number; H: number; fps: number; p: number
   if (!shot.src) return <AbsoluteFill style={{ background: "#000" }} />;
   if (shot.kind === "video") {
     const rate = shot.rate ?? 1, dur = shot.end - shot.start;
-    if (shot.speed !== undefined || shot.fit || shot.tail) { // user speed/stretch/in-point: identical mapping to the editor (audio untouched; clip muted)
+    if (shot.speed !== undefined || shot.fit || shot.tail || shot.clipTo !== undefined || shot.segments?.length) { // user speed/stretch/in-point: identical mapping to the editor (audio untouched; clip muted)
       const at = clipSourceTime(clipPlan(shot, dur, shot.clipDur), p * dur);
       return <Freeze frame={Math.max(0, Math.round(at * fps))}><OffthreadVideo src={src(shot.src)} muted volume={0} style={style} /></Freeze>;
     }

@@ -3,7 +3,7 @@ import {createRoot} from 'react-dom/client';
 import {lyricRange,sceneRange,loopStep} from './loop';
 import {sceneName} from '../src/lib/editstate';
 import {snapTime,resizeBoundary,moveLyricEdge,moveLyric,slideInPoint,fmt} from './timeline';
-import {clipPlan,clipSummary,SPEED_PRESETS,TAILS,SPEED_MIN,SPEED_MAX} from '../src/lib/clipspeed';
+import {clipPlan,clipSummary,trimSpan,SPEED_PRESETS,TAILS,SPEED_MIN,SPEED_MAX} from '../src/lib/clipspeed';
 import {Scene,isVideoAsset,CATALOG,FONT_OPTIONS,POSITIONS,EFFECTS,TRANSITIONS,CAMERA_MOVES,EFFECT_FX,STRENGTH,SYNC,sceneMove} from './editor-scene';
 const root=createRoot(document.getElementById('stage')!);
 let data:any,revision=0,dirty=false,t=0,mode='live',busy=false,lastJob:any=null;
@@ -21,11 +21,12 @@ const styles=Object.entries(CATALOG);
 function motionGroup(k:string){if(/^pro_/.test(k))return 'プロ演出（pro）';if(/^(join|leave)_(left_right|top_bottom)$/.test(k))return '追加：合流・分離';if(/leave|shatter/.test(k))return '離れる・散る';if(/join|reveal|scatter|fly3d|blur_in|particles|handwriting|outline|typewriter/.test(k))return '集まる・現れる';if(/neon|glitch|trail|spotlight/.test(k))return '光・質感';if(/tategaki|circular|ticker|collage|word_stack|ui_window/.test(k))return '配置・組版';return 'リズム・変形'}
 const motionGroups=[...new Set(styles.map(([k])=>motionGroup(k)))];
 const optionHtml=motionGroups.map(group=>`<optgroup label="${group}">${styles.filter(([k])=>motionGroup(k)===group).map(([k,v])=>`<option value="${k}">${v.short}</option>`).join('')}</optgroup>`).join('');
-function fit(){const w=$('screen').clientWidth,W=data?.width??1280,H=data?.height??720;$('stage').style.width=W+'px';$('stage').style.height=H+'px';$('stage').style.transform=`scale(${w/W})`;$('screen').style.height=`${w*H/W}px`}
-function draw(){root.render(<Scene data={data} t={t}/>);$('time').textContent=t.toFixed(2)+'秒';$('seek').value=t;const ph=$('tlHead');if(ph)ph.style.left=(t*pxs)+'px'}
+function fit(){const W=data?.width??1280,H=data?.height??720,st=$('stage');st.style.width=W+'px';st.style.height=H+'px';if(document.fullscreenElement===$('screen')){const k=Math.min(innerWidth/W,innerHeight/H);st.style.position='absolute';st.style.left=(innerWidth-W*k)/2+'px';st.style.top=(innerHeight-H*k)/2+'px';st.style.transform=`scale(${k})`;$('screen').style.height='';return}st.style.position='';st.style.left='';st.style.top='';const w=$('screen').clientWidth;st.style.transform=`scale(${w/W})`;$('screen').style.height=`${w*H/W}px`}
+function draw(){root.render(<Scene data={data} t={t}/>);$('time').textContent=t.toFixed(2)+'秒';$('seek').value=t;if(!$('fsBar').hidden){$('fsSeek').value=t;$('fsTime').textContent=`${t.toFixed(2)} / ${data.duration.toFixed(2)}秒`}const ph=$('tlHead');if(ph)ph.style.left=(t*pxs)+'px'}
 let pxs=40;
 function status(){ $('status').textContent=dirty?'未保存（プレビューに反映中）':`編集版 ${revision} 保存済み`;$('render').disabled=dirty||busy;$('save').disabled=!dirty||busy;if(lastJob?.status==='done'&&(dirty||lastJob.revision!==revision))$('exportStatus').textContent=`書き出し未反映（前の出力は編集版 ${lastJob.revision}）`;}
-function change(){dirty=true;mode='live';draw();status();refreshLineList();refreshSceneList();drawTimeline();refreshClip()}
+function sanitizeRamps(){for(let i=0;i<data.scenes.length;i++){const s=data.scenes[i];if(!s.segments)continue;const d=sceneDur(i);s.segments=s.segments.filter((g:any,k:number)=>k===0||g.at<d-.05);if(s.segments.length<2){delete s.segments;delete s.solve}else if(s.solve!==undefined&&s.solve>=s.segments.length)s.solve=s.segments.length-1}}
+function change(){if(data)sanitizeRamps();dirty=true;mode='live';draw();status();refreshLineList();refreshSceneList();drawTimeline();refreshClip()}
 function input(value:any,fn:(v:number)=>void,label:string,min=0,max=data.duration,step=.05){const e=document.createElement('input');e.type='number';e.value=value;e.min=String(min);e.max=String(max);e.step=String(step);e.setAttribute('aria-label',label);e.oninput=()=>{if(e.value===''||!Number.isFinite(Number(e.value)))return;fn(Number(e.value));change()};return e}
 function cell(tr:any,content:any){const td=document.createElement('td');if(typeof content==='string')td.textContent=content;else td.append(content);tr.append(td);return td}
 function seek(at:number,play=false){t=Math.max(0,Math.min(data.duration,at));audio.currentTime=t;draw();if(play)audio.play().catch(()=>{})}
@@ -89,26 +90,76 @@ function sceneInspector(){
 let showTab=(_s:boolean,_c?:boolean)=>{},currentScene=()=>0;
 const sceneDur=(i:number)=>(data.scenes[i+1]?.start??data.duration)-data.scenes[i].start;
 const clipLen=(s:any)=>{const a=data.assets[s.asset];return typeof a==='object'?a.duration:undefined};
-/** 動画クリップの速さ・伸ばす・開始位置（画像の場面では隠す）。曲の音は一切変わらない。 */
+/** 動画クリップの速さ・切り取り・スピードランプ（画像の場面では隠す）。曲の音は一切変わらない。 */
+const stripCache:any={};
+function filmstrip(src:string,len:number,done:()=>void){if(stripCache[src])return stripCache[src];const c=document.createElement('canvas');c.width=8*80;c.height=45;stripCache[src]=c;const v=document.createElement('video');v.muted=true;v.preload='auto';v.src=src;let k=0;
+ const next=()=>{if(k>=8){v.removeAttribute('src');v.load();return}v.currentTime=Math.min(len-.05,(k+.5)*len/8)};v.onseeked=()=>{try{c.getContext('2d')!.drawImage(v,k*80,0,80,45)}catch{}k++;done();next()};v.onloadeddata=next;return c}
 function clipPanel(cur:()=>number,preview:()=>void){
  const P=$('clipPanel');
- P.innerHTML=`<section class="clipBox"><h3>動画の速さ・長さ</h3><p class="hint">動画の<b>画だけ</b>の速さを変えます。曲の音・テンポ・長さは変わりません（動画の音は使いません）。</p>
- <div class="lineNav" id="speedPresets"></div>
- <label class="wide">速さ <input id="clipSpeed" type="range" min="${SPEED_MIN}" max="${SPEED_MAX}" step="0.05" aria-label="動画の速さ"> <b id="clipSpeedVal"></b></label>
- <label class="check"><input id="clipFit" type="checkbox" aria-label="場面の長さに合わせる"> 場面の長さに合わせる <small>（動画全体がちょうど場面の長さで終わる速さに自動で調整）</small></label>
- <div class="lookControls"><label>開始位置（秒） <input id="clipFrom" type="number" min="0" step="0.05" aria-label="動画の開始位置"></label>
- <label class="wide">動画が足りないとき <select id="clipTail" aria-label="動画が足りないとき">${Object.entries(TAILS).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select></label></div>
- <p id="clipInfo" class="hint"></p><p class="hint">タイムラインで動画の帯をドラッグすると開始位置をずらせます。</p></section>`;
- const S=()=>data.scenes[cur()];
- for(const [label,v] of SPEED_PRESETS){const b=document.createElement('button');b.textContent=label;b.dataset.speed=String(v);b.onclick=()=>{const s=S();s.speed=v;delete s.fit;change();preview()};$('speedPresets').append(b)}
- $('clipSpeed').oninput=()=>{const s=S();s.speed=Number($('clipSpeed').value);delete s.fit;change()};$('clipSpeed').onchange=preview;
- $('clipFit').onchange=()=>{const s=S();if($('clipFit').checked)s.fit=true;else delete s.fit;change();preview()};
- $('clipFrom').oninput=()=>{const v=Number($('clipFrom').value);if($('clipFrom').value===''||!Number.isFinite(v))return;S().clipFrom=Math.max(0,v);change()};
+ P.innerHTML=`<section class="clipBox"><h3>動画の速さ・切り取り</h3><p class="hint">動画の<b>画だけ</b>を変えます。曲の音・テンポ・長さは変わりません（動画の音は使いません）。</p>
+ <h4>速さ</h4><div class="lineNav" id="speedPresets"></div>
+ <div class="speedRow"><button id="speedDown" title="0.05倍おそく">−0.05</button><input id="clipSpeedNum" type="number" min="${SPEED_MIN}" max="${SPEED_MAX}" step="0.01" aria-label="動画の速さ（倍）" title="マウスホイールで0.01ずつ（Shiftで0.05ずつ）"><span>倍</span><button id="speedUp" title="0.05倍はやく">＋0.05</button></div>
+ <input id="clipSpeed" type="range" min="${SPEED_MIN}" max="${SPEED_MAX}" step="0.01" aria-label="動画の速さ" class="full"><b id="clipSpeedVal"></b>
+ <label class="check"><input id="clipFit" type="checkbox" aria-label="場面の長さに合わせる"> 場面の長さに合わせる <small>（使う部分がちょうど場面の終わりで終わる速さに自動調整）</small></label>
+ <h4>切り取り（使う部分）</h4><p class="hint">下の帯の黄色いつまみをドラッグして、使い始め（IN）と使い終わり（OUT）を決めます。</p>
+ <canvas id="clipStrip" width="640" height="62" aria-label="動画の切り取り帯"></canvas>
+ <div class="lookControls"><label>IN（秒） <input id="clipFrom" type="number" min="0" step="0.01" aria-label="動画の使い始め"></label><label>OUT（秒） <input id="clipTo" type="number" min="0" step="0.01" aria-label="動画の使い終わり"></label></div>
+ <h4>スピードランプ（途中で速さを変える）</h4>
+ <label class="check"><input id="rampOn" type="checkbox"> 途中から速さを変える</label>
+ <div id="rampBox"><p class="hint">下の帯は<b>場面の時間</b>です。白いつまみ＝速さが切り替わる位置。ドラッグで動かせます。</p><canvas id="rampBar" width="640" height="34" aria-label="速さの切替位置"></canvas>
+ <div class="lookControls"><label>切替位置（場面の何秒目） <input id="rampAt" type="number" min="0" step="0.01"></label><label>なめらかに変える（秒） <input id="rampEase" type="number" min="0" max="2" step="0.05" title="0で一瞬で切替。0.5〜1でスピードランプらしくなります"></label>
+ <label>前半の速さ <input id="rampV1" type="number" min="${SPEED_MIN}" max="${SPEED_MAX}" step="0.01"></label><label>後半の速さ <input id="rampV2" type="number" min="${SPEED_MIN}" max="${SPEED_MAX}" step="0.01"></label>
+ <label class="wide">自動で合わせる側 <select id="rampSolve"><option value="1">後半を自動（前半はそのまま）</option><option value="0">前半を自動（後半はそのまま）</option><option value="">自動にしない（両方手入力）</option></select></label></div></div>
+ <button id="rampFit" class="primary">途中からスローで帳尻合わせ</button><p class="hint">前半は今の速さのまま、切替位置から後をゆっくりにして、使う部分がぴったり場面の終わりで終わるようにします。</p>
+ <h4>動画が足りないとき</h4><select id="clipTail" aria-label="動画が足りないとき">${Object.entries(TAILS).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select>
+ <p id="clipInfo" class="result"></p><p class="hint">タイムラインで動画の帯の真ん中をドラッグすると、使う部分（IN〜OUT）をまとめてずらせます。</p></section>`;
+ const S=()=>data.scenes[cur()],D=()=>sceneDur(cur());
+ const setSpeed=(v:number)=>{if(!Number.isFinite(v))return;const s=S();v=Math.round(Math.max(SPEED_MIN,Math.min(SPEED_MAX,v))*100)/100;s.speed=v;delete s.fit;if(s.segments){s.segments[0].speed=v}change()};
+ for(const [label,v] of SPEED_PRESETS){const b=document.createElement('button');b.textContent=label;b.dataset.speed=String(v);b.onclick=()=>{setSpeed(v);preview()};$('speedPresets').append(b)}
+ $('clipSpeed').oninput=()=>setSpeed(Number($('clipSpeed').value));$('clipSpeed').onchange=preview;
+ $('clipSpeedNum').oninput=()=>{if($('clipSpeedNum').value!=='')setSpeed(Number($('clipSpeedNum').value))};
+ $('clipSpeedNum').addEventListener('wheel',(e:WheelEvent)=>{e.preventDefault();setSpeed((S().speed??1)+(e.deltaY<0?1:-1)*(e.shiftKey?.05:.01))},{passive:false});
+ $('speedDown').onclick=()=>setSpeed((S().speed??1)-.05);$('speedUp').onclick=()=>setSpeed((S().speed??1)+.05);
+ $('clipFit').onchange=()=>{const s=S();if($('clipFit').checked){s.fit=true;delete s.segments;delete s.solve}else delete s.fit;change();preview()};
+ const num=(id:string,fn:(v:number)=>void)=>{$(id).oninput=()=>{const v=Number($(id).value);if($(id).value===''||!Number.isFinite(v))return;fn(v);change()}};
+ const len=()=>clipLen(S())??1e9;
+ num('clipFrom',v=>{const s=S();s.clipFrom=Math.max(0,Math.min(v,(s.clipTo??len())-.05))});
+ num('clipTo',v=>{const s=S();s.clipTo=Math.min(len(),Math.max(v,(s.clipFrom??0)+.05))});
+ const ensureRamp=()=>{const s=S();if(!s.segments||s.segments.length<2){s.segments=[{at:0,speed:s.speed??1},{at:Math.round(D()*.5*100)/100,speed:s.speed??1}];s.solve=1;s.ease??=.5;delete s.fit}};
+ $('rampOn').onchange=()=>{const s=S();if($('rampOn').checked)ensureRamp();else{delete s.segments;delete s.solve;delete s.ease}change();preview()};
+ num('rampAt',v=>{ensureRamp();S().segments[1].at=Math.max(.05,Math.min(D()-.05,v))});
+ num('rampEase',v=>{S().ease=Math.max(0,Math.min(2,v))});
+ num('rampV1',v=>{ensureRamp();const s=S();s.segments[0].speed=s.speed=Math.max(SPEED_MIN,Math.min(SPEED_MAX,v))});
+ num('rampV2',v=>{ensureRamp();S().segments[1].speed=Math.max(SPEED_MIN,Math.min(SPEED_MAX,v))});
+ $('rampSolve').onchange=()=>{const s=S();ensureRamp();if($('rampSolve').value==='')delete s.solve;else s.solve=Number($('rampSolve').value);change()};
+ $('rampFit').onclick=()=>{ensureRamp();const s=S();s.solve=1;s.segments[0].speed=s.speed??1;change();preview()};
  $('clipTail').onchange=()=>{S().tail=$('clipTail').value;change();preview()};
- return ()=>{const s=S();const vid=isVideoAsset(data.assets[s.asset]);P.hidden=!vid;if(!vid)return;const len=clipLen(s),p=clipPlan(s,sceneDur(cur()),len);
-  $('clipSpeed').value=String(s.speed??1);$('clipSpeedVal').textContent=`${p.rate.toFixed(2)}倍`+(!s.fit&&Math.abs(p.rate-(s.speed??1))>.001?`（選んだ ${(s.speed??1)}倍では動画が足りない／長すぎるため自動調整）`:'');$('clipFit').checked=!!s.fit;$('clipSpeed').disabled=!!s.fit;if(document.activeElement!==$('clipFrom'))$('clipFrom').value=String(s.clipFrom??0);if(len)$('clipFrom').max=String(len);$('clipTail').value=s.tail??'auto';
+ // drag handles: IN/OUT on the film strip, switch point on the scene bar
+ const strip=$('clipStrip'),bar=$('rampBar');let drag:any=null;
+ const fx=(c:HTMLCanvasElement,e:PointerEvent)=>{const r=c.getBoundingClientRect();return Math.max(0,Math.min(1,(e.clientX-r.left)/r.width))};
+ strip.onpointerdown=(e:PointerEvent)=>{const s=S(),L=clipLen(s);if(!L)return;const x=fx(strip,e)*L,a=s.clipFrom??0,b=s.clipTo??L;drag={c:strip,k:Math.abs(x-a)<=Math.abs(x-b)?'in':'out'};strip.setPointerCapture(e.pointerId)};
+ bar.onpointerdown=(e:PointerEvent)=>{ensureRamp();drag={c:bar,k:'at'};bar.setPointerCapture(e.pointerId);move(e)};
+ const move=(e:PointerEvent)=>{if(!drag)return;const s=S(),L=clipLen(s)??1;const f=fx(drag.c,e);const tip=$('tlTip');let msg='';
+  if(drag.k==='in'){s.clipFrom=Math.round(Math.max(0,Math.min(f*L,(s.clipTo??L)-.05))*100)/100;msg=`IN ${s.clipFrom.toFixed(2)}秒`}
+  else if(drag.k==='out'){s.clipTo=Math.round(Math.min(L,Math.max(f*L,(s.clipFrom??0)+.05))*100)/100;msg=`OUT ${s.clipTo.toFixed(2)}秒`}
+  else{s.segments[1].at=Math.round(Math.max(.05,Math.min(D()-.05,f*D()))*100)/100;msg=`切替 場面の ${s.segments[1].at.toFixed(2)}秒目`}
+  tip.hidden=false;tip.textContent=msg;tip.style.left=e.clientX+12+'px';tip.style.top=e.clientY-34+'px';change()};
+ for(const c of [strip,bar]){c.onpointermove=move;c.onpointerup=c.onpointercancel=()=>{if(drag){drag=null;$('tlTip').hidden=true;preview()}}}
+ const paint=()=>{for(const c of [strip,bar]){const w=Math.round(c.clientWidth||640);if(w&&c.width!==w)c.width=w}const s=S(),L=clipLen(s),g=strip.getContext('2d')!,W=strip.width,H=strip.height;g.fillStyle='#111';g.fillRect(0,0,W,H);
+  if(L){const src=data.assets[s.asset].src;const fs=filmstrip(src,L,()=>paint());{const tw=80*(45/45),n=Math.ceil(W/tw);for(let k=0;k<n;k++){const sk=Math.min(7,Math.floor(k*8/n));g.drawImage(fs,sk*80,0,80,45,k*tw,(H-45)/2,tw,45)}}const a=(s.clipFrom??0)/L*W,b=(s.clipTo??L)/L*W;g.fillStyle='#000a';g.fillRect(0,0,a,H);g.fillRect(b,0,W-b,H);g.fillStyle='#f1c84b';g.fillRect(a-3,0,6,H);g.fillRect(b-3,0,6,H);g.fillRect(a,0,b-a,3);g.fillRect(a,H-3,b-a,3);g.fillStyle='#fff';g.font='12px sans-serif';g.fillText(`IN ${(s.clipFrom??0).toFixed(2)}`,Math.min(W-70,a+5),H-4);g.fillText(`OUT ${(s.clipTo??L).toFixed(2)}`,Math.max(0,b-75),14)}
+  else{g.fillStyle='#ccc';g.fillText('動画の長さが分からないため帯は表示できません（数値で指定できます）',8,30)}
+  const p=clipPlan(s,D(),L),h=bar.getContext('2d')!,BW=bar.width;h.fillStyle='#1d2a22';h.fillRect(0,0,BW,34);const segs=s.segments??[{at:0}];segs.forEach((sg:any,i:number)=>{const x0=sg.at/D()*BW,x1=(segs[i+1]?.at??D())/D()*BW;h.fillStyle=['#4f6f8f','#8f5f8f','#6f8f4f'][i%3];h.fillRect(x0,6,x1-x0,22);h.fillStyle='#fff';h.font='12px sans-serif';h.fillText(`${p.speeds[i]?.toFixed(2)}倍`,x0+6,22)});if(segs[1]){const x=segs[1].at/D()*BW;h.fillStyle='#fff';h.fillRect(x-3,0,6,34)}};
+ return ()=>{const s=S();const vid=isVideoAsset(data.assets[s.asset]);P.hidden=!vid;if(!vid)return;const L=clipLen(s),p=clipPlan(s,D(),L),ramp=(s.segments?.length??0)>1;
+  const keep=(id:string,v:any)=>{if(document.activeElement!==$(id))$(id).value=String(v)};
+  keep('clipSpeedNum',(s.speed??1).toFixed(2));$('clipSpeed').value=String(s.speed??1);
+  $('clipSpeedVal').textContent=ramp?'（スピードランプ中：下で区間ごとに設定）':`実際の速さ ${p.rate.toFixed(2)}倍`+(!s.fit&&Math.abs(p.rate-(s.speed??1))>.001?`（選んだ ${(s.speed??1).toFixed(2)}倍では使う部分が足りない／長すぎるため自動調整）`:'');
+  $('clipFit').checked=!!s.fit;for(const id of ['clipSpeed','clipSpeedNum','speedDown','speedUp'])$(id).disabled=!!s.fit;
+  keep('clipFrom',(s.clipFrom??0).toFixed(2));keep('clipTo',(s.clipTo??L??0).toFixed?.(2)??'');if(L){$('clipFrom').max=String(L);$('clipTo').max=String(L)}$('clipTail').value=s.tail??'auto';
+  $('rampOn').checked=ramp;$('rampBox').hidden=!ramp;if(ramp){keep('rampAt',s.segments[1].at.toFixed(2));keep('rampEase',(s.ease??0).toFixed(2));keep('rampV1',p.speeds[0].toFixed(2));keep('rampV2',p.speeds[1].toFixed(2));$('rampSolve').value=s.solve===undefined?'':String(s.solve);$('rampV1').disabled=s.solve===0;$('rampV2').disabled=s.solve===1}
   for(const b of $('speedPresets').children)b.setAttribute('aria-pressed',String(!s.fit&&Number(b.dataset.speed)===(s.speed??1)));
-  $('clipInfo').textContent=`いまの再生：${clipSummary(p,sceneDur(cur()))}${len?`（動画の長さ ${len.toFixed(2)}秒／場面 ${sceneDur(cur()).toFixed(2)}秒）`:''}`}
+  const sp=p.speeds.map((v:number)=>v.toFixed(2)+'倍');
+  $('clipInfo').textContent=(ramp?`結果：前半 ${sp[0]} → 後半 ${sp[1]}（場面 ${s.segments[1].at.toFixed(2)}秒目で切替${s.ease?`、${s.ease}秒かけてなめらかに`:''}）`:`結果：${clipSummary(p,D())}`)+(L?`／使う部分 ${trimSpan(s,L).span.toFixed(2)}秒（動画全体 ${L.toFixed(2)}秒）→ 場面 ${D().toFixed(2)}秒`:'')+(p.mode!=='play'?`　※${p.mode==='hold'?'足りない分は最後の画で止めます':'足りない分はくり返します'}`:'');
+  paint()}
 }
 /** タイムライン（マウスで編集）。data（editor-state）だけを書き換える＝唯一の正。 */
 function timeline(){
@@ -120,7 +171,7 @@ function timeline(){
  drawTimeline=()=>{if(!data)return;$('tlInner').style.width=data.duration*pxs+20+'px';
   const B=60/(data.bpm||120),beats=$('tlBeats');beats.replaceChildren();if(B*pxs>=4)for(let k=Math.ceil(-(data.phase??0)/B),x=0;(x=(data.phase??0)+k*B)<data.duration;k++){const d=document.createElement('i');d.className=k%4===0?'bar':'';d.style.left=x*pxs+'px';beats.append(d)}
   const cs=currentScene(),cl=$('lookLine')?.value,sceneTab=$('scenesTab').getAttribute('aria-pressed')==='true';
-  $('tlScenes').replaceChildren(...data.scenes.map((s:any,i:number)=>{const vid=isVideoAsset(data.assets[s.asset]);const d=el('tlScene'+(vid?' video':'')+(sceneTab&&i===cs?' sel':''),s.start,s.start+sceneDur(i),(vid?'🎞 ':'')+sceneName(s,i,data.sections)+(vid?` ${clipPlan(s,sceneDur(i),clipLen(s)).rate.toFixed(2)}倍`:''),{scene:String(i)});if(i>0){const h=document.createElement('span');h.className='edge left';h.dataset.edge='start';d.append(h)}return d}));
+  $('tlScenes').replaceChildren(...data.scenes.map((s:any,i:number)=>{const vid=isVideoAsset(data.assets[s.asset]);const d=el('tlScene'+(vid?' video':'')+(sceneTab&&i===cs?' sel':''),s.start,s.start+sceneDur(i),(vid?'🎞 ':'')+sceneName(s,i,data.sections)+(vid?` ${clipPlan(s,sceneDur(i),clipLen(s)).speeds.map(v=>v.toFixed(2)).join('→')}倍`:''),{scene:String(i)});if(i>0){const h=document.createElement('span');h.className='edge left';h.dataset.edge='start';d.append(h)}return d}));
   $('tlLyrics').replaceChildren(...data.lyrics.map((l:any)=>{const d=el('tlLyric'+(!sceneTab&&l.id===cl?' sel':''),l.start,l.end,l.text,{lyric:l.id});for(const e of ['start','end']){const h=document.createElement('span');h.className='edge '+(e==='start'?'left':'right');h.dataset.edge=e;d.append(h)}return d}));
   $('tlHead').style.left=t*pxs+'px'};
  let drag:any=null;
@@ -129,12 +180,12 @@ function timeline(){
   if(!blk){cue(x);return}
   const edge=tg.dataset.edge;
   if(blk.dataset.scene){const i=Number(blk.dataset.scene),s=data.scenes[i];selectSceneUi(i);
-   if(edge==='start')drag={kind:'cut',i};else if(isVideoAsset(data.assets[s.asset]))drag={kind:'slide',i,x0:x,from0:s.clipFrom??0,rate:clipPlan(s,sceneDur(i),clipLen(s)).rate,moved:false};else drag=null}
+   if(edge==='start')drag={kind:'cut',i};else if(isVideoAsset(data.assets[s.asset]))drag={kind:'slide',i,x0:x,from0:s.clipFrom??0,to0:s.clipTo,rate:clipPlan(s,sceneDur(i),clipLen(s)).rate,moved:false};else drag=null}
   else{const id=blk.dataset.lyric!;selectLyricUi(id);drag=edge?{kind:'lyr',id,edge}:{kind:'lyrMove',id,x0:x,s0:data.lyrics.find((l:any)=>l.id===id).start,moved:false}}
   if(drag){sc.setPointerCapture(e.pointerId);e.preventDefault()}});
  sc.addEventListener('pointermove',(e:PointerEvent)=>{if(!drag)return;let x=at(e);const snap=(v:number)=>e.shiftKey?v:snapTime(v,data.bpm||120,data.phase??0,Math.max(.04,6/pxs));let msg='';
   if(drag.kind==='cut'){const v=resizeBoundary(data.scenes,drag.i,snap(x),data.duration);msg=`切替 ${fmt(v)}（前の場面 ${sceneDur(drag.i-1).toFixed(2)}秒／この場面 ${sceneDur(drag.i).toFixed(2)}秒）`}
-  else if(drag.kind==='slide'){const s=data.scenes[drag.i];s.clipFrom=slideInPoint(drag.from0,x-drag.x0,drag.rate,clipLen(s));drag.moved=true;msg=`動画の開始位置 ${s.clipFrom.toFixed(2)}秒`}
+  else if(drag.kind==='slide'){const s=data.scenes[drag.i];const L=clipLen(s);if(drag.to0!==undefined){const w=drag.to0-drag.from0;s.clipFrom=slideInPoint(drag.from0,x-drag.x0,drag.rate,L!==undefined?L-w+.05:undefined);s.clipTo=+(s.clipFrom+w).toFixed(3)}else s.clipFrom=slideInPoint(drag.from0,x-drag.x0,drag.rate,L);drag.moved=true;msg=`使う部分 IN ${s.clipFrom.toFixed(2)}秒`+(s.clipTo!==undefined?`〜OUT ${s.clipTo.toFixed(2)}秒`:'')}
   else if(drag.kind==='lyr'){const l=data.lyrics.find((l:any)=>l.id===drag.id);const v=moveLyricEdge(l,drag.edge,snap(x),data.duration);msg=`${drag.edge==='start'?'開始':'終了'} ${fmt(v)}（長さ ${(l.end-l.start).toFixed(2)}秒）`}
   else{const l=data.lyrics.find((l:any)=>l.id===drag.id);if(Math.abs(x-drag.x0)*pxs<3&&!drag.moved)return;drag.moved=true;const len=l.end-l.start;moveLyric(l,snap(drag.s0+(x-drag.x0))-l.start,data.duration);msg=`歌詞 ${fmt(l.start)}〜${fmt(l.start+len)}`}
   tip.hidden=false;tip.textContent=msg+(e.shiftKey?'　（自由）':'　（拍にくっつく・Shiftで自由）');tip.style.left=e.clientX+12+'px';tip.style.top=e.clientY-34+'px';change()});
@@ -203,6 +254,16 @@ async function toolTabs(){let tools:any={};try{const r=await fetch('tools.json')
  const head=document.createElement('div');head.style.cssText='display:flex;gap:10px;align-items:center;padding:8px 12px;background:#1d2620;color:#eee';const back=document.createElement('button');back.textContent='← 歌詞・映像の編集に戻る';back.onclick=()=>{ov.hidden=true};const note=document.createElement('span');head.append(back,note);
  const fr=document.createElement('iframe');fr.style.cssText='flex:1;border:0;background:#fff';ov.append(head,fr);document.body.append(ov);
  for(const key of ['timing','faces']){if(!tools[key])continue;const b=document.createElement('button');b.id=key+'Tab';b.textContent=names[key][0];b.title=names[key][1];b.onclick=()=>{audio.pause();if(fr.dataset.k!==key){fr.src=tools[key];fr.dataset.k=key}note.textContent=names[key][0]+'：'+names[key][1];ov.hidden=false};bar.append(b)}}
+/* 全画面プレビュー（映像だけ・16:9のまま黒帯・曲はそのまま再生） */
+{const scr=$('screen'),bar=$('fsBar');let hideT:any=0;
+ const toggle=()=>{if(document.fullscreenElement)document.exitFullscreen();else scr.requestFullscreen?.().catch((e:any)=>$('error').textContent='全画面にできません：'+e.message)};
+ const wake=()=>{if(!document.fullscreenElement)return;bar.classList.remove('idle');scr.style.cursor='';clearTimeout(hideT);hideT=setTimeout(()=>{bar.classList.add('idle');scr.style.cursor='none'},2200)};
+ $('fullscreen').onclick=toggle;scr.ondblclick=toggle;$('fsExit').onclick=toggle;
+ $('fsPlay').onclick=()=>$('play').click();$('fsSeek').oninput=()=>{mode='live';loopRange=null;seek(Number($('fsSeek').value))};
+ scr.addEventListener('mousemove',wake);
+ document.addEventListener('fullscreenchange',()=>{const on=document.fullscreenElement===scr;bar.hidden=!on;$('fsSeek').max=data.duration;fit();draw();if(on)wake();else{clearTimeout(hideT);scr.style.cursor=''}});
+ document.addEventListener('keydown',e=>{const tag=(e.target as HTMLElement)?.tagName;if((e.key==='f'||e.key==='F')&&!e.ctrlKey&&!e.metaKey&&!/INPUT|SELECT|TEXTAREA/.test(tag??'')){e.preventDefault();toggle()}});
+ const sync=()=>{$('fsPlay').textContent=audio.paused?'再生':'一時停止'};audio.addEventListener('play',sync);audio.addEventListener('pause',sync)}
 load().then(()=>{requestAnimationFrame(tick);poll();toolTabs()}).catch(e=>$('error').textContent=e.message);
 
 

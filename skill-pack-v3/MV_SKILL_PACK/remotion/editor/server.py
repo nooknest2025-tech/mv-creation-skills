@@ -33,11 +33,18 @@ def validate(d):
         if not isinstance(s.get('camera',True),bool):raise ValueError('自動カメラの設定を確認してください')
         for key in ['cameraMove','cameraStrength','cameraSync']:
             if key in s and not (isinstance(s[key],str) and len(s[key])<40):raise ValueError('カメラの設定を確認してください')
-        if 'speed' in s and not (finite(s['speed']) and .25<=s['speed']<=4):raise ValueError('動画の速さは0.25〜4倍です')
+        if 'speed' in s and not (finite(s['speed']) and .1<=s['speed']<=4):raise ValueError('動画の速さは0.1〜4倍です')
         if 'fit' in s and not isinstance(s['fit'],bool):raise ValueError('「場面の長さに合わせる」の設定を確認してください')
         if s.get('tail','auto') not in ['auto','hold','loop']:raise ValueError('動画が足りないときの動きを確認してください')
+        a=orig['assets'][s['asset']];clip=a.get('duration') if isinstance(a,dict) else None
+        if 'clipTo' in s and (not finite(s['clipTo']) or s['clipTo']<=s.get('clipFrom',0)+.04 or (finite(clip) and s['clipTo']>clip+.001)):raise ValueError('動画の終わり位置は開始位置より後・動画の長さ以内です')
+        if 'segments' in s:
+            g=s['segments']
+            if not isinstance(g,list) or not 1<=len(g)<=8 or any(not isinstance(x,dict) or not finite(x.get('at')) or not finite(x.get('speed')) or not .1<=x['speed']<=4 for x in g):raise ValueError('速さの区間は1〜8個、速さは0.1〜4倍です')
+            if g[0]['at']!=0 or any(not g[k-1]['at']<g[k]['at']<end-s['start'] for k in range(1,len(g))):raise ValueError('速さを変える位置は0秒から始めて順番に、場面の中に置いてください')
+        if 'ease' in s and not (finite(s['ease']) and 0<=s['ease']<=2):raise ValueError('なめらかに変える時間は0〜2秒です')
+        if 'solve' in s and not (isinstance(s['solve'],int) and not isinstance(s['solve'],bool) and 0<=s['solve']<len(s.get('segments',[]))):raise ValueError('自動で合わせる区間を確認してください')
         if 'clipFrom' in s:
-            a=orig['assets'][s['asset']];clip=a.get('duration') if isinstance(a,dict) else None
             if not finite(s['clipFrom']) or s['clipFrom']<0 or (finite(clip) and s['clipFrom']>=clip):raise ValueError('動画の開始位置は0秒以上・動画の長さ未満です')
         if not isinstance(s.get('effects',[]),list) or len(s.get('effects',[]))>40 or any(not isinstance(e,dict) or not isinstance(e.get('id'),str) for e in s.get('effects',[])):raise ValueError('エフェクトの設定を確認してください')
     for r in d.get('effectRanges',[]) or []:

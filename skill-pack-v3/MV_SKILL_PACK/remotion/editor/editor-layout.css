@@ -24,3 +24,18 @@ body{height:100vh;overflow:hidden;font-size:13px}main{max-width:none;margin:0;pa
 @media(max-width:1280px){.workspace{grid-template-columns:170px minmax(0,1fr) 290px}.inspector,.lineSidebar{padding:10px}}
 @media(max-width:1000px){.workspace{grid-template-columns:150px minmax(0,1fr) 260px}}
 @media(max-width:900px){body,main{height:auto;min-height:100vh;overflow:auto}.workspace{grid-template-columns:1fr;grid-template-rows:auto}.lineSidebar{grid-row:auto;max-height:220px;border-right:0}.centerWorkspace{order:-1;overflow:visible}.inspector{grid-column:auto;overflow:visible;border-left:0}#screen{max-width:100%!important}.lineSidebar #lineList,.lineSidebar #sceneList{display:flex;flex-wrap:wrap;gap:4px}.lineSidebar .lineRow{flex:1 1 180px}}
+
+/* --- 常に見える：プレビュー＋操作バー＋タイムライン。設定欄だけスクロール --- */
+#stickyTop{position:sticky;top:-16px;z-index:8;background:#17241f;padding-bottom:6px;margin-top:-16px;padding-top:16px}
+.inspector h2,.lineSidebar h2,.inspector h3,.inspector h4,.centerWorkspace details>summary{position:sticky;top:-16px;z-index:4;background:#1c2c23;margin-top:0;padding:6px 0;box-shadow:0 4px 6px -4px #0008}
+.lineSidebar .editorTabs{position:sticky;top:-16px;z-index:5;background:#1c2c23;padding:6px 0;margin:0}.lineSidebar h2{top:30px}
+.clipBox h3,.clipBox h4{background:#293e2c}.inspector h4{font-size:12px;color:#e3d7a8;margin:14px 0 6px}
+.speedRow{display:flex;gap:6px;align-items:center;margin:6px 0}.speedRow input{width:80px}.clipBox input.full{width:100%}
+#clipStrip,#rampBar{width:100%;border-radius:4px;cursor:ew-resize;touch-action:none;display:block;margin:4px 0}
+.clipBox .result{font-weight:600;color:#f4efdf;background:#1d2a22;border-radius:5px;padding:6px 8px}button.primary{background:#7b5a2a;border-color:#f1c84b;margin-top:8px}
+/* 全画面 */
+#screen:fullscreen{background:#000;width:100vw;height:100vh!important;max-width:none!important;border-radius:0}
+#fsBar{position:absolute;left:0;right:0;bottom:0;display:flex;gap:10px;align-items:center;padding:12px 18px;background:linear-gradient(transparent,#000c);transition:opacity .4s;z-index:10}
+#fsBar.idle{opacity:0}#fsBar #fsSeek{flex:1}#fsBar span{color:#fff;font-size:14px;min-width:120px}
+@media(max-width:900px){#stickyTop{position:static}}
+#clipStrip{height:62px}#rampBar{height:34px}

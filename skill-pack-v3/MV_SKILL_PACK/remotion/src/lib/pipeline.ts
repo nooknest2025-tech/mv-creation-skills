@@ -104,11 +104,11 @@ export function buildProps(song0: Song, cfg: MVConfig, media: MediaItem[], o: { 
     const ps = T.perSection?.[s.section ?? ""] ?? T.perSection?.[s.sectionType ?? ""] ?? {};
     const lead = (T.cutLead ?? 0.05) + (ps.cutLead ?? 0); // default: cut ~1.5 frames before the beat (reads as "on the beat")
     const m = T.perShot?.[s.id] ?? {};
-    return { ...s, start: i === 0 ? s.start : Math.max(start, (m.start ?? s.start) - lead), end: (m.end ?? s.end) - (i === shots.length - 1 ? 0 : lead), ...(m.src ? { src: m.src, focus: undefined, kind: m.kind ?? (/\.(mp4|mov|webm)$/i.test(m.src) ? "video" : "image"), clipFrom: m.clipFrom ?? 0 } : {}), ...(m.clipFrom !== undefined && !m.src ? { clipFrom: m.clipFrom } : {}), ...(m.speed !== undefined ? { speed: m.speed } : {}), ...(m.fit ? { fit: true } : {}), ...(m.tail ? { tail: m.tail } : {}), ...(m.move ? { move: m.move } : {}), ...(m.transition ? { transition: m.transition } : {}),
+    return { ...s, start: i === 0 ? s.start : Math.max(start, (m.start ?? s.start) - lead), end: (m.end ?? s.end) - (i === shots.length - 1 ? 0 : lead), ...(m.src ? { src: m.src, focus: undefined, kind: m.kind ?? (/\.(mp4|mov|webm)$/i.test(m.src) ? "video" : "image"), clipFrom: m.clipFrom ?? 0 } : {}), ...(m.clipFrom !== undefined && !m.src ? { clipFrom: m.clipFrom } : {}), ...(m.speed !== undefined ? { speed: m.speed } : {}), ...(m.fit ? { fit: true } : {}), ...(m.tail ? { tail: m.tail } : {}), ...(m.clipTo !== undefined ? { clipTo: m.clipTo } : {}), ...(m.segments?.length ? { segments: m.segments } : {}), ...(m.ease !== undefined ? { ease: m.ease } : {}), ...(m.solve !== undefined ? { solve: m.solve } : {}), ...(m.move ? { move: m.move } : {}), ...(m.transition ? { transition: m.transition } : {}),
       ...(m.ramp ?? cfg.ramps?.[s.sectionType ?? ""] ?? cfg.ramps?.[s.section ?? ""] ?? cfg.ramps?.all ? { ramp: m.ramp ?? cfg.ramps?.[s.sectionType ?? ""] ?? cfg.ramps?.[s.section ?? ""] ?? cfg.ramps?.all } : {}),
       puppet: s.kind === "image" ? resolvePuppet(preset.puppet, cfg.puppet, cfg.puppetSections?.[s.sectionType ?? ""], cfg.puppetSections?.[s.section ?? ""], m.puppet) : undefined };
   });
-  shots = shots.map((s) => s.kind === "video" && (s.speed !== undefined || s.fit || s.tail) ? { ...s, clipDur: (media as any[]).find((x) => x.src === s.src)?.duration } : s);
+  shots = shots.map((s) => s.kind === "video" && (s.speed !== undefined || s.fit || s.tail || s.clipTo !== undefined || s.segments?.length) ? { ...s, clipDur: (media as any[]).find((x) => x.src === s.src)?.duration } : s);
   // hybrid structure (section -> shot role mix), chosen by fit unless the user named one
   const genre = pickGenre(song, cfg);
   const sel = cfg.structure ?? "auto";
