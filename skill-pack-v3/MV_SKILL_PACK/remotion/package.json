@@ -35,13 +35,14 @@
     "gallery": "tsx scripts/gen.ts gallery",
     "sample": "tsx scripts/mv.ts --sample",
     "faces": "tsx scripts/faces.ts",
-    "postinstall": "tsx scripts/fonts.ts sync && tsx scripts/plans_sync.ts",
+    "postinstall": "tsx scripts/fonts.ts sync && tsx scripts/plans_sync.ts && tsx scripts/editor_fonts.ts",
     "doctor": "tsx scripts/doctor.ts",
     "estimate": "tsx scripts/gen.ts estimate",
     "parts": "tsx scripts/parts.ts",
     "pro-demo": "tsx scripts/pro_demo.ts",
     "editor": "tsx scripts/editor.ts",
-    "editor:demo": "tsx scripts/editor.ts --demo --project editor-demo"
+    "editor:demo": "tsx scripts/editor.ts --demo --project editor-demo",
+    "fonts:editor": "tsx scripts/editor_fonts.ts"
   },
   "dependencies": {
     "@remotion/cli": "4.0.538",
