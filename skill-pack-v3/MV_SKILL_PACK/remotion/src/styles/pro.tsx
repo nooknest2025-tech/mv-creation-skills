@@ -63,7 +63,10 @@ function group(c: Ctx, items: PItem[], ox: number, oy: number, els: React.ReactN
   return <div style={{ position: "absolute", inset: 0, transformOrigin: `${ox}px ${oy}px`, transform: `rotate(${rot}deg) scale(${s})` }}>{els}</div>;
 }
 const exitDy = (c: Ctx, p: PItem) => -exitOut(exitP(c.L, c.t)) * p.px * 1.4;
+/** English section/line labels are off by default (they read as stray lyrics); opt in with params.label=true. */
+const labelsOn = (c: Ctx) => c.P?.label === true || c.P?.label === "on";
 const decoLabel = (c: Ctx, box: Box, a: number) => {
+  if (!labelsOn(c)) return null;
   const sz = U(c) * 0.014, txt = `${String(c.L.section ?? "").normalize("NFKC").replace(/[^\x20-\x7e]/g, "").toUpperCase() || String(c.L.sectionType ?? "").toUpperCase()} — ${String(c.L.li + 1).padStart(2, "0")}`;
   return <div style={{ position: "absolute", left: box[0], top: box[1] - sz * 2.6, fontFamily: "'Noto Sans JP', monospace", fontSize: sz, letterSpacing: sz * 0.5, color: FG, opacity: 0.55 * a, whiteSpace: "pre" }}>{txt}</div>;
 };
@@ -162,7 +165,7 @@ PRO_STYLES.pro_label = (c) => {
   const rw = (x1 - x0 + pad * 2) * r * (1 - ex), gs = U(c) * 0.013;
   return { el: group(c, l.items, x0, (y0 + y1) / 2, <><div style={{ position: "absolute", left: x0 - pad + (x1 - x0 + pad * 2) * ex, top: y0 - pad * 0.6, width: rw, height: y1 - y0 + pad * 1.2, background: AC }} />
     <div style={{ position: "absolute", inset: 0, clipPath: `inset(0 0 0 ${x0 - pad + (x1 - x0 + pad * 2) * ex}px)` }}>{els}</div>
-    <div style={{ position: "absolute", left: x0 - pad, top: y1 + pad * 1.2, fontFamily: "monospace", fontSize: gs, letterSpacing: gs * 0.35, color: FG, opacity: 0.6 * r * (1 - ex) }}>{`[${String(c.L.li + 1).padStart(2, "0")}] ${c.L.start.toFixed(2)}s  //  ${c.L.sectionType.toUpperCase()}`}</div></>, 0.03), boxes: boxesOf(l.items) };
+    {labelsOn(c) && <div style={{ position: "absolute", left: x0 - pad, top: y1 + pad * 1.2, fontFamily: "monospace", fontSize: gs, letterSpacing: gs * 0.35, color: FG, opacity: 0.6 * r * (1 - ex) }}>{`[${String(c.L.li + 1).padStart(2, "0")}] ${c.L.start.toFixed(2)}s  //  ${c.L.sectionType.toUpperCase()}`}</div>}</>, 0.03), boxes: boxesOf(l.items) };
 };
 
 /** spring pop (overshoot ~1.15) per syllable on colour block plates. */
