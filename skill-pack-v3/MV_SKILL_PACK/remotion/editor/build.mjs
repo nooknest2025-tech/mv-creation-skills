@@ -1,6 +1,6 @@
 import {build} from 'esbuild';
 import YAML from 'yaml';
-import fs from 'node:fs';import path from 'node:path';import {fileURLToPath} from 'node:url';
+import fs from 'node:fs';import path from 'node:path';import {fileURLToPath,pathToFileURL} from 'node:url';
 export const editorDir=path.dirname(fileURLToPath(import.meta.url));
 export const remotionDir=path.resolve(editorDir,'..');
 export const packDir=path.resolve(remotionDir,'..');
@@ -19,7 +19,7 @@ export async function buildEditor(runtime){
  const generated=path.join(editorDir,'.generated');fs.mkdirSync(generated,{recursive:true});
  const catalogFile=path.join(generated,'catalog.mjs');
  await build({entryPoints:[path.join(remotionDir,'src/lib/catalog.ts')],bundle:true,platform:'node',format:'esm',outfile:catalogFile});
- const {CATALOG}=await import(catalogFile+'?t='+Date.now());
+ const {CATALOG}=await import(pathToFileURL(catalogFile).href+'?t='+Date.now());
  fs.writeFileSync(path.join(editorDir,'style-catalog.json'),JSON.stringify(CATALOG,null,2));
  return {fonts:fonts.length,motions:Object.keys(CATALOG).length};
 }

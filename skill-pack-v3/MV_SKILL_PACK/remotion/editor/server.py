@@ -136,7 +136,14 @@ class Handler(SimpleHTTPRequestHandler):
             if not b:break
             output.write(b);self.remaining-=len(b)
         del self.remaining
-print(f'http://127.0.0.1:{args.port}/editor.html',flush=True)
-ThreadingHTTPServer(('127.0.0.1',args.port),Handler).serve_forever()
+# On Windows SO_REUSEADDR lets two servers share a port silently; keep binding exclusive.
+class Server(ThreadingHTTPServer):allow_reuse_address=os.name!='nt'
+server=None
+for port in range(args.port,args.port+30):
+    try:server=Server(('127.0.0.1',port),Handler);break
+    except OSError:print(f'ポート {port} は使用中のため次を試します',flush=True)
+if server is None:raise SystemExit(f'空きポートがありません（{args.port}〜{args.port+29}）。--port で別の番号を指定してください')
+print(f'http://127.0.0.1:{server.server_address[1]}/editor.html',flush=True)
+server.serve_forever()
 
 

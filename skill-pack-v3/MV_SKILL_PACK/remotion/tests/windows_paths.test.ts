@@ -33,3 +33,14 @@ describe("Windows-safe paths and process launch", () => {
     fs.rmSync(path.dirname(dir), { recursive: true, force: true });
   });
 });
+
+describe("Windows-safe dynamic imports", () => {
+  it("dynamic import() only takes relative specifiers or pathToFileURL(...).href", () => {
+    const files = [...sources(path.join(ROOT, "scripts")), ...sources(path.join(ROOT, "src")), ...sources(path.join(ROOT, "editor")), ...sources(path.join(ROOT, "tests"))];
+    for (const f of files.filter((x) => !x.endsWith("windows_paths.test.ts"))) for (const m of fs.readFileSync(f, "utf8").matchAll(/\bimport\(\s*([^)]*)\)/g)) {
+      const arg = m[1].trim();
+      if (!arg) continue;
+      expect(/^["'`](\.{1,2}\/|node:|[a-z@])/.test(arg) || /pathToFileURL\(/.test(arg), `${f}: import(${arg})`).toBe(true);
+    }
+  });
+});
