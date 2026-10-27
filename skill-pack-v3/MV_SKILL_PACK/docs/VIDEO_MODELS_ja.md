@@ -82,3 +82,36 @@
 - Vidu: https://platform.vidu.com/docs/api-reference/video-models/vidu-q3/reference-to-video 、 https://platform.vidu.com/docs/pricing.md
 - Pollo: https://docs.pollo.ai/pollo-ai/pollo-v2
 - OpenAI Sora: https://developers.openai.com/api/docs/guides/video-generation
+
+## 生成前の見積もり（`npm run gen -- estimate`）
+- ショットごとの表示：モデル、支払い方法（API の従量課金かサブスクか）、尺（モデルが対応する長さに合わせた値）、解像度、テイク数、金額またはクレジット。
+- 合計に含めるもの：
+  - 参照画像と開始画の費用
+  - サブスクの場合は「使うクレジット / 残り → 実行後」
+  - 不足する分の追加料金（単価が確認できたものだけ）
+- 未確認の価格は「未確認」と表示し、合計には入れません。API の価格が未確認だと実行できません。
+- 料金プランの設定：`mv.config.json` の `gen.plans.kling = "pro"` か `{ "plan": "pro", "remaining": 1200 }` で設定します。日本語でも指定できます：`npm run gen -- plan-tier "KlingはProプラン"`、`"RunwayはAPI"`、`"Klingの残り1200クレジット"`。ウィザードの Q4b でも聞きます。
+- 実行前の確認：
+  - `npm run gen -- run` → 見積もりを表示して `[y/N]` で確認します。Enter や N はキャンセルで、何もしません。
+  - 対話できない環境では `--confirm <合計>` が見積もりと一致したときだけ実行します。
+  - ギャラリーにも「この金額で生成する / キャンセル」ボタンがあります。
+- サブスクのクレジットは公式アプリ/Webで使う分です。そのショットは API では実行せず、アプリで生成して `import` で取り込みます。
+- プラン表は `gen/plans.yaml` にあります（出典と確認日つき）。
+  - 公式で確認済み：
+    - Kling：Standard 660 / Pro 3000 / Premier 8000 / Ultra 26000 クレジット。3.0 は 6〜12 クレジット/秒
+    - Runway：Standard 625 / Pro・Unlimited 2250 / Max 9500。gen4.5 は 12、turbo は 5、Aleph は 28 クレジット/秒
+    - Hailuo：利用規約に書かれた月額とクレジット。追加購入は $1 = 70 クレジット
+    - Luma：Plus 10000。ray-3.2 は 5秒ごとのクレジット
+  - 未確認：
+    - Pollo の月額とクレジット
+    - Luma の Pro / Ultra
+    - Hailuo のモデル別クレジット消費
+    - Kling と Runway の追加購入単価
+    - Grok アプリの動画枠
+
+## 口パク・ダンスの音声の自動切り出し
+- 対象は口パクとダンスのショットです。動画の尺をモデルの対応尺に合わせ、元の曲をショットの開始位置からその尺ちょうどで切り出します。サンプル単位で正確に切り、フェードはかけません。
+- 保存先は `assets/audio/<ショット>_lipsync.wav` で、素材の役割は「口パク用の音声」です。
+- 尺が変わったときは、ショットの終わりを延ばすか詰めます。曲の終わりを超える場合は開始を前に倒します。どう変えたかはプランと見積もりに表示します。
+- 音声を入れられるモデル（Wan 2.6、3〜30秒）には添付します。入れられないモデルでも音声は作り、Remotion で後から口を合わせる用に使います（プランにその旨を表示）。
+- 生成の直前に ffprobe で音声と動画の長さを比べ、1フレームを超えてずれていれば止めます。元の曲ファイルは md5 で確認し、変更されていたら中止します。

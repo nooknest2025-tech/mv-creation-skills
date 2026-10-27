@@ -35,8 +35,9 @@
     "gallery": "tsx scripts/gen.ts gallery",
     "sample": "tsx scripts/mv.ts --sample",
     "faces": "tsx scripts/faces.ts",
-    "postinstall": "tsx scripts/fonts.ts sync",
-    "doctor": "tsx scripts/doctor.ts"
+    "postinstall": "tsx scripts/fonts.ts sync && tsx scripts/plans_sync.ts",
+    "doctor": "tsx scripts/doctor.ts",
+    "estimate": "tsx scripts/gen.ts estimate"
   },
   "dependencies": {
     "@remotion/cli": "4.0.538",

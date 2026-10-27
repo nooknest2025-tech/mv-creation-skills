@@ -47,7 +47,8 @@ async function main() {
     await pickOpt("Q3c. サビの文字の動きは？", lyricOptions(genre, "chorus"));
     log("\nQ4. 演出の希望を日本語でどうぞ（例: サビはグリッチで。画は0.1秒前から切り替え。キライは割れるように）");
     const say = await q("  希望 [なし]: ");
-    const all = [...extra, say].filter(Boolean).join("。");
+    const tier = await q("Q4b. AI動画のプランは？（例: KlingはProプラン / RunwayはAPI / Klingの残り1200クレジット）[API従量]: ");
+    const all = [...extra, say, tier].filter(Boolean).join("。");
     if (all) { const r = applyInstruction({}, all); r.changes.forEach((c) => log(`   ✏️ ${c}`)); args.push("--say", all); }
     const rng = await q("Q5. 曲の一部だけ作りますか？ 例 40-60（秒）[全部]: ");
     if (/^\d+(\.\d+)?-\d+(\.\d+)?$/.test(rng)) args.push("--range", rng);

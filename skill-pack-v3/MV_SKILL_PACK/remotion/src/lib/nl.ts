@@ -1,3 +1,6 @@
+import { parsePlanTier } from "./estimate";
+import PLANS_JSON from "./plans.gen.json";
+export const planTierFromText = (t: string) => /(プラン|API|従量|クレジット)/i.test(t) ? parsePlanTier(t, PLANS_JSON as any) : null;
 // Japanese natural-language instructions -> mv.config.json edits (deterministic, testable).
 import type { MVConfig } from "./config";
 import type { PuppetCfg, VisualFx } from "./types";
@@ -50,6 +53,10 @@ export function applyInstruction(cfg0: MVConfig, text: string): { cfg: MVConfig;
   const parts = text.normalize("NFKC").split(/[。\n]|、(?=.*(で|に|して))/).map((s) => s?.trim()).filter(Boolean) as string[];
   for (const t of parts.length ? parts : [text]) {
     const T = (cfg.timing ??= {});
+    // ---- plan tier: 「KlingはProプラン」「RunwayはAPI」「Klingの残り1200クレジット」 ----
+    { const pt = planTierFromText(t); if (pt) { const G = (cfg.gen ??= {}); G.plans ??= {}; const cur = G.plans[pt.provider]; const prev = typeof cur === "string" ? { plan: cur } : cur ?? { plan: "api" };
+      const nv = { plan: pt.plan ?? prev.plan, ...(pt.remaining != null ? { remaining: pt.remaining } : (prev as any).remaining != null ? { remaining: (prev as any).remaining } : {}) };
+      G.plans[pt.provider] = nv.remaining == null ? nv.plan : nv; changes.push(`料金プラン: ${pt.provider} → ${nv.plan === "api" ? "API従量課金" : nv.plan + "プラン"}${nv.remaining != null ? `（残り ${nv.remaining} クレジット）` : ""}`); continue; } }
     // ---- pro direction: reroll / variety / hybrid structure / critic ----
     if (/別(の)?パターン|別案|やり直し.*(リリック|文字|歌詞)|リロール/.test(t)) { const L = (cfg.lyrics ??= {}); L.seed = (L.seed ?? 1) + 1; changes.push(`文字の動きを別パターンに（seed ${L.seed}。曲に合う候補の中から選び直し）`); continue; }
     if (/(リリック|歌詞|文字).*(統一感|統一|揃え)/.test(t)) { (cfg.lyrics ??= {}).variety = 0.15; changes.push("リリックは統一感重視（セクションごとに1種類・同じセクションは同じ動き）"); continue; }

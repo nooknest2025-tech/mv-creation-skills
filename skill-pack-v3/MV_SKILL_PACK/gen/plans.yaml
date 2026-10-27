@@ -1,0 +1,92 @@
+# サブスク（クレジット制）プランとモデルごとのクレジット消費。確認日つき。
+# verified: false の値は「未確認」と表示され、合計の確定値には使われません（範囲 or 除外）。
+# サブスクのクレジットは各社の公式アプリ/Webで使う分です（API は別の従量課金。Runway は個人プランと API クレジットが別）。
+providers:
+  kling:
+    ja: Kling AI
+    models: ["kling-3.0", "kling-2.6", "pollo/kling-v3-omni"]
+    plans:
+      standard: { ja: Standard, monthly_usd: 8.80, credits: 660, rollover: false, verified: true }
+      pro: { ja: Pro, monthly_usd: 32.56, credits: 3000, rollover: false, verified: true }
+      premier: { ja: Premier, monthly_usd: 80.96, credits: 8000, rollover: false, verified: true }
+      ultra: { ja: Ultra, monthly_usd: 159.99, credits: 26000, rollover: false, verified: true }
+    overage: { usd_per_credit: null, note: "追加クレジットの単価は未確認" }
+    credit_costs:
+      - { model: kling-3.0, res: 720p, audio: false, per_sec: 6 }
+      - { model: kling-3.0, res: 1080p, audio: false, per_sec: 8 }
+      - { model: kling-3.0, res: 720p, audio: true, per_sec: 9 }
+      - { model: kling-3.0, res: 1080p, audio: true, per_sec: 12 }
+    note: "月額は初月割引後の継続価格（初月は Standard $6.99 / Pro $25.99 / Premier $64.99 / Ultra $127.99）"
+    verified_at: 2026-10-27
+    source: https://kling.ai/blog/kling-video-3-0-credit-cost-guide
+  runway:
+    ja: Runway
+    models: ["runway/gen4.5", "runway/gen4_turbo", "runway/aleph2"]
+    plans:
+      standard: { ja: Standard, monthly_usd: 15, credits: 625, rollover: false, verified: true }
+      pro: { ja: Pro, monthly_usd: 35, credits: 2250, rollover: false, verified: true }
+      unlimited: { ja: "Unlimited（旧プラン・2026-11-30 に Max へ移行）", monthly_usd: null, credits: 2250, rollover: false, verified: true, relaxed_unlimited: null }
+      max: { ja: Max, monthly_usd: 95, credits: 9500, rollover: true, verified: true }
+    overage: { usd_per_credit: null, min_credits: 1000, note: "追加購入は1,000クレジットから（単価は未確認）" }
+    credit_costs:
+      - { model: runway/gen4.5, res: any, per_sec: 12 }
+      - { model: runway/gen4_turbo, res: any, per_sec: 5 }
+      - { model: runway/aleph2, res: any, per_sec: 28 }
+    note: "年払いは Standard $12 / Pro $28 / Max $76 /月"
+    verified_at: 2026-10-27
+    source: https://runway.com/pricing ; https://help.runwayml.com/hc/en-us/articles/15124877443219-How-do-credits-work
+  minimax:
+    ja: Hailuo AI（MiniMax）
+    models: ["MiniMax-Hailuo-2.3", "MiniMax-H3", "MiniMax-H3-Highspeed", "MiniMax-H3-Lite", "pollo/minimax-h3"]
+    plans:
+      standard: { ja: Standard, monthly_usd: 14.99, credits: 1000, rollover: false, verified: true }
+      pro: { ja: Pro, monthly_usd: 54.99, credits: 4500, rollover: false, verified: true }
+      master: { ja: Master, monthly_usd: 119.99, credits: 10000, rollover: false, verified: true }
+      ultra: { ja: Ultra, monthly_usd: 124.99, credits: 12000, rollover: false, verified: true }
+      max: { ja: Max, monthly_usd: 199.99, credits: 20000, rollover: false, verified: true, note: "プランページでは 27,000 と表示との報告あり（未確認）" }
+    overage: { usd_per_credit: 0.0142857, note: "購入クレジット $1 = 70 クレジット（利用規約）" }
+    credit_costs:
+      - { model: MiniMax-Hailuo-2.3, res: 768p, per_clip: { 6: 25 }, verified: false }
+      - { model: MiniMax-H3, res: 768p, per_sec: 7, verified: false }
+      - { model: MiniMax-H3, res: 2k, per_sec: 12, verified: false }
+    note: "月額・クレジットは利用規約（2025-07-14 更新）の表記。プランページは割引表示が多く、値が違う場合あり。モデル別のクレジット消費は第三者情報のみ（未確認）"
+    verified_at: 2026-10-27
+    source: https://hailuoai.video/doc/payment-policy.html
+  luma:
+    ja: Luma Dream Machine
+    models: ["luma/ray-3.2"]
+    plans:
+      plus: { ja: Plus, monthly_usd: 29.99, credits: 10000, rollover: false, verified: true }
+      pro: { ja: Pro, monthly_usd: 90, credits: 40000, rollover: false, verified: false }
+      ultra: { ja: Ultra, monthly_usd: 300, credits: 150000, rollover: false, verified: false }
+    overage: { usd_per_credit: null, note: "Top-Up の単価は未確認" }
+    credit_costs:
+      - { model: luma/ray-3.2, res: 540p, per_clip: { 5: 50, 10: 150 } }
+      - { model: luma/ray-3.2, res: 720p, per_clip: { 5: 100, 10: 300 } }
+      - { model: luma/ray-3.2, res: 1080p, per_clip: { 5: 400, 10: 1200 } }
+    note: "Plus は公式ヘルプ記載。Pro/Ultra は第三者情報（未確認）"
+    verified_at: 2026-10-27
+    source: https://lumalabs.ai/pricing ; https://lumalabs.ai/learning-hub/payments-subscriptions
+  pollo:
+    ja: Pollo AI
+    models: ["pollo/pollo-v2-5", "pollo/pollo-v2", "pollo/app-credits"]
+    plans:
+      lite: { ja: Lite, monthly_usd: 15, credits: 400, rollover: false, verified: false }
+      pro: { ja: Pro, monthly_usd: 29, credits: 800, rollover: false, verified: false }
+      ultra: { ja: Ultra, monthly_usd: 129, credits: 5000, rollover: false, verified: false }
+    overage: { usd_per_credit: null }
+    credit_costs:
+      - { model: pollo/pollo-v2-5, res: 720p, per_clip: { 5: 5 }, verified: false }
+      - { model: pollo/pollo-v2, res: 720p, per_clip: { 5: 10 }, verified: false }
+    note: "公式ページはクレジット繰り越しなし（FAQ）のみ確認。金額とクレジット数は第三者の確認値（未確認）"
+    verified_at: 2026-10-27
+    source: https://pollo.ai/pricing
+  xai:
+    ja: Grok（SuperGrok など）
+    models: ["manual/grok-app"]
+    plans: {}
+    overage: { usd_per_credit: null }
+    credit_costs: []
+    note: "アプリのプランの動画枠は公開数値なし（未確認）。API は従量課金（models.yaml）"
+    verified_at: 2026-10-27
+    source: https://docs.x.ai/developers/pricing

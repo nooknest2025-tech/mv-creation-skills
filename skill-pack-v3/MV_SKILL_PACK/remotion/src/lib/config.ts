@@ -49,7 +49,7 @@ export interface MVConfig {
   visuals?: import("./types").VisualFx; // audio-reactive layers
   finish?: import("./types").FinishFx; // in-Remotion finishing
   ramps?: Record<string, string>; // section -> speed ramp
-  gen?: { model?: string; perShot?: Record<string, string>; resolution?: string; takes?: number; capUSD?: number; provider?: string; budgetPerShot?: number; imageModel?: string };
+  gen?: { model?: string; perShot?: Record<string, string>; resolution?: string; takes?: number; capUSD?: number; provider?: string; budgetPerShot?: number; imageModel?: string; plans?: Record<string, string | { plan: string; remaining?: number }>; audio?: boolean };
   /** continuity sheet for AI video (character / wardrobe / locations / props) */
   continuity?: { character?: string; wardrobe?: string; location?: string; locations?: string[]; props?: string[]; refImages?: string[] };
 }

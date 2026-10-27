@@ -13,10 +13,14 @@ import type { Song, Shot } from "../src/lib/types";
 import { buildSpecs, reviewShotList, proseOf } from "../src/lib/shotprompt";
 import { adapt, recommendModel, priceAt } from "../src/lib/videoModels";
 import { selectRefs, ROLE_JA } from "../src/lib/assets";
-import { loadLib, planImages, addAsset, setApproval, parseAssetCmd, ORDER_JA } from "./assets_lib";
+import { estimate as estimateCost, estimateMd, confirmRun, type PlansFile } from "../src/lib/estimate";
+import { planCut, needsAudio } from "../src/lib/audiocut";
+import { cutAudio, validateCut } from "./audiotrim";
+import { saveLib, loadLib, planImages, addAsset, setApproval, parseAssetCmd, ORDER_JA } from "./assets_lib";
 
 const GEN_DIR = path.join(PACK_DIR, "gen");
 export interface Model { id: string; provider: string; kind: string; price_per_sec: Record<string, number> | null; input_extra?: string; max_res?: string | null; max_sec?: number | null; aspects?: string[] | null; strengths?: string; verified: boolean; verified_at?: string | null; source: string; deprecated?: boolean }
+export const loadPlans = (): PlansFile => YAML.parse(fs.readFileSync(path.join(GEN_DIR, "plans.yaml"), "utf8"));
 export const loadModels = (): Model[] => YAML.parse(fs.readFileSync(path.join(GEN_DIR, "models.yaml"), "utf8")).models;
 
 const MOOD: Record<string, string> = { intro: "mysterious, quiet anticipation", verse: "intimate, everyday, calm", pre_chorus: "rising tension", chorus: "explosive, euphoric, vivid", bridge: "dreamlike, reflective", outro: "afterglow, fading", other: "atmospheric" };
@@ -76,29 +80,43 @@ export function makePlan(dir: string, o: Record<string, any>) {
     if (legacy) ({ model, why } = recommend(s, preset.id, models, ov, o.provider ?? cfg.gen?.provider));
     else { const pk = recommendModel(sp, models, { res, refs, override: ov, verifiedOnly: true, budgetPerShot: cfg.gen?.budgetPerShot }); model = pk.model; why = pk.why.slice(0, 3).join("・"); }
     const req = adapt(sp, model, refs, { res, aspect });
+    let audioCut: any = null;
+    if (needsAudio(sp.performance)) {
+      const c = planCut(s, model, song.duration, props.fps), songF = findSong(dir, o, cfg);
+      audioCut = { ...c, file: null as string | null, error: null as string | null };
+      if (!songF) audioCut.error = "元の曲ファイルが見つかりません（--song で指定）";
+      else if (!o.dryAudio) { try { const f = cutAudio(songF, c, path.join(dir, "assets", "audio")); audioCut.file = path.relative(dir, f); upsertAudioAsset(dir, s.id, audioCut.file); } catch (e: any) { audioCut.error = e.message; } }
+      req.seconds = c.dur; req.params.duration = c.dur;
+      if (c.attach && audioCut.file) { req.params.audio_file = path.join(dir, audioCut.file); req.refs.audio = { id: `lipsync_audio_${s.id}`, role: "lipsync_audio", file: audioCut.file, shot: s.id }; }
+    }
     const sec = req.seconds, price = priceOf(model, res);
     const ref = s.kind === "image" && s.src ? path.join(PUBLIC_PROJECT, "..", s.src) : null;
-    return { ref, aspect, shot: s.id, section: s.section, start: s.start, end: s.end, sec, model: model.id, why, res, takes, price_per_sec: price, cost: estimate(sec, takes, price), prompt: req.prompt, negative_prompt: req.negative_prompt, params: req.params, refs: { first: req.refs.first?.file, last: req.refs.last?.file, keyframes: req.refs.keyframes.map((a) => a.file), refs: req.refs.refs.map((a) => ({ file: a.file, role: a.role })), audio: req.refs.audio?.file, composite: req.refs.composite?.map((a) => a.file) }, dropped: req.refs.dropped.map((d) => `${ROLE_JA[d.a.role]}: ${d.why}`), warnings: [...req.warnings, ...req.refs.notes], spec: sp, verified: model.verified, source: model.source };
+    return { audioCut, ref, aspect, shot: s.id, section: s.section, start: s.start, end: s.end, sec, model: model.id, why, res, takes, price_per_sec: price, cost: estimate(sec, takes, price), prompt: req.prompt, negative_prompt: req.negative_prompt, params: req.params, refs: { first: req.refs.first?.file, last: req.refs.last?.file, keyframes: req.refs.keyframes.map((a) => a.file), refs: req.refs.refs.map((a) => ({ file: a.file, role: a.role })), audio: req.refs.audio?.file, composite: req.refs.composite?.map((a) => a.file) }, dropped: req.refs.dropped.map((d) => `${ROLE_JA[d.a.role]}: ${d.why}`), warnings: [...req.warnings, ...req.refs.notes], spec: sp, verified: model.verified, source: model.source };
   });
   const imgT = readJson<any>(path.join(dir, "image_tasks.json"), null);
   const imageUSD = imgT?.total_usd ?? 0;
   const total = +(rows.reduce((a, r) => a + (r.cost ?? 0), 0) + (imageUSD ?? 0)).toFixed(3);
   const plan = { shotReview, createdAt: new Date().toISOString(), project: path.basename(dir), res, takes, total, unknownCost: rows.some((r) => r.cost === null) || !!(imgT && imgT.total_usd == null), imageUSD, imageTasks: imgT?.tasks?.length ?? 0, rows };
+  const est = estimateFor(dir, rows, models);
+  (plan as any).estimate = est; plan.total = est.usdTotal; (plan as any).unknownCost = !est.complete;
   fs.mkdirSync(GEN_DIR, { recursive: true });
   writeJson(path.join(dir, "gen_plan.json"), plan);
-  const md = [`# 生成プラン — ${plan.project}`, "", `解像度 ${res} / 1カット ${takes} テイク / **見積もり合計 $${total}**（うち参照画像 ${plan.imageTasks}枚 $${imageUSD ?? "?"}）${plan.unknownCost ? "（未確認価格のモデルを含むため一部不明）" : ""}`, "",
+  fs.writeFileSync(path.join(dir, "gen_estimate.md"), estimateMd(est));
+  const md = [`# 生成プラン — ${plan.project}`, "", `解像度 ${res} / 1カット ${takes} テイク / **見積もり合計（確認済み）$${plan.total}**（うち参照画像 ${plan.imageTasks}枚 $${imageUSD ?? "未確認"}）${plan.unknownCost ? "（未確認価格のモデルを含むため一部不明）" : ""}`, "",
     "| ショット | セクション | 秒 | モデル | 理由 | $/秒 | 見積もり |", "|---|---|---|---|---|---|---|",
     ...rows.map((r) => `| ${r.shot} | ${r.section} | ${r.sec} | ${r.model} | ${r.why} | ${r.price_per_sec ?? "未確認"} | ${r.cost === null ? "不明" : "$" + r.cost} |`), "",
     `## ショットリスト批評（スコア ${shotReview.score}）`, ...(shotReview.issues.length ? shotReview.issues.map((i) => `- ${i.fixed ? "🔧" : "💡"} ${i.msg}`) : ["- 問題なし"]), "",
+    "## 口パク・ダンスの音声（元の曲から切り出し）", ...(rows.filter((r: any) => r.audioCut).map((r: any) => `- **${r.shot}**: ${r.audioCut.start.toFixed(3)}s から ${r.audioCut.dur}s（${r.audioCut.adjustJa}）→ ${r.audioCut.file ?? "未作成: " + r.audioCut.error} / ${r.audioCut.note}`)), "",
     "## 参照素材の割り当て", ...rows.map((r: any) => `- **${r.shot}**: ${[r.refs.first && "開始画", r.refs.last && "終了画", r.refs.refs.length && `参照${r.refs.refs.length}枚`, r.refs.composite && "合成開始画（要作成）", r.refs.audio && "音声"].filter(Boolean).join(" / ") || "なし"}${r.dropped.length ? `（使えない素材: ${r.dropped.join("、")}）` : ""}${r.warnings.length ? ` ⚠ ${r.warnings.join("、")}` : ""}`), "",
     "## 無料の代わり", "- **静止画モード**（このまま npm run mv）: 画像だけで Ken Burns・疑似2.5D・光・粒子・拍揺れ。API 料金ゼロ。",
     "- **Grok アプリ / grok.com で手動生成**: 下の prompts.csv をコピペ → できた mp4 を `gen/takes/<ショットID>/` か `input/` に入れる → `npm run gallery` で採用。", "",
     "## プロンプト", ...rows.map((r) => `- **${r.shot}** (${r.sec}s): ${r.prompt}`), "",
+    estimateMd(est), "",
     `価格の出典は gen/models.yaml の source（確認日つき）。価格は変わるので、実行前に公式ページを再確認してください。`].join("\n");
   fs.writeFileSync(path.join(dir, "gen_plan.md"), md);
   // provider-agnostic task list: any video MCP (Pollo / Grok / Runway / Kling ...) can execute it
   const tasks = { howto: "For each task call your video-generation MCP tool (text2video, or img2video when reference_image is set), wait for the result, then run: npm run gen -- import <file-or-url> --shot <shot> --from <provider>. Never exceed the user's confirmed budget.",
-    tasks: rows.map((r: any) => ({ negative_prompt: r.negative_prompt ?? null, params: r.params, refs: r.refs, shot: r.shot, seconds: r.sec, aspect: r.aspect, resolution: res, takes, prompt: r.prompt, reference_image: r.ref && fs.existsSync(r.ref) ? path.resolve(r.ref) : null, suggested_model: r.model, mcp_model: (models.find((m) => m.id === r.model) as any)?.mcp_model ?? null, estimated_usd: r.cost, save_to: path.join(GEN_DIR, "takes", r.shot) })) };
+    tasks: rows.map((r: any) => ({ audio_file: r.audioCut?.attach && r.audioCut.file ? path.join(dir, r.audioCut.file) : null, post_sync_audio: r.audioCut?.file ? path.join(dir, r.audioCut.file) : null, negative_prompt: r.negative_prompt ?? null, params: r.params, refs: r.refs, shot: r.shot, seconds: r.sec, aspect: r.aspect, resolution: res, takes, prompt: r.prompt, reference_image: r.ref && fs.existsSync(r.ref) ? path.resolve(r.ref) : null, suggested_model: r.model, mcp_model: (models.find((m) => m.id === r.model) as any)?.mcp_model ?? null, estimated_usd: r.cost, save_to: path.join(GEN_DIR, "takes", r.shot) })) };
   writeJson(path.join(dir, "gen_tasks.json"), tasks);
   fs.writeFileSync(path.join(dir, "prompts.csv"), "\uFEFFshot,section,seconds,model,prompt\n" + rows.map((r) => [r.shot, r.section, r.sec, r.model, `"${r.prompt.replace(/"/g, '""')}"`].join(",")).join("\n"));
   return { plan, md };
@@ -134,6 +152,33 @@ export function assetsCmd(dir: string, args: string[], o: Record<string, any>) {
   return lib;
 }
 
+export function findSong(dir: string, o: Record<string, any>, cfg: any): string | null {
+  for (const c of [o.song, cfg.song, cfg.audio]) if (c && fs.existsSync(String(c))) return path.resolve(String(c));
+  const pub = fs.existsSync(PUBLIC_PROJECT) ? fs.readdirSync(PUBLIC_PROJECT).find((f) => /\.(wav|mp3|m4a|flac|aac)$/i.test(f)) : null;
+  return pub ? path.join(PUBLIC_PROJECT, pub) : null;
+}
+function upsertAudioAsset(dir: string, shot: string, file: string) {
+  const lib = loadLib(dir); lib.assets = lib.assets.filter((a) => !(a.role === "lipsync_audio" && a.shot === shot));
+  lib.assets.push({ id: `lipsync_audio_${shot}`, role: "lipsync_audio", file, shot, approved: true, generatedBy: "audiotrim", note: "元の曲から自動切り出し" });
+  saveLib(dir, lib);
+}
+/** pre-generation: every cut audio must match its video length within 1 frame. */
+export function validateAudio(dir: string, rows: any[], fps = 30): string[] {
+  const errs: string[] = [];
+  for (const r of rows) { const a = r.audioCut; if (!a) continue;
+    if (!a.file) { errs.push(`${r.shot}: 音声がありません（${a.error ?? "未作成"}）`); continue; }
+    const v = validateCut(path.join(dir, a.file), r.sec, fps); if (!v.ok) errs.push(`${r.shot}: ${v.msg}`); }
+  return errs;
+}
+
+// ---- cost estimate (API + subscription credits + images) ----
+export function estimateFor(dir: string, rows: any[], models = loadModels()) {
+  const cfg = loadConfig(dir), imgT = readJson<any>(path.join(dir, "image_tasks.json"), null);
+  const byModel: Record<string, number> = {}; for (const t of imgT?.tasks ?? []) byModel[t.model] = (byModel[t.model] ?? 0) + 1;
+  const images = Object.entries(byModel).map(([id, n]) => ({ count: n, model: id, usd_each: (models.find((m: any) => m.id === id) as any)?.price_per_image ?? null }));
+  return estimateCost(rows.map((r) => ({ shot: r.shot, model: r.model, seconds: r.sec, res: r.res, takes: r.takes, audio: !!cfg.gen?.audio, adjustJa: r.audioCut && r.audioCut.adjust !== "none" ? r.audioCut.adjustJa : undefined })), models, loadPlans(), cfg.gen?.plans ?? {}, images);
+}
+
 // ---- generated-clip QA (flicker / morph / face drift) -> marks takes "regen" in the gallery ----
 export function clipQA(dir: string, o: Record<string, any>) {
   const { execFileSync } = require("node:child_process") as typeof import("node:child_process");
@@ -159,16 +204,22 @@ export const ADAPTERS: Adapter[] = [{
   buildRequest: (r, imageUrl) => ({ url: "https://api.x.ai/v1/videos/generations", body: { model: r.model, prompt: r.prompt, duration: r.sec, resolution: r.res, ...(imageUrl ? { image_url: imageUrl } : {}) } }),
 }];
 
-async function runPlan(dir: string, o: Record<string, any>) {
+export async function runPlan(dir: string, o: Record<string, any>) {
   const plan = readJson<any>(path.join(dir, "gen_plan.json"), null);
   if (!plan) throw new UserError("生成プランがありません", "先に npm run gen -- plan を実行して、内容と金額を確認してください。");
   const cap = Number(o.cap ?? loadConfig(dir).gen?.capUSD ?? 20);
-  if (plan.unknownCost) throw new UserError("価格が未確認のモデルが含まれるため実行できません", "models.yaml の価格を公式ページで確認して verified: true にするか、--model で確認済みモデルを指定して plan をやり直してください。");
-  if (Number(o.confirm) !== plan.total) throw new UserError(`有料生成です。見積もり $${plan.total} を確認したら --confirm ${plan.total} を付けて実行してください`, "金額が違う場合は plan をやり直してください。");
-  if (plan.total > cap) throw new UserError(`見積もり $${plan.total} が上限 $${cap} を超えています`, "--cap で上限を上げるか、--sections で対象を減らしてください。");
+  const est = estimateFor(dir, plan.rows);
+  log(estimateMd(est));
+  const aerr = validateAudio(dir, plan.rows, readJson<any>(path.join(dir, "song.json"), {}).fps ?? 30);
+  if (aerr.length) throw new UserError("口パク/ダンス用の音声と動画の長さが合いません", aerr.join("\n"));
+  const interactive = !!process.stdin.isTTY && o.confirm == null && !o.yes;
+  const ask = async (q: string) => { const rl = (await import("node:readline/promises")).default.createInterface({ input: process.stdin, output: process.stdout }); const a = await rl.question(q); rl.close(); return a; };
+  const d = await confirmRun(est, { confirm: o.confirm, interactive, ask, cap });
+  if (!d.go) { log("🛑 " + d.reason); return { ran: false, reason: d.reason }; }
   const pending = loadLib(dir).assets.filter((a) => a.approved === false);
   if (pending.length) throw new UserError(`未承認の参照素材が ${pending.length} 件あります`, "npm run gallery で確認して承認（または却下）してから動画を生成してください。");
   for (const r of plan.rows) {
+    if (est.lines.find((l) => l.shot === r.shot)?.mode === "plan") { log(`📱 ${r.shot}: サブスクのクレジットで公式アプリ/Webから生成 → npm run gen -- import で取り込み`); continue; }
     const ad = ADAPTERS.find((a) => a.id.test(r.model));
     if (!ad) { log(`⏭ ${r.shot}: ${r.model} は自動実行に未対応 → prompts.csv で手動生成してください`); continue; }
     const key = process.env[ad.envKey];
@@ -235,8 +286,8 @@ export function reviewAction(dir: string, a: { shot: string; file: string; actio
   return review[k];
 }
 const GALLERY_HTML = `<!doctype html><html lang="ja"><meta charset="utf-8"><title>生成レビュー</title><style>body{background:#15131a;color:#eee;font-family:sans-serif;margin:16px}.shot{margin:18px 0;padding:12px;background:#221e2a;border-radius:10px}.takes{display:flex;gap:12px;flex-wrap:wrap}.take{background:#2c2735;padding:8px;border-radius:8px;width:340px}video{width:100%;border-radius:6px}button{margin:3px;border:0;border-radius:5px;padding:5px 9px;cursor:pointer}.adopt{background:#2a9d5a;color:#fff}.reject{background:#7a2a3a;color:#fff}.regen{background:#555;color:#fff}.st{font-weight:700}textarea{width:100%;background:#111;color:#fff}</style>
-<h2>🎞 生成レビュー（ショットごと）</h2><p>採用 = タイムラインに自動で入ります（mv.config.json → timing.perShot）。新しいテイクは gen/takes/&lt;ショットID&gt;/ に置くと自動で表示（MCP・手動どちらでもOK）。</p><h2>🖼 参照素材（動画生成の前に承認）</h2><div id=assets></div><div id="list"></div>
-<script>async function la(){const d=await fetch('/assets').then(r=>r.json());const A=document.getElementById('assets');A.innerHTML=(d.assets||[]).map(a=>'<div class=take style="display:inline-block;width:220px"><img style="width:100%" src="/afile/'+a.id+'"><div>'+a.id+' '+(a.approved===false?'⏳未承認':'✅')+'</div><button class=adopt onclick="aact(\\''+a.id+'\\',1)">承認</button><button class=reject onclick="aact(\\''+a.id+'\\',0)">却下</button></div>').join('')||'<p>素材なし</p>'}function aact(id,ok){fetch('/aact',{method:'POST',body:JSON.stringify({id,ok})}).then(la)}la();async function load(){const d=await fetch('/state').then(r=>r.json());const L=document.getElementById('list');L.innerHTML='';
+<h2>🎞 生成レビュー（ショットごと）</h2><p>採用 = タイムラインに自動で入ります（mv.config.json → timing.perShot）。新しいテイクは gen/takes/&lt;ショットID&gt;/ に置くと自動で表示（MCP・手動どちらでもOK）。</p><h2>💰 見積もり</h2><pre id=est style="white-space:pre-wrap;background:#111;padding:8px"></pre><button class=adopt id=go>この金額で生成する</button> <button class=reject id=cancel>キャンセル</button> <span id=gost></span><h2>🖼 参照素材（動画生成の前に承認）</h2><div id=assets></div><div id="list"></div>
+<script>let EST=null;fetch('/estimate').then(r=>r.json()).then(e=>{EST=e;document.getElementById('est').textContent=e.md});document.getElementById('cancel').onclick=()=>{document.getElementById('gost').textContent='キャンセルしました（何もしていません）'};document.getElementById('go').onclick=()=>{if(!EST)return;if(!confirm('合計 $'+EST.usdTotal+' で生成します。よろしいですか？')){document.getElementById('gost').textContent='キャンセルしました';return}fetch('/run',{method:'POST',body:JSON.stringify({confirm:EST.usdTotal})}).then(r=>r.json()).then(r=>document.getElementById('gost').textContent=r.ran===false?'🛑 '+r.reason:'▶ 生成を開始しました')};async function la(){const d=await fetch('/assets').then(r=>r.json());const A=document.getElementById('assets');A.innerHTML=(d.assets||[]).map(a=>'<div class=take style="display:inline-block;width:220px"><img style="width:100%" src="/afile/'+a.id+'"><div>'+a.id+' '+(a.approved===false?'⏳未承認':'✅')+'</div><button class=adopt onclick="aact(\\''+a.id+'\\',1)">承認</button><button class=reject onclick="aact(\\''+a.id+'\\',0)">却下</button></div>').join('')||'<p>素材なし</p>'}function aact(id,ok){fetch('/aact',{method:'POST',body:JSON.stringify({id,ok})}).then(la)}la();async function load(){const d=await fetch('/state').then(r=>r.json());const L=document.getElementById('list');L.innerHTML='';
 const plan={};(d.plan?.rows||[]).forEach(r=>plan[r.shot]=r);
 if(!d.shots.length)L.innerHTML='<p>まだテイクがありません。</p>';
 d.shots.forEach(s=>{const el=document.createElement('div');el.className='shot';const p=plan[s.shot];el.innerHTML='<h3>'+s.shot+(p?' — '+p.section+' / '+p.sec+'秒 / '+p.model:'')+'</h3>'+(p?'<small>'+p.prompt+'</small>':'')+'<div class=takes></div>';
@@ -258,6 +309,8 @@ async function main() {
   if (cmd === "run") return runPlan(dir, o);
   if (cmd === "assets") return assetsCmd(dir, rest.slice(1), o);
   if (cmd === "qa") return clipQA(dir, o);
+  if (cmd === "estimate") { const p = readJson<any>(path.join(dir, "gen_plan.json"), null) ?? makePlan(dir, o).plan; const e = estimateFor(dir, p.rows); log(estimateMd(e)); log(`\n▶ 実行: npm run gen -- run （確認あり）/ 非対話: --confirm ${e.usdTotal}`); return e; }
+  if (cmd === "plan-tier") { const { applyInstruction } = await import("../src/lib/nl"); const r = applyInstruction(loadConfig(dir), rest.slice(1).join(" ")); saveConfig(dir, r.cfg); r.changes.forEach((c) => log("✏️ " + c)); if (!r.changes.length) log("プランを読み取れませんでした。例: KlingはProプラン / RunwayはAPI / Klingの残り1200クレジット"); return r; }
   if (cmd === "import") {
     if (!rest[1]) throw new UserError("取り込むファイル・フォルダ・URLを指定してください", "例: npm run gen -- import ~/Downloads/clip.mp4 --shot S012 --from pollo");
     const got = await importTake(rest[1], o.shot ? String(o.shot).toUpperCase() : undefined, String(o.from ?? "manual"), o.note ? String(o.note) : undefined);
@@ -269,6 +322,8 @@ async function main() {
       try {
         if (req.url === "/") { res.writeHead(200, { "content-type": "text/html; charset=utf-8" }); res.end(GALLERY_HTML); return; }
         if (req.url === "/state") { const b = JSON.stringify(galleryState(dir)); res.writeHead(200, { "content-type": "application/json" }); res.end(b); return; }
+        if (req.url === "/estimate") { const p = readJson<any>(path.join(dir, "gen_plan.json"), null); const e = p ? estimateFor(dir, p.rows) : null; res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify(e ? { ...e, md: estimateMd(e) } : { md: "生成プランがありません（npm run gen -- plan）" })); return; }
+        if (req.url === "/run" && req.method === "POST") { let b = ""; req.on("data", (c) => (b += c)); req.on("end", async () => { try { const r = await runPlan(dir, { confirm: JSON.parse(b).confirm, yes: true }); res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify(r ?? { ran: true })); } catch (e: any) { res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify({ ran: false, reason: e.message })); } }); return; }
         if (req.url === "/assets") { res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify(loadLib(dir))); return; }
         if (req.url?.startsWith("/afile/")) { const a = loadLib(dir).assets.find((x) => x.id === decodeURIComponent(req.url!.slice(7))); if (!a) { res.writeHead(404); res.end(); return; } res.writeHead(200); fs.createReadStream(path.join(dir, a.file)).pipe(res); return; }
         if (req.url === "/aact" && req.method === "POST") { let b = ""; req.on("data", (c) => (b += c)); req.on("end", () => { const { id, ok } = JSON.parse(b); res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify(setApproval(dir, id, !!ok))); }); return; }
