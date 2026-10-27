@@ -18,3 +18,15 @@ python -m unittest discover -s tools -p test_sync_mv_skills.py
 ```
 
 原本のみを編集し、配布用コピーを直接変更しない。詳しい更新・検証範囲は `tools/MV_SKILL_REVIEW.md` を参照。
+
+## 共通編集UI（制作パック同梱）
+
+`skill-pack-v3/MV_SKILL_PACK/remotion/editor/` に、どのプロジェクトでも使えるブラウザ編集UIを同梱した（歌詞の結合・分割・秒数、シーン、全モーション・書体・色、保存、保存値での MP4 書き出し）。
+
+```text
+cd skill-pack-v3/MV_SKILL_PACK/remotion
+npm install
+npm run editor -- --demo --project editor-demo
+```
+
+使い方・必要なもの・確認済み範囲は `skill-pack-v3/MV_SKILL_PACK/docs/EDITOR_ja.md`。Windows/macOS での動作は未確認。

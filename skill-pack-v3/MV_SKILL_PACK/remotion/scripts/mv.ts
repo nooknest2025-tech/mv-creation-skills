@@ -159,6 +159,15 @@ export async function run(argv: string[]) {
   const aspects: Aspect[] = (o.aspects ? String(o.aspects).split(",") : cfg.aspects ?? [cfg.aspect ?? "16:9"]) as Aspect[];
   const first = buildProps(song, cfg, media, { audio: `project/${pub[0].name}`, aspect: aspects[0] });
   { const { fontsOfLines } = await import("../src/render/fontsUsed"); await fetchMissing({ ids: fontsOfLines(first.lines) }); }
+  // A per-project manifest lets the shared editor (npm run editor -- --project <name>) reopen the exact source files.
+  if (det.images.length && !(det.videos ?? []).length) writeJson(path.join(dir, "out", "editor-input.json"), {
+    title, audio: det.audio, lyrics: path.join(dir, "song.json"), images: det.images,
+    scenes: first.shots.map((s, i) => ({ id: s.id, start: s.start, end: s.end,
+      asset: Math.max(0, media.findIndex((m) => m.src === s.src)), transition: i ? Math.min(0.7, s.end - s.start) : 0,
+      label: s.section ?? `シーン ${i + 1}` })),
+    lyricStyles: first.lines.map((l) => ({ motion: l.style, params: l.params })),
+    width: first.width, height: first.height, fps: first.fps,
+  });
   if (first.genre) { const g = GENRES[first.genre]; log(`🎼 ジャンル: ${g.ja}（${first.genreWhy}）→ 書体 ${[g.fonts.base, g.fonts.chorus].map((i) => FONT_REG.find((f) => f.id === i)?.family ?? i).join(" / ")}　違えば「ジャンルはロックで」など`); }
   log(`\n🎬 演出: ${PRESETS[first.preset!].ja}（${first.presetWhy}）　画面: ${aspects.map((a) => ASPECTS[a]?.ja ?? a).join(" / ")}`);
   log(`🎞  構成: ${first.structureWhy}　変えるなら「ストーリー＋リップシンクで」「サビだけ歌うシーン」など`);

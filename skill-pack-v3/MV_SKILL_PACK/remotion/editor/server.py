@@ -1,0 +1,142 @@
+"""Project-local edit/save/render API. One canonical state; immutable export snapshots."""
+import os,json,re,math,threading,subprocess,time,hashlib,shutil
+from pathlib import Path
+from http.server import SimpleHTTPRequestHandler,ThreadingHTTPServer
+import argparse
+parser=argparse.ArgumentParser()
+parser.add_argument('--root',required=True)
+parser.add_argument('--port',type=int,default=5194)
+args=parser.parse_args()
+EDITOR=Path(__file__).resolve().parent
+ROOT=Path(args.root).resolve()
+os.chdir(ROOT)
+STATE=ROOT/'editor-state.json'
+LOCK=threading.RLock(); JOB={'status':'idle'}
+if not STATE.exists():raise SystemExit('編集データがありません。npm run editor -- --project ... から起動してください')
+
+def read():return json.loads(STATE.read_text(encoding='utf-8'))
+def validate(d):
+    orig=json.loads((ROOT/'original-source.json').read_text(encoding='utf-8'))
+    if any(d.get(k)!=orig.get(k) for k in ['width','height','fps']):raise ValueError('画面サイズとfpsは元の設定を保持してください')
+    if d.get('audioFile')!=orig['audioFile'] or d.get('assets')!=orig['assets']:raise ValueError('元素材の指定は保持してください')
+    if d.get('duration')!=orig['duration'] or not 1<=len(d['lyrics'])<=200 or len(d['scenes'])!=len(orig['scenes']):raise ValueError('曲尺・場面数または歌詞グループ数を確認してください')
+    def finite(x):return isinstance(x,(float,int)) and math.isfinite(x)
+    for i,s in enumerate(d['scenes']):
+        if s['id']!=orig['scenes'][i]['id'] or not finite(s['start']) or not 0<=s['start']<d['duration'] or s['asset'] not in range(len(orig['assets'])):raise ValueError('場面の設定を確認してください')
+        if i==0 and s['start']!=0:raise ValueError('最初の場面は0秒からです')
+        if i and s['start']<=d['scenes'][i-1]['start']+.05:raise ValueError('切替秒は前の場面より後にしてください')
+        end=d['scenes'][i+1]['start'] if i<len(d['scenes'])-1 else d['duration']
+        if not finite(s['transition']) or not 0<=s['transition']<=min(4,end-s['start']):raise ValueError('フェード秒は0〜4秒、かつ場面の長さ以内です')
+        for key in ['x','y']:
+            if not finite(s.get(key,0)) or not -100<=s.get(key,0)<=100:raise ValueError('画像位置は-100〜100です')
+        if not finite(s.get('zoom',1)) or not 1<=s.get('zoom',1)<=3:raise ValueError('画像の拡大率は1〜3倍です')
+        if not isinstance(s.get('camera',True),bool):raise ValueError('自動カメラの設定を確認してください')
+    catalog=json.loads((EDITOR/'style-catalog.json').read_text(encoding='utf-8'))
+    original={f'L{i+1:03}':line['text'] for i,line in enumerate(orig.get('sourceLyrics',orig['lyrics']))}
+    expected=[(key,i) for key,text in original.items() for i in range(len(text))]
+    coverage=[];ids=set()
+    for i,l in enumerate(d['lyrics']):
+        if not re.fullmatch(r'[A-Za-z0-9_-]{1,64}',l['id']) or l['id'] in ids:raise ValueError('歌詞IDを確認してください')
+        ids.add(l['id']);source=l.get('sourceParts',[{'line':l['id'],'start':0,'end':len(l['text'])}]);text=''
+        for part in source:
+            key=part['line'];a=part['start'];b=part['end']
+            if key not in original or not isinstance(a,int) or not isinstance(b,int) or not 0<=a<b<=len(original[key]):raise ValueError('元の歌詞の範囲を確認してください')
+            text+=original[key][a:b];coverage.extend((key,n) for n in range(a,b))
+        if text!=l['text']:raise ValueError('元の歌詞を保持してください')
+        for k in ['start','end','scale','y','motionDuration']:
+            if not finite(l[k]):raise ValueError('数値を確認してください')
+        if not 0<=l['start']<l['end']<=d['duration']-1:raise ValueError('歌詞の開始・終了を曲内に収めてください（最後の1秒は文字なし）')
+        # Overlapping lines are supported by the shared scene renderer.
+        if l['motion'] not in catalog or not .3<=l['scale']<=3 or not .15<=l['y']<=.85 or not .1<=l['motionDuration']<=3:raise ValueError('文字設定の範囲を確認してください')
+        fonts=json.loads((EDITOR/'font-options.json').read_text(encoding='utf-8'))
+        if l.get('font','noto_serif') not in [f['id'] for f in fonts]:raise ValueError('利用できる書体を選択してください')
+        if not finite(l.get('angle',0)) or not -180<=l.get('angle',0)<=180:raise ValueError('角度は-180〜180度です')
+        if l.get('position','manual') not in ['manual','tl','tc','tr','ml','mc','mr','bl','bc','br']:raise ValueError('配置を確認してください')
+        if l.get('effect','none') not in ['none','double','shadow','glow','rgb'] or not finite(l.get('effectOffset',6)) or not 1<=l.get('effectOffset',6)<=24:raise ValueError('文字効果を確認してください')
+        for key in ['entrance','departure']:
+            if l.get(key,'none') not in ['none','lr','tb','fade']:raise ValueError('文字の入り方・消え方を確認してください')
+        if not finite(l.get('transitionDuration',.7)) or not .1<=l.get('transitionDuration',.7)<=2:raise ValueError('文字の切替時間は0.1〜2秒です')
+        for key in ['fill','accent','stroke']:
+            if key in l and not re.fullmatch(r'#[0-9a-fA-F]{6}',l[key]):raise ValueError('色を確認してください')
+    if coverage!=expected:raise ValueError('歌詞の欠落・重複・並び順を確認してください')
+
+def render(snapshot,out):
+    global JOB
+    try:
+        log=ROOT/(out.stem+'.log')
+        with log.open('w',encoding='utf-8') as f:
+            p=subprocess.Popen(['node',str(EDITOR/'export.mjs'),str(snapshot),str(out)],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,encoding='utf-8',errors='replace')
+            for line in p.stdout:
+                f.write(line);f.flush()
+                if line.strip().isdigit():
+                    with LOCK:JOB['progress']=int(line.strip())
+            if p.wait():raise RuntimeError('書き出しログを確認してください: '+log.name)
+        if not out.exists():raise RuntimeError('出力ファイルがありません')
+        with LOCK:
+            JOB.update(status='done',progress=100,url='/'+out.name)
+            (ROOT/'last-export.json').write_text(json.dumps(JOB,ensure_ascii=False),encoding='utf-8')
+    except Exception as e:
+        with LOCK:JOB.update(status='failed',error=str(e))
+
+class Handler(SimpleHTTPRequestHandler):
+    def end_headers(self):
+        self.send_header('Cache-Control','no-store');super().end_headers()
+    def respond(self,d,status=200):
+        b=json.dumps(d,ensure_ascii=False).encode();self.send_response(status);self.send_header('Content-Type','application/json');self.send_header('Content-Length',str(len(b)));self.end_headers();self.wfile.write(b)
+    def do_GET(self):
+        if self.path=='/api/state':
+            with LOCK:return self.respond(read())
+        if self.path=='/api/job':
+            with LOCK:
+                job=JOB.copy()
+                if job['status']=='idle' and (ROOT/'last-export.json').exists():job=json.loads((ROOT/'last-export.json').read_text(encoding='utf-8'))
+                return self.respond(job)
+        super().do_GET()
+    def do_POST(self):
+        global JOB
+        try:
+            origin=self.headers.get('Origin','')
+            if origin and origin not in [f'http://127.0.0.1:{self.server.server_address[1]}',f'http://localhost:{self.server.server_address[1]}']:return self.respond({'error':'別のページからは保存できません'},403)
+            size=int(self.headers.get('Content-Length','0'))
+            if not 0<size<200000:return self.respond({'error':'入力サイズを確認してください'},400)
+            body=json.loads(self.rfile.read(size))
+            with LOCK:
+                current=read()
+                if body.get('revision')!=current['revision']:return self.respond({'error':'別の保存があります。ページを開き直して確認してください'},409)
+                if self.path=='/api/reload-catalog':
+                    if JOB['status']=='running':return self.respond({'error':'書き出し完了後に追加分を読み込んでください'},409)
+                    result=subprocess.run(['node',str(EDITOR/'build.mjs'),str(ROOT)],capture_output=True,text=True,encoding='utf-8',errors='replace')
+                    if result.returncode:raise RuntimeError('登録一覧の更新に失敗しました: '+result.stderr[-500:])
+                    return self.respond({'ok':True})
+                if self.path=='/api/save':
+                    validate(body['data']); rev=current['revision']+1
+                    history=ROOT/'edit-history';history.mkdir(exist_ok=True)
+                    shutil.copyfile(STATE,history/f'rev-{current["revision"]}-{time.time_ns()}.json')
+                    new={'revision':rev,'data':body['data']};temp=STATE.with_suffix('.tmp');temp.write_text(json.dumps(new,ensure_ascii=False,indent=2),encoding='utf-8');temp.replace(STATE)
+                    return self.respond({'revision':rev})
+                if self.path=='/api/render':
+                    if JOB['status']=='running':return self.respond({'error':'書き出し中です'},409)
+                    validate(current['data']);stamp=time.time_ns();name=f'edit-r{current["revision"]}-{stamp}'
+                    snapshot=ROOT/(name+'.json');snapshot.write_text(json.dumps(current,ensure_ascii=False,indent=2),encoding='utf-8');out=ROOT/(name+'.mp4')
+                    JOB={'status':'running','revision':current['revision'],'progress':0,'snapshot':snapshot.name,'hash':hashlib.sha256(snapshot.read_bytes()).hexdigest()}
+                    threading.Thread(target=render,args=(snapshot,out),daemon=True).start();return self.respond(JOB)
+                self.respond({'error':'見つかりません'},404)
+        except (ValueError,KeyError,TypeError) as e:self.respond({'error':str(e)},400)
+        except Exception as e:self.respond({'error':str(e)},500)
+    def send_head(self):
+        path=self.translate_path(self.path);match=re.match(r'bytes=(\d+)-(\d*)',self.headers.get('Range',''))
+        if not match or not os.path.isfile(path):return super().send_head()
+        size=os.path.getsize(path);start=int(match[1]);end=min(int(match[2]) if match[2] else size-1,size-1)
+        if start>=size or end<start:self.send_error(416);return None
+        self.send_response(206);self.send_header('Content-Type',self.guess_type(path));self.send_header('Accept-Ranges','bytes');self.send_header('Content-Range',f'bytes {start}-{end}/{size}');self.send_header('Content-Length',str(end-start+1));self.end_headers();self.remaining=end-start+1;f=open(path,'rb');f.seek(start);return f
+    def copyfile(self,source,output):
+        if not hasattr(self,'remaining'):return super().copyfile(source,output)
+        while self.remaining:
+            b=source.read(min(65536,self.remaining))
+            if not b:break
+            output.write(b);self.remaining-=len(b)
+        del self.remaining
+print(f'http://127.0.0.1:{args.port}/editor.html',flush=True)
+ThreadingHTTPServer(('127.0.0.1',args.port),Handler).serve_forever()
+
+

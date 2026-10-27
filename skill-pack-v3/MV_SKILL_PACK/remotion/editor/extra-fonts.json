@@ -1,0 +1,36 @@
+[
+  {
+    "id": "ankoku_onryou_legacy",
+    "family": "Ankoku Onryou Legacy",
+    "label": "怨霊（旧版1.0）",
+    "url": "https://www.ankokukoubou.com/font/japanese/onryouv10.zip",
+    "source": "https://www.ankokukoubou.com/font/onryou.htm",
+    "file": "ankoku_onryou_legacy.ttf",
+    "category": "ホラー・ダーク",
+    "jp": true,
+    "moods": [
+      "horror",
+      "dark"
+    ],
+    "author": "暗黒工房 / maki",
+    "license": "Author permission; see permission record",
+    "permissionSource": "https://www.ankokukoubou.com/font/ankokuzonji.htm"
+  },
+  {
+    "id": "ankoku_hakidame",
+    "family": "Ankoku Hakidame",
+    "label": "吐き溜",
+    "url": "https://www.ankokukoubou.com/font/hakidame.zip",
+    "source": "https://www.ankokukoubou.com/font/hakidame.htm",
+    "file": "ankoku_hakidame.ttf",
+    "category": "ホラー・ダーク",
+    "jp": true,
+    "moods": [
+      "horror",
+      "dark"
+    ],
+    "author": "暗黒工房 / maki",
+    "license": "Author permission; see permission record",
+    "permissionSource": "https://www.ankokukoubou.com/font/ankokuzonji.htm"
+  }
+]
