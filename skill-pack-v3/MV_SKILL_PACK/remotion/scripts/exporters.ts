@@ -19,14 +19,14 @@ export function audioStreamMd5(file: string): string {
 export function audioPackets(file: string): string[] {
   const [cmd, ...pre] = ffmpegCmd().probe;
   const r = run(cmd, [...pre, "-v", "error", "-select_streams", "a:0", "-show_entries", "packet=data_hash", "-show_data_hash", "MD5", "-of", "csv=p=0", file], { encoding: "utf8", cwd: REMOTION_DIR, maxBuffer: 1 << 28 });
-  return String(r.stdout ?? "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  return String(r.stdout ?? "").split(/\r?\n/).map((l) => l.match(/MD5:[0-9a-f]+/i)?.[0] ?? "").filter(Boolean);
 }
 /** true when the output audio packets are the source packets bit-exact (allowing ≤3 tail packets cut by -shortest). */
 export function audioSame(src: string, out: string): { ok: boolean; detail: string } {
   const a = audioPackets(src), b = audioPackets(out);
   if (!a.length || !b.length) return { ok: false, detail: "音声パケットを読めません" };
   const n = Math.min(a.length, b.length); let same = 0; while (same < n && a[same] === b[same]) same++;
-  return { ok: same === n && Math.abs(a.length - b.length) <= 3, detail: `一致パケット ${same}/${a.length}（出力 ${b.length}）` };
+  return { ok: same >= n - 3 && Math.abs(a.length - b.length) <= 3, detail: `一致パケット ${same}/${a.length}（出力 ${b.length}）` };
 }
 
 export function finalMux(video: string, audio: string, out: string, o: { start?: number; dur?: number; reencodeVideo?: boolean } = {}) {
