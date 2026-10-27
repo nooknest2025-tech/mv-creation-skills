@@ -262,7 +262,7 @@ export async function run(argv: string[]) {
 export async function offerEditor(dir: string, o: Record<string, any>) {
   const name = path.basename(dir), can = fs.existsSync(path.join(dir, "out", "editor-input.json")) || fs.existsSync(path.join(dir, "out", "editor", "editor-state.json"));
   if (!can) { log("ℹ️ 動画素材を含むため、画面での手直し（編集画面）は静止画の曲のみ対応です。日本語の指示（npm run edit）で直せます。"); return; }
-  log(`✏️ 画面で手直しするなら: npm run editor -- --project ${name}\n   （歌詞・シーン・カメラ・エフェクト・タイミング・顔の位置を1つの画面で。保存した内容は次の AI 修正でも引き継がれます）`);
+  log(`✏️ 画面で手直しするなら: npm run editor -- --project ${name}\n   （歌詞・シーン・カメラ・エフェクト・タイミング・顔の位置を1つの画面で。※いまは編集画面の保存と日本語の指示 npm run edit は別々に記録されます）`);
   const tty = process.stdin.isTTY && process.stdout.isTTY && !process.env.CI;
   if (o["no-editor"] || o.editor === false || (!tty && !o.editor)) return;
   let yes = !!o.editor;
