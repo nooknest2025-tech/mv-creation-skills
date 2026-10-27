@@ -43,8 +43,10 @@ npm run editor -- --project <名前> --audio 曲.wav --lyrics 歌詞.json --imag
 - 元の音源はコピーして保持し、`audio-integrity.json` にハッシュを記録（MP4 の音声は AAC に変換）
 
 ## 書体とライセンス
-- 一覧に出るのは `fonts.yaml`（OFL-1.1 / Apache-2.0 のみ）に登録され、`remotion/public/fonts/` に実ファイルがある日本語書体です。増やすときは `npm run fonts:fetch`。
-- `editor/extra-fonts.json` の暗黒工房の書体（ホラー系）は**同梱していません**。作者の利用条件（`editor/FONT-LICENSES.md`）を自分で確認し、ファイルを `remotion/public/fonts/` に置いた場合だけ一覧に出ます。
+- `npm install` の最後（と編集UIの起動時）に、編集UI用の **29書体** を自動で用意します。すでにあるものは飛ばします。ネットにつながらなくても install は失敗せず、手元の書体だけで使えます（あとで `npm run fonts:editor` で再試行）。
+  - Google Fonts の27書体（OFL-1.1 / Apache-2.0。ライセンスを確認してから保存し、ライセンス文も保存）
+  - 暗黒工房（作者: maki）の「怨霊」「吐き溜」: **作者の公式サイトから直接**ダウンロードし、ファイルは一切変更しません。リポジトリには入れていません。編集UIで選ぶと作者名と利用条件ページ（https://www.ankokukoubou.com/font/ankokuzonji.htm ）が表示されます。詳しくは `editor/FONT-LICENSES.md`
+- 自動ダウンロードを止めたいとき: 環境変数 `MVPACK_SKIP_FONT_DOWNLOAD=1`、または起動時に `--no-font-download`
 
 ## 確認済み / 未確認（正直に）
 - 確認済み（Linux, 2026-10-27）: 見本での起動、API での保存、不正な保存（歌詞本文の改変）の拒否、再起動後に保存内容が残ること、MP4 書き出し（1280×720 h264 + AAC、8秒）で編集（モーション `pro_pop`・文字色・シーン拡大）が映像に反映されること、ファイル指定版の準備。
