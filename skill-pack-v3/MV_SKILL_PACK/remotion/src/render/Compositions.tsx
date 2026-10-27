@@ -5,13 +5,22 @@ import { loadFonts } from "./fonts";
 import { LyricLayer } from "./LyricLayer";
 import { Visuals } from "./Visuals";
 import { CATALOG } from "../lib/catalog";
+import { PartsLayer } from "./Rig";
+import { MoGraphBg, MoGraphTop, accentStyle } from "./MoGraph";
 
 loadFonts();
 
+const AccentWrap: React.FC<{ p: RenderProps; children: React.ReactNode }> = ({ p, children }) => {
+  const f = useCurrentFrame();
+  return <AbsoluteFill style={accentStyle(p, p.startAt + f / p.fps)}>{children}</AbsoluteFill>;
+};
 export const MV: React.FC<RenderProps> = (p) => (
   <AbsoluteFill style={{ background: p.overlayOnly ? "transparent" : "#000" }}>
     {!p.overlayOnly && <Visuals p={p} />}
-    <LyricLayer p={p} />
+    {!p.overlayOnly && p.mograph && <MoGraphBg p={p} />}
+    {!p.overlayOnly && p.parts && <PartsLayer p={p} />}
+    {p.mograph ? <AccentWrap p={p}><LyricLayer p={p} /></AccentWrap> : <LyricLayer p={p} />}
+    {!p.overlayOnly && p.mograph && <MoGraphTop p={p} />}
     {p.audio && !p.overlayOnly && <Audio src={/^(https?:|data:)/.test(p.audio) ? p.audio : staticFile(p.audio)} startFrom={Math.round(p.startAt * p.fps)} />}
   </AbsoluteFill>
 );

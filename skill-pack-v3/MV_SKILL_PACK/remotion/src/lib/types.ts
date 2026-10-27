@@ -37,6 +37,8 @@ export interface LyricStyleConfig {
   variety?: number; // 0 = 統一感重視 .. 1 = 変化多め (default 0.5)
   vertOk?: boolean; // false = no room for vertical text
   fitVisual?: boolean; // false = ignore picture analysis for colour
+  pro?: boolean; // pro director: prefer pro_* styles, avoid cheap defaults (default true via pipeline)
+  prefer?: Record<string, string[]>; // section label/type -> preferred styles (from the motion-graphics plan)
 }
 export interface ResolvedLine extends LyricLine {
   li: number;
@@ -118,4 +120,6 @@ export interface RenderProps {
   energy?: number[]; energyHz?: number; // loudness envelope for mouth flap / reactive fallback
   visuals?: VisualFx;
   finish?: FinishFx;
+  parts?: { rig: import("./rig").Rig; x?: number; h?: number; dy?: number; segments: { start: number; end: number; type: string; preset: string; energy: number }[] }; // parts animation (パーツアニメ)
+  mograph?: import("./mograph").MoGraphPlan; // pro motion-graphics layer (shapes, transitions, accents, textures)
 }

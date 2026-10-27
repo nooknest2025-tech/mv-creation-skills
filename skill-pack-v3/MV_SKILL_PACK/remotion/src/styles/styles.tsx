@@ -3,6 +3,7 @@
 import React from "react";
 import { beatLen, beatPulse, beatStep, beatX, clamp, easeOut, easeOutBack, easeOutElastic, rng, spring } from "../lib/core";
 import { FONTS, layoutH, layoutV, advOf } from "./layout";
+import { EASE, springOver } from "../lib/pro";
 import { BLK, CANDY, CREAM, CRIM, CYAN, Glyph, MINT, PINK, WHITE, YELLOW, boxesH, charAge, drawH, dropShadow, exitP, kwMod, sungP, wordText, type Box, type Ctx, type StyleFn } from "./prims";
 
 const U = (c: Ctx) => Math.min(c.W, c.H);
@@ -23,7 +24,7 @@ STYLES.simple = (c) => {
 STYLES.reveal = (c) => {
   const l = lay(c, 0.075);
   const en = +c.P.enter, rise = +c.P.rise * l.px * 4;
-  return drawH(c, l, (i, age) => { const p = clamp((age + 0.06) / en); return p <= 0 ? null : { a: easeOut(p, 2), dy: (1 - easeOut(p)) * rise }; });
+  return drawH(c, l, (i, age) => { const p = clamp((age + 0.06) / en); return p <= 0 ? null : { a: easeOut(p, 2), dy: (1 - EASE.expoOut(p)) * rise }; }); // pro core: expo-out travel (fast settle, no linear drift)
 };
 
 STYLES.bounce = (c) => {
@@ -32,7 +33,7 @@ STYLES.bounce = (c) => {
   return drawH(c, l, (i, age) => {
     const p = clamp((age + 0.04) / en);
     if (p <= 0) return null;
-    const s = 0.7 + 0.3 * easeOutBack(p, 2.6);
+    const s = 0.7 + 0.3 * springOver(p, 1.15); // pro core: spring overshoot ~1.15
     const b = age > en ? beatPulse(c.beat, c.t, 0.12) * (i % 2 ? 0.5 : 1) : 0;
     const sq = 1 + 0.12 * b;
     return { a: clamp(p * 3), dy: -(1 - easeOut(p, 2)) * drop - b * hop * 0.35, s, sx: sq, sy: 2 - sq, ay: 0.85 };
@@ -687,4 +688,6 @@ STYLES.kinetic = (c) => {
 
 // styles made with `npm run style:new`
 import { CUSTOM_STYLES } from "./custom";
+import { PRO_STYLES } from "./pro";
+Object.assign(STYLES, PRO_STYLES);
 Object.assign(STYLES, CUSTOM_STYLES);

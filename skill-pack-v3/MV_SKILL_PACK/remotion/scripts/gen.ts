@@ -55,6 +55,8 @@ function latestProject() {
   return path.join(PROJECTS_DIR, name);
 }
 
+const TASTE_EN: Record<string, string> = { anime: "Japanese anime style, clean cel shading", photo: "photorealistic cinematic film still", illust: "soft painted illustration, watercolor texture", graphic: "flat vector graphic shapes, minimal", own: "" };
+export const withTaste = (subject: string | undefined, taste?: string) => [subject, taste ? TASTE_EN[taste] : ""].filter(Boolean).join(", ") || undefined;
 export function makePlan(dir: string, o: Record<string, any>) {
   const song = readJson<Song>(path.join(dir, "song.json"), null as any), cfg = loadConfig(dir);
   const props = buildProps(song, cfg, readJson(path.join(dir, "media.json"), []) as any);
@@ -62,14 +64,17 @@ export function makePlan(dir: string, o: Record<string, any>) {
   let shots = props.shots.filter((s) => s.src !== "" || true);
   if (o.shots) { const ids = String(o.shots).split(","); shots = shots.filter((s) => ids.includes(s.id)); }
   else {
-    const secs = o.sections ? String(o.sections).split(",") : null;
+    const scope = cfg.gen?.scope;
+    if (scope === "none" && !o.sections) log("ℹ️ 動画化は「静止画のみ」の設定です（mv.config.json gen.scope）。一部だけ試すなら --sections chorus を付けてください");
+    const secs = o.sections ? String(o.sections).split(",") : scope === "chorus" ? ["chorus"] : scope === "none" ? ["__none__"] : null;
+    if (scope === "all" && !o.sections) { /* every shot */ shots = shots.filter(() => true); }
     // default: one "hero" clip per section (first shot) - keeps cost small
-    shots = shots.filter((s, i, a) => (i === 0 || a[i - 1].section !== s.section) && (!secs || secs.includes(s.sectionType ?? "") || secs.includes(s.section ?? "")));
+    if (scope !== "all" || o.sections) shots = shots.filter((s, i, a) => (i === 0 || a[i - 1].section !== s.section) && (!secs || secs.includes(s.sectionType ?? "") || secs.includes(s.section ?? "")));
   }
   const preset = PRESETS[props.preset!];
   const aspect = props.width > props.height ? "16:9" : props.width === props.height ? "1:1" : "9:16";
   const lib = loadLib(dir), locked = new Set<string>(props.shots.filter((s) => s.locked).map((s) => s.id));
-  const allSpecs = buildSpecs(props.shots, { subject: cfg.subject, continuity: cfg.continuity, bpm: song.bpm, textY: (props as any).textY });
+  const allSpecs = buildSpecs(props.shots, { subject: withTaste(cfg.subject, cfg.taste), continuity: cfg.continuity, bpm: song.bpm, textY: (props as any).textY });
   const shotReview = reviewShotList(allSpecs, locked);
   const specOf = (id: string) => allSpecs.find((x) => x.shot === id)!;
   const legacy = !!(o.provider ?? cfg.gen?.provider);

@@ -56,6 +56,8 @@ export function pickGenre(song: Song, cfg: MVConfig): { id: string | null; why: 
   return { ...autoGenre(song), explicit: false };
 }
 import { letterboxPx } from "./finish";
+import { directPro, moodOf, proposeCombo } from "./mograph";
+import { autoPartsPreset } from "./rig";
 export function buildProps(song0: Song, cfg: MVConfig, media: MediaItem[], o: { overlayOnly?: boolean; audio?: string; aspect?: string } = {}): RenderProps & { presetWhy: string; genre?: string; genreWhy?: string; structure?: string; structureWhy?: string; sectionNotes?: string[]; review?: Review } {
   if (o.audio && /_lipsync\.(wav|mp3)$/i.test(o.audio)) throw new Error("口パク用に切り出した音声は最終ミックスに使えません（元の曲を1本だけ使います）");
   const song = applyTiming(song0, cfg);
@@ -64,7 +66,15 @@ export function buildProps(song0: Song, cfg: MVConfig, media: MediaItem[], o: { 
   const sc = cfg.scale && (o.aspect ?? cfg.aspect ?? "16:9") === "16:9" ? cfg.scale : 1;
   const fps = cfg.fps ?? 30;
   const start = Math.max(0, cfg.range?.start ?? 0), end = Math.min(song.duration, cfg.range?.end ?? song.duration);
-  let shots = planShots(song, preset, media, { start, end, cutOverride: cfg.cutBeats });
+  // pro auto director (mood x section -> look / palette / transition / accents / cut length / lyric styles)
+  const genre0 = pickGenre(song, cfg);
+  const faceRatio0 = media.length ? media.filter((m) => m.face?.eyes?.length).length / media.length : 0;
+  const proOn = cfg.pro !== false;
+  const autoStruct = !cfg.structure || cfg.structure === "auto";
+  const comboModes = cfg.combo?.length ? cfg.combo : proOn && autoStruct && !cfg.preset?.match(/^(story|dance|lipsync|live|firsttake|vocaloid)$/) ? proposeCombo(moodOf(genre0.id, song.bpm), faceRatio0, media.length) : null;
+  const mog = proOn && !cfg.mograph?.off ? directPro(song, { genre: genre0.id, combo: comboModes, nMedia: media.length, faceRatio: faceRatio0, density: cfg.density, look: cfg.mograph?.look, palette: cfg.mograph?.palette, transition: cfg.mograph?.transition, seed: cfg.lyrics?.seed, accents: cfg.mograph?.accents }) : undefined;
+  const cutOverride = cfg.cutBeats ?? (mog ? Object.fromEntries(mog.sections.map((s) => [s.label, s.cutBeats])) : undefined);
+  let shots = planShots(song, preset, media, { start, end, cutOverride });
   // timing: cut lead (global / per section) + per-shot manual edits
   const T = cfg.timing ?? {};
   shots = shots.map((s, i) => {
@@ -79,7 +89,7 @@ export function buildProps(song0: Song, cfg: MVConfig, media: MediaItem[], o: { 
   const genre = pickGenre(song, cfg);
   const sel = cfg.structure ?? "auto";
   const faceRatio = media.length ? media.filter((m) => m.face?.eyes?.length).length / media.length : 0;
-  const st = sel === "none" ? null : sel === "auto" ? pickHybrid(genre.id, faceRatio, media.length) : HYBRIDS[sel] ? { id: sel, why: `${HYBRIDS[sel].ja}（指定）: ${HYBRIDS[sel].why}` } : (() => { throw new Error(`構成「${sel}」は未知です: ${HYBRID_IDS.join(", ")}`); })();
+  const st = sel === "none" ? null : comboModes && (cfg.combo?.length || sel === "auto") && mog?.combo ? { id: mog.combo.id, why: `${HYBRIDS[mog.combo.id].ja}${cfg.combo?.length ? "（指定）" : "（自動提案）"}: ${mog.combo.notes.join("｜")}` } : sel === "auto" ? pickHybrid(genre.id, faceRatio, media.length) : HYBRIDS[sel] ? { id: sel, why: `${HYBRIDS[sel].ja}（指定）: ${HYBRIDS[sel].why}` } : (() => { throw new Error(`構成「${sel}」は未知です: ${HYBRID_IDS.join(", ")}`); })();
   shots.forEach((s) => { if (T.perShot?.[s.id]) s.locked = true; });
   if (st) shots = applyHybrid(shots, st.id, { keepMouth: cfg.puppet?.mouth !== undefined, pool: media.filter((m) => m.kind === "image").map((m) => ({ ...m })) });
   // lip-sync / dance takes: fixed on their audio window (respects extended/shifted in/out from the gen plan)
@@ -93,12 +103,24 @@ export function buildProps(song0: Song, cfg: MVConfig, media: MediaItem[], o: { 
     lyricCfg.sections = { ...(cfg.lyrics?.sections ?? {}), ...(cfg.sectionStyles ?? {}) };
     if (cfg.lyrics?.default === undefined) lyricCfg.default = "auto";
   }
+  if (mog) { // lyric styles follow the director (user tables / explicit styles still win)
+    if ((lyricCfg as any).pro === undefined) (lyricCfg as any).pro = true;
+    const tm = mog.combo?.textMode ?? {};
+    (lyricCfg as any).prefer = { ...Object.fromEntries(mog.sections.map((s) => [s.label, tm[s.type] === "typo" ? ["pro_crop", "pro_smash", ...s.lyricPrefer] : s.lyricPrefer])), ...((lyricCfg as any).prefer ?? {}) };
+  }
   const userY = (lyricCfg as any).textY !== undefined || (lyricCfg as any).textYShift !== undefined || lyricCfg.position !== undefined;
   const defY = Math.max(0.1, Math.min(1 - asp.safeBottom, (lyricCfg as any).textY ?? ((preset.id === "vocaloid" && asp.h > asp.w ? 0.55 : preset.id === "vocaloid" ? preset.textY : Math.min(asp.textY, preset.textY + (asp.textY - 0.84))) + ((lyricCfg as any).textYShift ?? 0))));
   const lbFrac = letterboxPx({ ...preset.finish, ...(cfg.finish ?? {}) }, asp.w, asp.h) / asp.h;
   if (!userY) for (const s of shots) if (s.vis || s.face) { const pl = placeText(s.vis, s.face, defY); if (pl.band !== "bottom") { s.textY = pl.band === "top" ? Math.max(pl.textY, lbFrac + 0.08) : pl.textY; s.textWhy = pl.why; } }
   const allLines = resolveLines(song, lyricCfg, shots);
   const lines = allLines.filter((L) => L.tEnd > start && L.tOn < end);
+  if (mog && !cfg.lyrics?.palette) for (const L of lines) { // section palette: full on solid (graphics) shots, accent only over pictures
+    const ms = mog.sections.find((s) => L.start >= s.start && L.start < s.end); if (!ms) continue;
+    const sh = shots.find((s) => L.start >= s.start && L.start < s.end);
+    const solid = mog.solo || ["typo", "mograph"].includes(sh?.role ?? "");
+    if (solid && sh?.role === "typo" && /^pro_/.test(L.style) && L.params.size === undefined) L.params.size = 1.7; // full-screen typography: text is the picture
+    L.params.palette = solid ? { fill: ms.palette.fg, stroke: ms.palette.bg, accent: ms.palette.accent } : { ...(L.params.palette ?? {}), accent: ms.palette.accent };
+  }
   // loop ending recipe: keep the last second clean (lyrics finish their exit 1 s before the end)
   if (preset.recipes.loopEnding && end >= song.duration - 0.05) for (const L of lines) if (L.tEnd > end - 1) { L.tOff = Math.max(L.tOn + 0.2, end - 1 - L.exit); L.tEnd = L.tOff + L.exit; }
   const props: RenderProps & { presetWhy: string; genre?: string; genreWhy?: string; structure?: string; structureWhy?: string; sectionNotes?: string[]; review?: Review } = {
@@ -108,12 +130,21 @@ export function buildProps(song0: Song, cfg: MVConfig, media: MediaItem[], o: { 
     overlayOnly: !!o.overlayOnly, textSize: lyricCfg.size ?? preset.textSize ?? 1, textY: defY,
     safeBottom: asp.safeBottom, preset: preset.id, presetWhy: why, genre: genre.id ?? undefined, genreWhy: genre.why,
     energy: downsample(song.energy, song.energyHz, 10), energyHz: song.energy.length ? 10 : 0,
-    visuals: { ...preset.visuals, ...(cfg.visuals ?? {}) }, finish: { ...preset.finish, ...(cfg.finish ?? {}) },
+    visuals: { ...preset.visuals, ...(cfg.visuals ?? {}) }, ...(mog ? { mograph: mog } : {}), finish: { ...preset.finish, ...(cfg.finish ?? {}) },
   };
   const lb = letterboxPx(props.finish, props.width, props.height);
   if (lb > 0 && (lyricCfg as any).textY === undefined) props.textY = 1 - (lb / props.height) * 0.42; // subtitles live in the lower bar
   props.structure = st?.id; props.structureWhy = st?.why ?? "構成なし（素材を順に使う）";
   props.sectionNotes = notesOf(allLines).map((n) => n.why);
+  if (cfg.parts?.rigData && !cfg.parts.off) { // parts animation: preset per section (おまかせ = by section type + energy)
+    const ranks = song.sections.map((s) => { const a = Math.floor(s.start * song.energyHz), b = Math.max(a + 1, Math.floor(s.end * song.energyHz)); const v = song.energy.slice(a, b); return v.length ? v.reduce((x, y) => x + y, 0) / v.length : 0.5; });
+    const pr = cfg.parts.preset;
+    props.parts = { rig: cfg.parts.rigData, x: cfg.parts.x, h: cfg.parts.h, segments: (song.sections.length ? song.sections : [{ label: "全体", type: "other" as const, start: 0, end: song.duration }]).map((s, i) => {
+      const want = typeof pr === "string" ? pr : pr?.[s.label] ?? pr?.[s.type] ?? "auto";
+      return { start: s.start, end: s.end, type: s.type, energy: ranks[i] ?? 0.5, preset: want === "auto" ? autoPartsPreset(s.type, ranks[i] ?? 0.5) : want }; }) };
+  }
+  if (props.parts) { const right = (props.parts.x ?? 0.5) < 0.5; for (const L of lines) if (L.params.anchor === undefined && /^pro_/.test(L.style)) L.params.anchor = (right ? [2, 5, 8] : [0, 3, 6])[L.li % 3]; } // keep lyrics off the character
+  if (mog) (props as any).mographNotes = mog.sections.map((s) => s.why);
   (props as any).lipsyncNotes = lipsyncNotes;
   if (cfg.critic !== false) {
     const calm = !!genre.id && ["ballad", "acoustic", "ambient"].includes(genre.id) || song.bpm < 90;

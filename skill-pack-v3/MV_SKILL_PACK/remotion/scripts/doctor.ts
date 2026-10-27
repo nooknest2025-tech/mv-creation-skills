@@ -22,6 +22,8 @@ export function probeAll(): Probe {
   P.python = { ok: !!py, detail: py ? run(py).out : undefined };
   const imp = (m: string) => !!py && spawnSync(py, ["-c", `import ${m}`], { shell: WIN }).status === 0;
   P.pillow = { ok: imp("PIL") && imp("numpy") };
+  P.psd_tools = { ok: imp("psd_tools") };
+  P.rembg = { ok: imp("rembg") };
   P.opencv = { ok: !!py && spawnSync(py, ["-c", "import cv2,sys; sys.exit(0 if hasattr(cv2,'CascadeClassifier') else 1)"], { shell: WIN }).status === 0 };
   P.whisper = { ok: imp("faster_whisper") };
   let free = Infinity; try { const s = (fs as any).statfsSync(REMOTION_DIR); free = (s.bavail * s.bsize) / 1e9; } catch { /* old node */ }

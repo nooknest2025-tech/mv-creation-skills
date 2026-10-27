@@ -10,8 +10,14 @@ import { CATALOG } from "./catalog";
 import { fontFromText, FONT_REG } from "./fonts";
 import { GENRES, genreFromText } from "./genres";
 import { HYBRIDS, hybridFromText } from "./hybrids";
+import { SHOW_MODES, TRANSITIONS_JA, comboFromText, composeCombo } from "./mograph";
+import { PALETTES } from "./pro";
+import { PARTS_PRESETS, partsPresetFromText } from "./rig";
 
 export const JA_STYLE_WORDS: [RegExp, string][] = [
+  [/スマッシュ/, "pro_smash"], [/ストレッチ|横に伸び/, "pro_stretch"], [/線から(出|引)|ライン(から|で)出/, "pro_line"], [/ボックス|箱が(縮|消)/, "pro_box"],
+  [/斜めマスク|斜めに切/, "pro_diag"], [/ラベル|帯に乗/, "pro_label"], [/短冊/, "pro_tanzaku"], [/縦の柱|柱みたい/, "pro_pillar"], [/切れ文字|はみ出す(巨大)?文字/, "pro_crop"],
+  [/マスク(で)?スライド|プロっぽい(文字|動き)/, "pro_slide"], [/バネ|ぽよん|色ブロック/, "pro_pop"],
   [/桜吹雪|花びら(みたい|のよう)|舞い落ち/, "sakura_fall"], [/スポットライト|照らされ|光の輪/, "spotlight"],
   [/キネティック|激しい文字|叩きつけ/, "kinetic"], [/シンプル|普通の(字幕|テロップ|文字)|従来/, "simple"], [/映画字幕|字幕風|映画風/, "simple:film"],
   [/おまかせ|お任せ|自動|オート/i, "auto"], [/タイプライター|タイピング|打ち込み/, "typewriter"], [/手書き|筆記|ペン/, "handwriting"],
@@ -65,6 +71,22 @@ export function applyInstruction(cfg0: MVConfig, text: string): { cfg: MVConfig;
     if (/(リリック|歌詞|文字).*(変化多め|変化を?多く|バラエティ|色々)/.test(t)) { (cfg.lyrics ??= {}).variety = 0.9; changes.push("リリックは変化多め（曲に合う範囲で、セクションごとに2〜3種類）"); continue; }
     if (/構成(を|は)?(自動|おまかせ)/.test(t)) { cfg.structure = "auto"; changes.push("構成 → 曲と素材に合わせて自動"); continue; }
     if (/構成(なし|を?使わない)|ハイブリッド(なし|をやめ)/.test(t)) { cfg.structure = "none"; changes.push("構成テンプレート → なし"); continue; }
+    // ---- parts animation: 「腕を振って」「首をかしげて」「サビはノリノリで」 ----
+    { const pp = partsPresetFromText(t); if (pp && /キャラ|腕|手|首|うなず|頷|ノリ|踊って|揺れて|歌って|待機|かしげ|傾げ/.test(t)) { const P = (cfg.parts ??= {}); const k = sectionKey(t);
+      if (k) { const cur = typeof P.preset === "object" ? P.preset : P.preset ? { all: P.preset } : {}; P.preset = { ...cur, [k]: pp }; delete (P.preset as any).all; } else P.preset = pp;
+      changes.push(`キャラの動き${k ? `（${k}）` : ""} → ${PARTS_PRESETS[pp].ja}（${PARTS_PRESETS[pp].why}）${P.rig || P.rigData ? "" : "　※パーツ素材が未登録です: npm run parts で取り込み"}`); continue; } }
+    { const m = t.match(/画像は?(アニメ|実写|イラスト|図形|手持ち)/); if (m) { cfg.taste = ({ アニメ: "anime", 実写: "photo", イラスト: "illust", 図形: "graphic", 手持ち: "own" } as const)[m[1] as "アニメ"]; changes.push(`画像テイスト → ${m[1]}`); continue; } }
+    { const m = t.match(/動画化は?(静止画のみ|しない|なし|サビ(だけ|など)?|一部|全部)/); if (m) { const G = (cfg.gen ??= {}); G.scope = /静止画|しない|なし/.test(m[1]) ? "none" : /全部/.test(m[1]) ? "all" : "chorus"; changes.push(`動画化 → ${G.scope === "none" ? "静止画のみ（0円）" : G.scope === "all" ? "全部（npm run gen -- plan で費用を確認してから）" : "サビなど一部（npm run gen -- plan で費用を確認してから）"}`); continue; } }
+    // ---- show modes, combinable: 「ダンス＋リリックモーションで」「物語＋タイポグラフィ」「リップシンク＋モーショングラフィックス」 ----
+    { const cm = comboFromText(t); if (cm) { cfg.combo = cm; cfg.structure = "auto"; const c = composeCombo(cm); changes.push(`見せ方 → ${cm.map((m) => SHOW_MODES[m].ja).join("＋")}（セクションごとの配分: ${c.notes.join("｜")}）`); continue; } }
+    if (/(プロ演出|モーショングラフィックス|図形演出)(を)?(オフ|なし|使わない|やめ)/.test(t)) { (cfg.mograph ??= {}).off = true; changes.push("図形・トランジション演出 → オフ（文字のプロ動きは残す）"); continue; }
+    if (/(従来|昔|前)の(見た目|動き)に戻|プロ(モード)?(オフ|なし)/.test(t)) { cfg.pro = false; changes.push("プロ演出 → オフ（従来の見た目）"); continue; }
+    if (/シーン|カット|場面/.test(t) && /(ゆったり|少なめ|長め|ゆっくり)/.test(t)) { cfg.density = "slow"; changes.push("シーンの細かさ → ゆったり（カット長め）"); continue; }
+    if (/シーン|カット|場面/.test(t) && /(テンポよく|多め|細かく|速く|刻)/.test(t)) { cfg.density = "fast"; changes.push("シーンの細かさ → テンポよく（カット短め）"); continue; }
+    { const tr = (Object.entries({ circle: /円(で|の)?(トランジション|転換|ワイプ)/, ripple: /波紋/, cloud: /雲(みたい|の)?(ワイプ|トランジション)/, glyph_zoom: /文字の中に(ズーム|入)/, push_text: /巨大(な)?文字(で|が)?押/, diag_sweep: /斜め(線|の線)?(スイープ|ワイプ)/, rect: /四角(で|の)?(トランジション|ワイプ)/ }) as [string, RegExp][]).find(([, re]) => re.test(t));
+      if (tr) { (cfg.mograph ??= {}).transition = tr[0] as any; changes.push(`場面転換 → ${TRANSITIONS_JA[tr[0] as keyof typeof TRANSITIONS_JA]}`); continue; } }
+    { const pl = (Object.entries({ mono_red: /白黒(と|＋|\+)?赤/, neon: /ネオン(カラー|色)/, pop: /ポップ(な)?(色|カラー)/, paper_red: /紙(と|＋)?朱|和紙/, dusk: /夕暮れ(色)?/, acid: /蛍光(色|イエロー)/ }) as [string, RegExp][]).find(([, re]) => re.test(t));
+      if (pl && /色|カラー|配色|パレット/.test(t)) { (cfg.mograph ??= {}).palette = pl[0]; changes.push(`配色 → ${PALETTES[pl[0]].ja}（3〜4色に絞る）`); continue; } }
     { const hid = hybridFromText(t); if (hid) { cfg.structure = hid; const h = HYBRIDS[hid]; changes.push(`構成 → ${h.ja}（${h.why}）`); continue; } }
     if (/(プロ|ディレクター)?(チェック|批評|添削)(なし|しない|オフ)/.test(t)) { cfg.critic = false; changes.push("プロチェック → オフ"); continue; }
     // ---- typeface (書体): song / section / line / keyword ----
