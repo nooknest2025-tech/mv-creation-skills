@@ -1,0 +1,22 @@
+# Local material, render output, downloaded runtimes and credentials.
+*.zip
+**/node_modules/
+**/.python-deps/
+**/.model-cache/
+**/__pycache__/
+**/.env
+**/.env.*
+!**/.env.example
+skill-pack-v3/MV_SKILL_PACK/projects/
+skill-pack-v3/MV_SKILL_PACK/input/*
+!skill-pack-v3/MV_SKILL_PACK/input/README.txt
+skill-pack-v3/MV_SKILL_PACK/remotion/public/project/
+skill-pack-v3/MV_SKILL_PACK/remotion/public/yaiba/
+skill-pack-v3/MV_SKILL_PACK/remotion/src/editor/yaiba/
+skill-pack-v3/MV_SKILL_PACK/remotion/scripts/*yaiba*
+skill-pack-v3/MV_SKILL_PACK/remotion/.cache/
+skill-pack-v3/MV_SKILL_PACK/remotion/build/
+**/.remotion/
+skill-pack-v3/MV_SKILL_PACK/gen/takes/
+skill-pack-v3/MV_SKILL_PACK/tools/ffmpeg/
+*.log
