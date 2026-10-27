@@ -1,6 +1,6 @@
 // Style traits used by fit scoring: intensity 0..1, mood tags, flags (shake/glitch = never in slow ballads; hero = a "big move" to use once per section).
 import { MOOD_STYLES } from "./moods";
-export interface Trait { intensity: number; moods: string[]; shaky?: boolean; hero?: boolean; readable?: number /* 0..1 how legible mid-motion */; vertical?: boolean; wordUnit?: boolean }
+export interface Trait { intensity: number; moods: string[]; shaky?: boolean; hero?: boolean; readable?: number /* 0..1 how legible mid-motion */; vertical?: boolean; wordUnit?: boolean; pro?: boolean /* built on the pro motion core */ }
 const T = (intensity: number, moods: string, x: Partial<Trait> = {}): Trait => ({ intensity, moods: moods.split(" "), readable: 0.8, ...x });
 const CORE: Record<string, Trait> = {
   simple: T(0.05, "acoustic ballad ambient citypop", { readable: 1 }),
@@ -38,7 +38,20 @@ const CORE: Record<string, Trait> = {
   sakura_fall: T(0.35, "wa ballad idol"),
   spotlight: T(0.2, "ballad acoustic dark", { readable: 0.9 }),
 };
-export const TRAITS: Record<string, Trait> = { ...CORE };
+const PRO: Record<string, Trait> = {
+  pro_slide: T(0.3, "ballad citypop wa acoustic dark idol hiphop rock", { readable: 0.95, pro: true }),
+  pro_smash: T(0.85, "rock hiphop", { hero: true, readable: 0.75, wordUnit: true, pro: true }),
+  pro_stretch: T(0.65, "rock hiphop dark idol", { readable: 0.8, pro: true }),
+  pro_line: T(0.2, "ballad acoustic citypop ambient wa", { readable: 0.95, pro: true }),
+  pro_box: T(0.45, "rock hiphop citypop dark", { readable: 0.9, pro: true }),
+  pro_diag: T(0.55, "rock dark hiphop", { readable: 0.85, pro: true }),
+  pro_label: T(0.4, "citypop dark hiphop idol", { readable: 0.9, pro: true }),
+  pro_pop: T(0.55, "idol", { readable: 0.85, pro: true }),
+  pro_tanzaku: T(0.1, "wa ballad acoustic ambient", { readable: 0.9, vertical: true, pro: true }),
+  pro_pillar: T(0.4, "wa rock ballad", { readable: 0.85, pro: true }),
+  pro_crop: T(0.75, "rock dark wa", { hero: true, readable: 0.8, pro: true }),
+};
+export const TRAITS: Record<string, Trait> = { ...CORE, ...PRO };
 for (const [k, m] of Object.entries(MOOD_STYLES)) TRAITS[k] = T(m.intensity, m.moods.join(" "), {
   shaky: m.spec.idle === "jitter" || m.spec.idle === "flicker", hero: m.intensity >= 0.6 || m.spec.layout === "big",
   vertical: m.spec.layout === "v", wordUnit: m.spec.unit === "word", readable: m.spec.enter === "cut" || m.spec.enter === "fade" ? 0.95 : 0.85 });

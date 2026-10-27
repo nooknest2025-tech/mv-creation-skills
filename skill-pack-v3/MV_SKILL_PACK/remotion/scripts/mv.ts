@@ -145,6 +145,11 @@ export async function run(argv: string[]) {
       else log(`  ℹ️ 画像解析をスキップ（${(r.stderr || "").split("\n").filter(Boolean).pop() ?? "Pillow/numpy が必要: pip install pillow numpy"}）→ 文字は既定の位置・色。npm run doctor で確認できます`);
     } }
   publish(pub);
+  { // parts animation rig (npm run parts で作成): projects/<曲>/parts/<名前>/rig.json or input/parts/<名前>/rig.json
+    const { loadRigForRender } = await import("./parts_lib");
+    const rr = loadRigForRender(dir, inputDir, cfg, PUBLIC_PROJECT);
+    if (rr) { cfg = { ...cfg, parts: { ...(cfg.parts ?? {}), rigData: rr.rig } }; log(`  🧩 パーツアニメ: ${rr.rig.name}（${rr.rig.parts.length} パーツ${rr.issues.length ? `・要確認 ${rr.issues.length} 件` : ""}）`); rr.issues.forEach((x) => log(`     ⚠️ ${x}`)); }
+  }
   writeJson(path.join(PUBLIC_PROJECT, "song.json"), song);
   writeJson(path.join(PUBLIC_PROJECT, "mv.config.json"), { ...cfg, audioFile: `project/${pub[0].name}` });
   writeJson(path.join(PUBLIC_PROJECT, "media.json"), media);
@@ -158,6 +163,7 @@ export async function run(argv: string[]) {
   log(`\n🎬 演出: ${PRESETS[first.preset!].ja}（${first.presetWhy}）　画面: ${aspects.map((a) => ASPECTS[a]?.ja ?? a).join(" / ")}`);
   log(`🎞  構成: ${first.structureWhy}　変えるなら「ストーリー＋リップシンクで」「サビだけ歌うシーン」など`);
   for (const n of first.sectionNotes ?? []) log(`   ・${n}`);
+  if ((first as any).mographNotes?.length) { log("🎨 プロ演出（図形・色・転換・拍アクセント）: 消すなら「モーショングラフィックスなし」、昔の見た目は「プロ演出オフ」"); for (const n of (first as any).mographNotes) log(`   ・${n}`); }
   if (first.review) { log(`\n${first.review.note}\n  （プロチェック ${first.review.score}/100）`); fs.writeFileSync(path.join(dir, "director_note.md"), `${first.review.note}\n\n## セクションごとの選択理由\n${(first.sectionNotes ?? []).map((n) => `- ${n}`).join("\n")}\n\n## 構成\n- ${first.structureWhy}\n`); }
   log(`  カット ${first.shots.length} 個 / 歌詞 ${first.lines.length} 行 / 文字スタイル: ${styleSummary(first.lines) || "（歌詞なし）"}`);
   const m = loadManifest(dir, title);

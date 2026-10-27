@@ -85,7 +85,7 @@ export function resolveLines(song: Song, cfg: LyricStyleConfig = {}, shots: Shot
   const g = cfg.genre ? GENRES[cfg.genre] : undefined;
   const kw = cfg.keywordEffects === false ? {} : mergeKeywords({ ...(g?.keywords ?? {}), ...(cfg.keywords ?? {}) });
   const F = (x: string | undefined) => { if (!x) return undefined; const id = resolveFont(x); if (!id) throw new Error(`書体「${x}」が見つかりません（npm run fonts で一覧、npm run fonts:add で追加）`); return id; };
-  const plan = planLyrics(song, ranks, { genre: cfg.genre ?? null, seed: cfg.seed, variety: cfg.variety, vertOk: cfg.vertOk, accent: g?.accent });
+  const plan = planLyrics(song, ranks, { genre: cfg.genre ?? null, seed: cfg.seed, variety: cfg.variety, vertOk: cfg.vertOk, accent: g?.accent, pro: cfg.pro, prefer: cfg.prefer });
   const fontLines = Object.fromEntries(Object.entries(cfg.fontLines ?? {}).map(([k, v]) => [N(k), v]));
   const out: ResolvedLine[] = song.lines.map((L, li) => {
     const sec = sectionAt(song.sections, L.start);

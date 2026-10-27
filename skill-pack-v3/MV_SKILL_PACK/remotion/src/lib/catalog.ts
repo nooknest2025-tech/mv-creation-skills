@@ -38,6 +38,21 @@ export const CATALOG: Record<string, StyleInfo> = {
   letter_rain: { short: "文字の雨", ja: "文字の雨が降り、歌詞は上から落ちてきて着地する", energy: "mid", defaults: { density: 1.0 } },
   ui_window: { short: "ダイアログ", ja: "昔のOSのダイアログが語ごとにポップアップ", energy: "high", defaults: {} },
 };
+// pro motion styles (src/styles/pro.tsx): masked reveals, expo-out / spring easing, hierarchy, grid layout
+export const PRO_CATALOG: Record<string, StyleInfo> = {
+  pro_slide: { short: "プロ・スライド", ja: "音節ごとにマスクから滑り出る。要の語は大きく、助詞は小さな明朝。グリッド配置で対角に流れる", energy: "mid", defaults: { exit: 0.28 } },
+  pro_smash: { short: "プロ・スマッシュ", ja: "語が300%から一瞬で叩きつけられる（動く間だけブレ）。極太・詰め字・中抜き輪郭の影", energy: "high", defaults: { exit: 0.2 } },
+  pro_stretch: { short: "プロ・ストレッチ", ja: "横に300%伸びた文字がキュッと戻る。2〜3フレームずつずらして", energy: "high", defaults: { exit: 0.22 } },
+  pro_line: { short: "プロ・ライン", ja: "細い線が伸び、その裏から文字が引き出される", energy: "low", defaults: { exit: 0.35 } },
+  pro_box: { short: "プロ・ボックス", ja: "ベタの箱が走り、縮んで消えると文字が現れる", energy: "mid", defaults: { exit: 0.25 } },
+  pro_diag: { short: "プロ・斜めマスク", ja: "斜めのマスクが走って文字を切り出す。少し傾けて疾走感", energy: "mid", defaults: { exit: 0.25 } },
+  pro_label: { short: "プロ・ラベル", ja: "差し色の帯が先に伸び、文字が帯に乗って滑り込む。小さな等幅の英数字つき", energy: "mid", defaults: { exit: 0.25 } },
+  pro_pop: { short: "プロ・ポップ", ja: "色ブロックに乗った文字がバネのように弾む（オーバーシュート約1.15）", energy: "mid", defaults: { exit: 0.25 } },
+  pro_tanzaku: { short: "短冊・縦明朝", ja: "短冊の枠に縦書き明朝。上から直線的にゆっくり現れ、長く留まる", energy: "low", defaults: { exit: 0.5, hold: 0.8 } },
+  pro_pillar: { short: "縦の柱", ja: "要の語を極太の縦の柱として画面端に、全文は小さく横に", energy: "mid", defaults: { exit: 0.3 } },
+  pro_crop: { short: "巨大切れ文字", ja: "要の語を画面からはみ出す巨大な輪郭文字（形として）にし、手前に読める行を叩きつける", energy: "high", defaults: { exit: 0.22 } },
+};
+Object.assign(CATALOG, PRO_CATALOG);
 Object.assign(CATALOG, CUSTOM_CATALOG);
 export const STYLE_NAMES = Object.keys(CATALOG);
 

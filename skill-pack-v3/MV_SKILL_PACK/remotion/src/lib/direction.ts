@@ -25,7 +25,7 @@ const GENERIC: GenreFit = { moods: [], lo: 0.1, hi: 0.75, ja: "汎用" };
 // section "base" level on the arc before energy is applied
 const ARC: Record<string, number> = { intro: 0.15, verse: 0.25, pre_chorus: 0.5, chorus: 0.85, bridge: 0.35, outro: 0.15, other: 0.3 };
 
-export interface LineCtx { genre?: string | null; secType: string; energy: number; cps: number; bpm: number; text: string; isLastChorus?: boolean; vertOk?: boolean }
+export interface LineCtx { genre?: string | null; secType: string; energy: number; cps: number; bpm: number; text: string; isLastChorus?: boolean; vertOk?: boolean; pro?: boolean; prefer?: string[] }
 export interface Scored { style: string; score: number; why: string[] }
 
 export function targetIntensity(c: LineCtx): number {
@@ -59,6 +59,9 @@ export function scoreStyle(style: string, c: LineCtx): Scored {
   if (c.cps > 6.5) { s += t.wordUnit ? 0.8 : 0; s += ((t.readable ?? 0.8) - 0.8) * 3; if (t.wordUnit) why.push("言葉数が多い→語単位"); }
   if (c.cps < 3 && (t.readable ?? 0.8) >= 0.9) { s += 0.4; why.push("ゆっくり読ませる"); }
   if (c.genre === "wa" && t.vertical) { s += 0.6; why.push("和→縦書き"); }
+  // pro director: prefer styles built on the pro motion core, avoid the cheapest defaults (plain fades / centred static subtitles)
+  if (c.pro) { if (t.pro) { s += 1.2; why.push("プロの動き（マスク・イージング）"); } if (style === "simple" || style === "karaoke") s -= 1.5; }
+  if (c.prefer?.includes(style)) { s += 1.6 - c.prefer.indexOf(style) * 0.2; why.push("演出プランの推奨"); }
   return { style, score: s, why };
 }
 
@@ -66,7 +69,7 @@ export function fitSet(c: LineCtx, k = 8): Scored[] {
   return Object.keys(TRAITS).filter((s) => s in CATALOG).map((s) => scoreStyle(s, c)).filter((x) => x.score > -Infinity).sort((a, b) => b.score - a.score).slice(0, k);
 }
 
-export interface LyricPlanOpts { genre?: string | null; seed?: number; variety?: number /* 0 統一感 .. 1 変化多め */; vertOk?: boolean; accent?: Record<string, string> }
+export interface LyricPlanOpts { genre?: string | null; seed?: number; variety?: number /* 0 統一感 .. 1 変化多め */; vertOk?: boolean; accent?: Record<string, string>; pro?: boolean; prefer?: Record<string, string[]> /* section label or type -> preferred styles */ }
 export interface PlannedLine { style: string; why: string; hero: boolean }
 export interface SectionNote { label: string; type: string; styles: string[]; why: string }
 
@@ -88,7 +91,7 @@ export function planLyrics(song: Song, ranks: number[], o: LyricPlanOpts = {}): 
     const isLastChorus = sec.type === "chorus" && !secs.slice(si + 1).some((x) => x.type === "chorus");
     const dur = idx.reduce((a, { L }) => a + Math.max(0.2, L.end - L.start), 0);
     const cps = idx.reduce((a, { L }) => a + [...L.text.replace(/\s/g, "")].length, 0) / dur;
-    const ctx: LineCtx = { genre: o.genre, secType: sec.type, energy: ranks[si] ?? 0.5, cps, bpm: song.bpm, text: "", isLastChorus, vertOk: o.vertOk };
+    const ctx: LineCtx = { genre: o.genre, secType: sec.type, energy: ranks[si] ?? 0.5, cps, bpm: song.bpm, text: "", isLastChorus, vertOk: o.vertOk, pro: o.pro, prefer: o.prefer?.[sec.label] ?? o.prefer?.[sec.type] };
     const fit = fitSet(ctx, 4 + Math.round(variety * 6));
     if (!fit.length) return;
     const r = rng("lyr", seed, si, song.title);
