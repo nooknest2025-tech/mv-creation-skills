@@ -5,7 +5,7 @@ import React from "react";
  * The result is stored on the line as `edited: string[]` (and on scenes as `edited`), recomputed by the editor front-end and by server.py on save/export.
  */
 export const LYRIC_EDIT_KEYS = ["motion", "params", "font", "fill", "stroke", "accent", "scale", "y", "position", "angle", "effect", "effectOffset", "motionDuration", "entrance", "departure", "transitionDuration", "stageStyle"] as const;
-export const SCENE_EDIT_KEYS = ["stage", "camera", "cameraMove", "cameraStrength", "cameraSync", "zoom", "x", "y"] as const;
+export const SCENE_EDIT_KEYS = ["stage", "camera", "cameraMove", "cameraStrength", "cameraSync", "zoom", "x", "y", "mograph"] as const;
 /** stage-native lyric styles a custom stage offers per line (editor: 「ステージの文字スタイル」). */
 export const STAGE_STYLES: Record<string, string> = { auto: "おまかせ（元の見た目）", tate: "縦書き吹き出し", bigBehind: "後ろに大きく", band: "下の帯", pop: "ポップ（強調語を大きく）", ghost: "斜めの半透明", center: "中央の縦書き" };
 const same = (a: any, b: any) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
@@ -20,6 +20,7 @@ export function markEdited(data: any, orig: any) {
   const L = new Map<string, any>((orig.lyrics ?? []).map((l: any) => [l.id, l])), S = new Map<string, any>((orig.scenes ?? []).map((s: any) => [s.id, s]));
   for (const l of data.lyrics ?? []) { const e = editedKeys(l, baseOf(l, L), LYRIC_EDIT_KEYS); if (e.length) l.edited = e; else delete l.edited; }
   if (data.stage && typeof data.stage === "object" && Object.keys(data.stage).length && !orig.stage) data.editedStage = true; else delete data.editedStage;
+  if (data.mographEdit && typeof data.mographEdit === "object" && Object.keys(data.mographEdit).length && !same(data.mographEdit, orig.mographEdit)) data.editedMograph = true; else delete data.editedMograph;
   for (const s of data.scenes ?? []) { const e = editedKeys(s, S.get(s.id), SCENE_EDIT_KEYS); if (e.length) s.edited = e; else delete s.edited; }
   return data;
 }

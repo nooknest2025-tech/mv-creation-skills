@@ -29,8 +29,8 @@ export function writeStillsPlan(dir: string, o: Record<string, any> = {}) {
   return { plan: p, md };
 }
 export function stillsSummary(p: StillsPlan) {
-  const c = p.counts, cheapest = p.costs.filter((x) => !x.free && x.usd != null).sort((a, b) => a.usd! - b.usd!)[0];
-  return `🖼 静止画: ${c.total} 枚（キャラ ${c.character}・背景 ${c.background}・シーン ${c.scene}）／おすすめ: 無料（Grok アプリ / grok.com で手動）= 0円${cheapest ? `／有料APIなら最安 $${cheapest.usd}（${cheapest.label.replace(/^有料API: /, "")}）` : ""}`;
+  const c = p.counts;
+  return `🖼 画像: ${c.total} 枚（キャラ ${c.character}・背景 ${c.background}・シーン ${c.scene}）／Grok アプリ等で無料で作る（0円）`;
 }
 
 /** import generated images: scene_* -> input/AI生成画像 (used by npm run mv), character/bg -> project reference assets. */

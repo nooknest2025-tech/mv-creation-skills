@@ -64,6 +64,17 @@ export function latestProject() {
 
 const TASTE_EN: Record<string, string> = { anime: "Japanese anime style, clean cel shading", photo: "photorealistic cinematic film still", illust: "soft painted illustration, watercolor texture", graphic: "flat vector graphic shapes, minimal", own: "" };
 export const withTaste = (subject: string | undefined, taste?: string) => [subject, taste ? TASTE_EN[taste] : ""].filter(Boolean).join(", ") || undefined;
+const ATTACH_JA: Record<string, string> = { start_frame: "開始画（first frame）", end_frame: "終了画", character_front: "キャラ参照", character_side: "キャラ参照", character_back: "キャラ参照", expression: "キャラ参照（表情）", outfit: "キャラ参照（衣装）", location: "背景参照", style: "スタイル参照", prop: "小道具参照", pose: "ポーズ参照", keyframe: "開始画（first frame）" };
+/** what to upload with a scene's prompt in the app / MCP: role + file path (the scene's own image is the first frame). */
+export function attachFor(refs: { role: string; file: string }[], sceneImage: string | null, dir: string): { role: string; file: string }[] {
+  const out: { role: string; file: string }[] = [];
+  const start = refs.find((a) => a.role === "start_frame" || a.role === "keyframe");
+  if (start) out.push({ role: ATTACH_JA.start_frame, file: path.resolve(dir, start.file) }); else if (sceneImage) out.push({ role: ATTACH_JA.start_frame, file: sceneImage });
+  for (const a of refs) if (!["start_frame", "end_frame", "keyframe", "lipsync_audio", "lipsync_face"].includes(a.role) && ATTACH_JA[a.role]) out.push({ role: ATTACH_JA[a.role], file: path.resolve(dir, a.file) });
+  const end = refs.find((a) => a.role === "end_frame"); if (end) out.push({ role: ATTACH_JA.end_frame, file: path.resolve(dir, end.file) });
+  return out.slice(0, 7);
+}
+export const attachText = (att: { role: string; file: string }[] = []) => att.length ? `${att.length}枚: ` + att.map((a) => `${a.role} = ${a.file}`).join(" / ") : "なし（プロンプトだけ）";
 export function makePlan(dir: string, o: Record<string, any>) {
   const song = readJson<Song>(path.join(dir, "song.json"), null as any), cfg = loadConfig(dir);
   const props = buildProps(song, cfg, readJson(path.join(dir, "media.json"), []) as any);
@@ -118,7 +129,7 @@ export function makePlan(dir: string, o: Record<string, any>) {
     }
     const sec = req.seconds, price = priceOf(model, res);
     const ref = s.kind === "image" && s.src ? path.join(PUBLIC_PROJECT, "..", s.src) : null;
-    return { audioCut, ref, aspect, shot: s.id, section: s.section, start: s.start, end: s.end, sec, model: model.id, why, res, takes, price_per_sec: price, cost: estimate(sec, takes, price), prompt: req.prompt, negative_prompt: req.negative_prompt, params: req.params, refs: { first: req.refs.first?.file, last: req.refs.last?.file, keyframes: req.refs.keyframes.map((a) => a.file), refs: req.refs.refs.map((a) => ({ file: a.file, role: a.role })), audio: req.refs.audio?.file, composite: req.refs.composite?.map((a) => a.file) }, dropped: req.refs.dropped.map((d) => `${ROLE_JA[d.a.role]}: ${d.why}`), warnings: [...req.warnings, ...req.refs.notes], spec: sp, verified: model.verified, source: model.source };
+    return { audioCut, ref, aspect, attach: attachFor(refs as any, ref, dir), shot: s.id, section: s.section, start: s.start, end: s.end, sec, model: model.id, why, res, takes, price_per_sec: price, cost: estimate(sec, takes, price), prompt: req.prompt, negative_prompt: req.negative_prompt, params: req.params, refs: { first: req.refs.first?.file, last: req.refs.last?.file, keyframes: req.refs.keyframes.map((a) => a.file), refs: req.refs.refs.map((a) => ({ file: a.file, role: a.role })), audio: req.refs.audio?.file, composite: req.refs.composite?.map((a) => a.file) }, dropped: req.refs.dropped.map((d) => `${ROLE_JA[d.a.role]}: ${d.why}`), warnings: [...req.warnings, ...req.refs.notes], spec: sp, verified: model.verified, source: model.source };
   });
   const imgT = readJson<any>(path.join(dir, "image_tasks.json"), null);
   const imageUSD = imgT?.total_usd ?? 0;
@@ -147,7 +158,9 @@ export function makePlan(dir: string, o: Record<string, any>) {
   const tasks = { howto: "For each task call your video-generation MCP tool (text2video, or img2video when reference_image is set), wait for the result, then run: npm run gen -- import <file-or-url> --shot <shot> --from <provider>. Never exceed the user's confirmed budget.",
     tasks: rows.map((r: any) => ({ audio_file: r.audioCut?.attach && r.audioCut.file ? path.join(dir, r.audioCut.file) : null, post_sync_audio: r.audioCut?.file ? path.join(dir, r.audioCut.file) : null, negative_prompt: r.negative_prompt ?? null, params: r.params, refs: r.refs, shot: r.shot, seconds: r.sec, aspect: r.aspect, resolution: res, takes, prompt: r.prompt, reference_image: r.ref && fs.existsSync(r.ref) ? path.resolve(r.ref) : null, suggested_model: r.model, mcp_model: (models.find((m) => m.id === r.model) as any)?.mcp_model ?? null, estimated_usd: r.cost, save_to: path.join(GEN_DIR, "takes", r.shot) })) };
   writeJson(path.join(dir, "gen_tasks.json"), tasks);
-  fs.writeFileSync(path.join(dir, "prompts.csv"), "\uFEFFshot,section,seconds,model,prompt\n" + rows.map((r) => [r.shot, r.section, r.sec, r.model, `"${r.prompt.replace(/"/g, '""')}"`].join(",")).join("\n"));
+  { // keep the user's prompt edits / skips (use=スキップ) when the plan is rebuilt
+    const prev = readPromptEdits(dir);
+    fs.writeFileSync(path.join(dir, "prompts.csv"), "\uFEFFshot,section,seconds,use,prompt,attach\n" + rows.map((r: any) => { const e = prev[r.shot]; return [r.shot, r.section, r.sec, e?.skip ? "スキップ" : "使う", `"${(e?.prompt ?? r.prompt).replace(/"/g, '""')}"`, `"${attachText(r.attach).replace(/"/g, '""')}"`].join(","); }).join("\n")); }
   return { plan, md };
 }
 
@@ -233,9 +246,39 @@ export const ADAPTERS: Adapter[] = [{
   buildRequest: (r, imageUrl) => ({ url: "https://api.x.ai/v1/videos/generations", body: { model: r.model, prompt: r.prompt, duration: r.sec, resolution: r.res, ...(imageUrl ? { image_url: imageUrl } : {}) } }),
 }];
 
+/** prompts.csv edits: use = スキップ skips the scene, the prompt column replaces the generated prompt. */
+export function readPromptEdits(dir: string): Record<string, { skip: boolean; prompt: string }> {
+  const f = path.join(dir, "prompts.csv"); if (!fs.existsSync(f)) return {};
+  const txt = fs.readFileSync(f, "utf8").replace(/^\uFEFF/, ""), rows: string[][] = []; let cur: string[] = [], cell = "", q = false;
+  for (let i = 0; i < txt.length; i++) { const c = txt[i];
+    if (q) { if (c === '"' && txt[i + 1] === '"') { cell += '"'; i++; } else if (c === '"') q = false; else cell += c; }
+    else if (c === '"') q = true; else if (c === ",") { cur.push(cell); cell = ""; } else if (c === "\n" || c === "\r") { if (c === "\r" && txt[i + 1] === "\n") i++; cur.push(cell); rows.push(cur); cur = []; cell = ""; } else cell += c; }
+  if (cell || cur.length) { cur.push(cell); rows.push(cur); }
+  const head = rows.shift() ?? [], iS = head.indexOf("shot"), iU = head.indexOf("use"), iP = head.indexOf("prompt");
+  return Object.fromEntries(rows.filter((r) => r[iS]).map((r) => [r[iS], { skip: iU >= 0 && /スキップ|skip|いいえ|no/i.test(r[iU] ?? ""), prompt: r[iP] ?? "" }]));
+}
+/** show every scene's exact prompt; apply prompts.csv edits; interactive: per scene Enter=使う / s=スキップ / e=書き換え. */
+export async function reviewPrompts(dir: string, rows: any[], ask?: (q: string) => Promise<string>) {
+  const ed = readPromptEdits(dir), out: any[] = [];
+  log("\n📝 シーンごとのプロンプト（prompts.csv で書き換え・スキップできます）");
+  for (const r0 of rows) {
+    const e = ed[r0.shot], r = { ...r0, prompt: e?.prompt || r0.prompt };
+    if (e?.skip) { log(`  ⏭ ${r.shot}: スキップ（prompts.csv）`); continue; }
+    log(`\n  ■ ${r.shot}（${r.section ?? ""} ${r.sec}秒）\n  プロンプト: ${r.prompt}\n  添付: ${attachText(r.attach)}`);
+    if (ask) { const a = (await ask("  [Enter=使う / s=スキップ / e=書き換え] ")).trim();
+      if (/^s/i.test(a)) { log("  → スキップ"); continue; }
+      if (/^e/i.test(a)) { const np = (await ask("  新しいプロンプト: ")).trim(); if (np) r.prompt = np; } }
+    out.push(r);
+  }
+  return out;
+}
 export async function runPlan(dir: string, o: Record<string, any>) {
-  const plan = readJson<any>(path.join(dir, "gen_plan.json"), null);
-  if (!plan) throw new UserError("生成プランがありません", "先に npm run gen -- plan を実行して、内容と金額を確認してください。");
+  const plan0 = readJson<any>(path.join(dir, "gen_plan.json"), null);
+  if (!plan0) throw new UserError("生成プランがありません", "先に npm run gen -- plan を実行して、内容と金額を確認してください。");
+  const tty = !!process.stdin.isTTY && o.confirm == null && !o.yes;
+  const ask0 = async (q: string) => { const rl = (await import("node:readline/promises")).default.createInterface({ input: process.stdin, output: process.stdout }); const a = await rl.question(q); rl.close(); return a; };
+  const plan = { ...plan0, rows: await reviewPrompts(dir, plan0.rows, tty ? ask0 : undefined) };
+  if (!plan.rows.length) { log("🛑 生成するシーンがありません（全部スキップ）"); return { ran: false, reason: "all skipped" }; }
   const cap = Number(o.cap ?? loadConfig(dir).gen?.capUSD ?? 20);
   const est = estimateFor(dir, plan.rows);
   log(estimateMd(est));
@@ -247,7 +290,7 @@ export async function runPlan(dir: string, o: Record<string, any>) {
   if (!d.go) { log("🛑 " + d.reason); return { ran: false, reason: d.reason }; }
   const pending = loadLib(dir).assets.filter((a) => a.approved === false);
   if (pending.length) throw new UserError(`未承認の参照素材が ${pending.length} 件あります`, "npm run gallery で確認して承認（または却下）してから動画を生成してください。");
-  for (const r of plan.rows) {
+  for (const r0 of plan.rows) { const r = r0.prompt !== plan0.rows.find((x: any) => x.shot === r0.shot)?.prompt ? { ...r0, params: { ...(r0.params ?? {}), prompt: r0.prompt } } : r0;
     if (est.lines.find((l) => l.shot === r.shot)?.mode === "plan") { log(`📱 ${r.shot}: サブスクのクレジットで公式アプリ/Webから生成 → npm run gen -- import で取り込み`); continue; }
     const ad = ADAPTERS.find((a) => a.id.test(r.model));
     if (!ad) { log(`⏭ ${r.shot}: ${r.model} は自動実行に未対応 → prompts.csv で手動生成してください`); continue; }

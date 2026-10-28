@@ -31,6 +31,7 @@
     "timing": "tsx scripts/timing.ts",
     "timeline": "tsx scripts/timing.ts --png",
     "gen": "tsx scripts/gen.ts",
+    "made": "tsx scripts/made.ts",
     "models": "tsx scripts/gen.ts models",
     "gallery": "tsx scripts/gen.ts gallery",
     "sample": "tsx scripts/mv.ts --sample",

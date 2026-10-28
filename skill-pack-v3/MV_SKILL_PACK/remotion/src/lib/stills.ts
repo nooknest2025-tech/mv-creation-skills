@@ -57,13 +57,18 @@ export function stillsMd(p: StillsPlan, song: string): string {
     `**作る画像: 合計 ${c.total} 枚**（キャラクターシート ${c.character} 枚 → 背景 ${c.background} 枚 → シーン画像 ${c.scene} 枚）／テイスト: ${TASTE_JA[p.taste] ?? p.taste}／シーンの細かさ: ${({ slow: "ゆったり", normal: "標準", fast: "テンポよく" } as any)[p.density]}`, "",
     `**おすすめの方法: 無料（Grok アプリ / grok.com で手動生成）→ 費用 0円**`, "",
     "## 方法と費用（合計）", "| 方法 | 1枚 | 合計 | メモ |", "|---|---|---|---|",
-    ...p.costs.map((x) => `| ${x.label} | ${x.each == null ? "未確認" : x.each === 0 ? "0円" : "$" + x.each} | ${x.usd == null ? "未確認" : x.usd === 0 ? "**0円**" : "**$" + x.usd + "**"} | ${x.note} |`), "",
-    ...(paid.length ? [`有料APIで作る場合は、金額を確認したうえで \`npm run gen -- stills run --image <方法のID> --confirm <合計金額>\` を実行します（金額が一致しないと実行しません）。`, ""] : []),
+    ...p.costs.filter((x) => x.free).map((x) => `| ${x.label} | ${x.each == null ? "未確認" : x.each === 0 ? "0円" : "$" + x.each} | ${x.usd == null ? "未確認" : x.usd === 0 ? "**0円**" : "**$" + x.usd + "**"} | ${x.note} |`), "",
+    ...(paid.length ? ["MCP・画像生成APIにつないで作る場合だけ有料です（`npm run gen -- stills run` が実行の直前に見積もりを見せて確認します）。", ""] : []),
     "## 無料で作る手順", "1. `stills_prompts.csv` を開き、上から順にプロンプトを Grok アプリ / grok.com に貼って画像を作る（キャラクターシート → 背景 → シーン）",
     "2. シーン画像を作るときは、キャラクターシートと背景の画像も一緒に添付すると、顔や服がそろいます",
-    "3. できた画像を `gen/stills/<曲名>/` に、表のファイル名（例 scene_001.png）で保存（名前が違っても、作った順に並べればOK）",
-    "4. `npm run gen -- stills import` で取り込み → `npm run mv` で画像を使ったMVになります", "",
-    "## 画像リスト（この順で作ってください）", "| ファイル名 | 内容 | 歌詞 |", "|---|---|---|",
-    ...p.tasks.map((t) => `| ${t.file} | ${t.title} | ${t.lyric ?? ""} |`), ""].join("\n");
+    "3. できた画像を `input/made/` に入れる（表のファイル名 例 scene_001.png にすると確実。名前が違っても作った順に並べればOK）",
+    "4. `npm run made`（または「作ったの入れた」）で取り込んで作り直し → 画像を使ったMVになります", "",
+    "## 画像リスト（この順で作ってください）", "| ファイル名 | 内容 | 添付する画像（役割 = 場所） | プロンプト |", "|---|---|---|---|",
+    ...p.tasks.map((t) => `| ${t.file} | ${t.title} | ${stillAttachText(t)} | ${t.prompt} |`), ""].join("\n");
 }
-export const stillsCsv = (p: StillsPlan) => "\uFEFF順番,ファイル名,内容,添付する画像,プロンプト\n" + p.tasks.map((t, i) => [i + 1, t.file, t.title, t.refs.join(" + "), `"${t.prompt.replace(/"/g, '""')}"`].join(",")).join("\n");
+/** what to attach in the app for a still: role + where the earlier images were saved (input/made/). */
+export const stillAttach = (t: StillTask, inbox = "input/made") => t.refs.map((f) => ({ role: /^character/.test(f) ? "キャラ参照" : /^bg_/.test(f) ? "背景参照" : "スタイル参照", file: `${inbox}/${f}` }));
+export const stillAttachText = (t: StillTask, inbox?: string) => { const a = stillAttach(t, inbox); return a.length ? `${a.length}枚: ` + a.map((x) => `${x.role} = ${x.file}`).join(" / ") : "なし（プロンプトだけ）"; };
+export const stillsCsv = (p: StillsPlan) => "\uFEFF順番,ファイル名,内容,添付する画像（役割 = 場所）,プロンプト\n" + p.tasks.map((t, i) => [i + 1, t.file, t.title, `"${stillAttachText(t)}"`, `"${t.prompt.replace(/"/g, '""')}"`].join(",")).join("\n");
+/** on-screen list: every image's exact prompt + what to attach. */
+export const stillsPromptList = (p: StillsPlan) => p.tasks.map((t, i) => `  ■ ${i + 1}. ${t.file}（${t.title}）\n    プロンプト: ${t.prompt}\n    添付: ${stillAttachText(t)}`).join("\n");

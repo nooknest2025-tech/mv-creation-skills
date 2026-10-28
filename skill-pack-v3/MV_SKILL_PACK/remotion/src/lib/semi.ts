@@ -3,12 +3,13 @@
 import { MODE_IDS, SHOW_MODES, composeCombo, moodOf, proposeCombo, type Mood } from "./mograph";
 import { PARTS_PRESETS } from "./rig";
 import { STILL_TASTES, TASTE_JA, SEC_PER_IMAGE } from "./stills";
+import { allowedModes, genreOptions, type Q2Key, type Material } from "./startFlow";
 const PICTURE_MODES = ["story", "lipsync", "dance", "live", "tachie"];
 const isStillTaste = (t?: string) => !!t && (STILL_TASTES as readonly string[]).includes(t);
 
 export interface SemiOpt { key: string; label: string; say: string; why: string }
 export interface SemiQ { id: string; title: string; multi?: boolean; options: SemiOpt[]; recommend: string[] }
-export interface SemiCtx { genre?: string | null; bpm?: number; nImages?: number; faceRatio?: number; duration?: number; cuts?: Record<string, number>; videoCost?: Record<string, string>; hasChar?: boolean /* character material (PSD / parts / 立ち絵) found */ }
+export interface SemiCtx { genre?: string | null; bpm?: number; nImages?: number; faceRatio?: number; duration?: number; cuts?: Record<string, number>; videoCost?: Record<string, string>; hasChar?: boolean /* character material (PSD / parts / 立ち絵) found */; flow?: { q2: Q2Key; m: Material } /* start flow v2: only offer what Q1/Q2 allow */ }
 
 export const TASTES: SemiOpt[] = [
   { key: "anime", label: "アニメ", say: "画像はアニメ調で", why: "キャラクターの表情が伝わりやすい。目パチ・口パク・パーツアニメと相性◎" },
@@ -27,16 +28,34 @@ export const LYRIC_LOOKS: SemiOpt[] = [
 
 /** the semi-auto questions with recommended defaults for this song. */
 export function semiQuestions(c: SemiCtx = {}): SemiQ[] {
+  if (c.flow) return flowQuestions(c, baseQuestions(c));
+  return baseQuestions(c);
+}
+const FLOW_TASTE: Record<Q2Key, string> = { textpv: "graphic", images: "own", animate: "own", videos: "own", tachie: "own", stills: "anime" };
+/** start flow v2: drop / narrow the questions Q1・Q2 already answered, add ジャンル (folded in from the old menu). */
+function flowQuestions(c: SemiCtx, qs: SemiQ[]): SemiQ[] {
+  const { q2, m } = c.flow!, allow = new Set(allowedModes(q2, m)), out: SemiQ[] = [];
+  for (const q of qs) {
+    if (q.id === "show") { const options = q.options.filter((o) => o.key === "mix" || allow.has(o.key)); out.push({ ...q, title: q2 === "textpv" ? "見せ方（文字と図形。複数OK: 例 2,3）" : "見せ方（複数OK: 例 1,2 = 組み合わせ）", options });
+      out.push({ id: "genre", title: "ジャンル（演出の型）", options: genreOptions(q2).map((g) => ({ key: g.key, label: g.label, say: "", why: g.why })), recommend: ["auto"] }); }
+    else if (q.id === "taste") { if (q2 === "stills") out.push({ ...q, title: "作る画像のテイスト", options: q.options.filter((o) => ["anime", "photo", "illust"].includes(o.key)), recommend: ["anime"] }); }
+    else if (q.id === "video") { if (q2 === "images" || q2 === "stills") out.push(q); }
+    else if (q.id === "parts") { if (m.nChars) out.push({ ...q, recommend: [q2 === "tachie" ? "tachie" : "auto"] }); }
+    else out.push(q);
+  }
+  return out;
+}
+function baseQuestions(c: SemiCtx = {}): SemiQ[] {
   const mood: Mood = moodOf(c.genre, c.bpm ?? 120);
   const n = c.nImages ?? 0;
-  const rec = proposeCombo(mood, c.faceRatio ?? 0, n, !!c.hasChar);
+  const rec = proposeCombo(mood, c.faceRatio ?? 0, n, c.flow ? c.flow.q2 === "tachie" : !!c.hasChar);
   const modes: SemiOpt[] = MODE_IDS.map((id) => ({ key: id, label: SHOW_MODES[id].ja, say: "", why: SHOW_MODES[id].desc }));
   modes.push({ key: "mix", label: "ミックス（おすすめの組み合わせ）", say: "", why: n > 0 ? `${rec.map((m) => SHOW_MODES[m].ja).join("＋")}` : `${rec.map((m) => SHOW_MODES[m].ja).join("＋")}（次の質問で画像テイストをアニメ・実写風・イラストにすると、画像を作って「物語＋リリックモーション」にします）` });
   const cut = (k: string) => (c.cuts?.[k] !== undefined ? `（約${c.cuts[k]}カット）` : "");
   const vc = (k: string) => (c.videoCost?.[k] ? `（目安 ${c.videoCost[k]}）` : "");
   return [
     { id: "show", title: "見せ方（複数OK: 例 3,5 = ダンス＋リリックモーション）", multi: true, options: modes, recommend: ["mix"] },
-    { id: "taste", title: "画像テイスト", options: TASTES, recommend: [n > 0 ? "own" : mood === "rock" || mood === "electronic" ? "graphic" : "anime"] },
+    { id: "taste", title: "画像テイスト", options: TASTES, recommend: [n > 0 ? "own" : "graphic"] }, // no images: free 文字PV by default; picture generation only when chosen
     { id: "density", title: "シーンの細かさ", options: [
       { key: "slow", label: `ゆったり${cut("slow")}`, say: "シーンはゆったり", why: "1枚を長く見せる。バラード向き" },
       { key: "normal", label: `標準${cut("normal")}`, say: "", why: "曲調に合わせてプロが決める" },
@@ -61,14 +80,16 @@ export function parsePick(input: string, q: SemiQ): string[] {
   return keys.length ? (q.multi ? keys : keys.slice(0, 1)) : q.recommend;
 }
 /** answers -> instruction text (applyInstruction) + plan lines to show before building. */
-export function semiToPlan(ans: Record<string, string[]>, c: SemiCtx = {}): { say: string[]; plan: string[]; combo: string[]; warnings: string[] } {
+export function semiToPlan(ans: Record<string, string[]>, c: SemiCtx = {}): { say: string[]; plan: string[]; combo: string[]; warnings: string[]; args: string[] } {
   const qs = semiQuestions(c), say: string[] = [], plan: string[] = [], warnings: string[] = [];
-  const taste = (ans.taste ?? [])[0] ?? semiQuestions(c)[1].recommend[0], n = c.nImages ?? 0, isMix = (ans.show ?? ["mix"]).includes("mix");
+  const args: string[] = [];
+  const taste = (ans.taste ?? [])[0] ?? qs.find((q) => q.id === "taste")?.recommend[0] ?? (c.flow ? FLOW_TASTE[c.flow.q2] : "graphic"), n = c.nImages ?? 0, isMix = (ans.show ?? ["mix"]).includes("mix");
   const mood = moodOf(c.genre, c.bpm ?? 120);
-  let combo = (ans.show ?? ["mix"]).includes("mix") ? proposeCombo(mood, c.faceRatio ?? 0, c.nImages ?? 0, !!c.hasChar) : ans.show!.filter((k) => SHOW_MODES[k]);
-  if ((ans.parts ?? (c.hasChar ? ["tachie"] : []))[0] === "tachie" && !combo.includes("tachie")) combo = ["tachie", ...combo.filter((m) => !(isMix && PICTURE_MODES.includes(m)))];
+  let combo = (ans.show ?? ["mix"]).includes("mix") ? proposeCombo(mood, c.faceRatio ?? 0, c.nImages ?? 0, c.flow ? c.flow.q2 === "tachie" : !!c.hasChar) : ans.show!.filter((k) => SHOW_MODES[k]);
+  if (c.flow) { const allow = new Set(allowedModes(c.flow.q2, c.flow.m)); combo = combo.filter((m) => allow.has(m)); if (!combo.length) combo = c.flow.q2 === "tachie" ? ["tachie", "lyric_motion"] : ["typography", "mograph"]; }
+  if ((ans.parts ?? qs.find((q) => q.id === "parts")?.recommend ?? [])[0] === "tachie" && !combo.includes("tachie")) combo = ["tachie", ...combo.filter((m) => !(isMix && PICTURE_MODES.includes(m)))];
   if (combo.includes("tachie") && c.hasChar === false) warnings.push(TACHIE_MATERIAL_HELP);
-  if ((ans.taste ?? [])[0] === "graphic" && !combo.includes("mograph")) combo = [...combo.filter((m) => SHOW_MODES[m].kind === "text" || m === "tachie"), "mograph"];
+  if ((ans.taste?.[0] ?? (c.flow ? FLOW_TASTE[c.flow.q2] : null)) === "graphic" && !combo.includes("mograph")) combo = [...combo.filter((m) => SHOW_MODES[m].kind === "text" || m === "tachie"), "mograph"];
   // picture tastes need pictures: mix -> story + lyric motion (images are generated when input has none)
   if (isMix && isStillTaste(taste) && !combo.some((m) => PICTURE_MODES.includes(m))) combo = ["story", "lyric_motion", ...combo.filter((m) => m === "typography")];
   if (!isMix && isStillTaste(taste) && !combo.some((m) => PICTURE_MODES.includes(m))) warnings.push(`画像テイスト「${TASTE_JA[taste]}」を選びましたが、見せ方が文字・図形だけなので画像が使われません。→ 見せ方に「物語」を足す（例: 「物語＋リリックモーションで」）か、テイストを「図形中心」にしてください。`);
@@ -80,6 +101,7 @@ export function semiToPlan(ans: Record<string, string[]>, c: SemiCtx = {}): { sa
   for (const q of qs.slice(1)) {
     const k = (ans[q.id] ?? q.recommend)[0], o = q.options.find((x) => x.key === k) ?? q.options[0];
     if (o.say && !(q.id === "taste" && k === "graphic")) say.push(o.say);
+    if (q.id === "genre" && k !== "auto") args.push("--preset", k);
     plan.push(`${q.title.replace(/（.*$/, "")}: ${o.label}${ans[q.id] ? "" : "（おすすめ）"} — ${o.why}`);
   }
   if (isStillTaste(taste) && n === 0 && combo.some((m) => PICTURE_MODES.includes(m))) {
@@ -87,5 +109,5 @@ export function semiToPlan(ans: Record<string, string[]>, c: SemiCtx = {}): { sa
     plan.push(`画像: input に画像がないため、${TASTE_JA[taste]}の静止画${scenes ? `（キャラクターシート1枚＋背景数枚＋シーン約${scenes}枚）` : ""}を作る計画を自動で用意します。無料（Grok アプリ等で手動）なら0円。npm run gen -- stills で枚数と費用を確認できます`);
   }
   plan.push("選ばなかった項目は、曲調・セクション・素材からプロの組み合わせを自動で決めます（直線フェードや中央固定の字幕は使いません）。");
-  return { say, plan, combo, warnings };
+  return { say, plan, combo, warnings, args };
 }

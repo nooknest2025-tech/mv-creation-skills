@@ -1,62 +1,122 @@
-// npm run start : やさしい対話ウィザード（おまかせ / 半自動 / ジャンル / こだわり）。答えると mv.config.json を作って npm run mv を実行。
+// npm run start : やさしい対話ウィザード（start flow v2）。
+//   Q1 何がありますか？（input フォルダから自動で選択済み）→ Q2 映像はどうする？（Q1 に合う選択肢だけ）
+//   → Q3 ここから先は？（おまかせ / 半自動 / こだわり）→ 画面の形 → 確認画面 → Enter で開始。
+// 1画面1問・Enter = おすすめ。答えから --say（自然文）と CLI フラグを作って npm run mv と同じ run() を呼ぶ。有料APIは呼ばない。
 import readline from "node:readline/promises";
-import { INPUT_DIR, PACK_DIR, detectInput, fail, fs, log, path } from "./common";
-import { PRESETS, PRESET_IDS } from "../src/lib/presets";
+import YAML from "yaml";
+import { INPUT_DIR, PACK_DIR, analyzeAudio, autoSections, detectInput, fail, fs, log, path } from "./common";
+import { PRESETS } from "../src/lib/presets";
 import { ASPECTS } from "../src/lib/config";
 import { applyInstruction } from "../src/lib/nl";
 import { run } from "./mv";
 import { TACHIE_OPTION, VARIETY_OPTIONS, lyricOptions, structureOptions, type Option } from "../src/lib/options";
 import { findCharacterMaterial } from "./tachie_project";
-import { TACHIE_MATERIAL_HELP } from "../src/lib/semi";
-import { MODE_IDS, SHOW_MODES, composeCombo } from "../src/lib/mograph";
-import { parsePick, semiQuestions, semiToPlan, type SemiCtx } from "../src/lib/semi";
-import { analyzeAudio, autoSections } from "./common";
-import { estimateCutsFor, videoCostHint } from "./wizard_lib";
+import { TACHIE_MATERIAL_HELP, parsePick, semiQuestions, semiToPlan, type SemiCtx } from "../src/lib/semi";
+import { SHOW_MODES, composeCombo } from "../src/lib/mograph";
+import { planStills } from "../src/lib/stills";
+import { animEstimate, estimateCutsFor } from "./wizard_lib";
+import { ANIM_METHODS, ANIM_SCOPES, animArgs, type AnimMethod, type AnimScope } from "../src/lib/startFlow";
+import { Q1_OPTS, Q3_DEFAULT, Q3_OPTS, TEXT_STRUCTURES, allowedModes, allowedPresets, checkQ1, confirmLines, detectQ1, hasPictures, materialLine, q2Options, q2Plan, type Material, type Q1Key, type Q2Key, type Q3Key } from "../src/lib/startFlow";
+
+const ASPECT_OPTS = [["16:9", "横長 16:9（YouTube）"], ["9:16", "縦長 9:16（ショート/TikTok/リール）"], ["1:1", "正方形 1:1"], ["4:5", "4:5（Instagram）"], ["all", "全部"]] as const;
 
 async function main() {
-  // Piped answers (Codex / tests: printf "1\n\n" | npm run start): readline drops lines that arrive before
+  // Piped answers (Codex / tests: printf "\n\n\n" | npm run start): readline drops lines that arrive before
   // a question is asked, so read them all first and answer from the queue.
   const piped = !process.stdin.isTTY ? (await new Promise<string>((ok) => { let b = ""; process.stdin.setEncoding("utf8"); process.stdin.on("data", (c) => (b += c)); process.stdin.on("end", () => ok(b)); })).split(/\r?\n/) : null;
   const rl = piped ? { question: async (s: string) => { process.stdout.write(s); const a = piped.shift() ?? ""; process.stdout.write(a + "\n"); return a; }, close: () => {} } : readline.createInterface({ input: process.stdin, output: process.stdout });
-  const q = async (s: string, def = "") => ((await rl.question(s)).trim() || def);
-  log("\n🎬 MVメーカーへようこそ！ いくつか質問します（Enter だけで「おすすめ」を選べます）\n");
+  const q = async (s: string, def = "") => ((await rl.question(s)).trim().normalize("NFKC") || def);
+  /** one numbered choice; Enter = the recommended (first unless rec given). */
+  const choose = async <K extends string>(title: string, opts: { key: K; label: string; why: string }[], rec: K = opts[0].key, note?: string): Promise<K> => {
+    log(`\n${title}`); if (note) log(`  ${note}`);
+    opts.forEach((o, i) => log(`  ${i + 1}) ${o.label}${o.key === rec ? " ★おすすめ" : ""} … ${o.why}`));
+    const ri = opts.findIndex((o) => o.key === rec) + 1;
+    const n = Number(await q(`  番号 [Enter=${ri}]: `, String(ri)));
+    return opts[n - 1]?.key ?? rec;
+  };
+
+  log("\n🎬 MVメーカーへようこそ！ 1問ずつ聞きます（Enter だけで「おすすめ」を選べます）");
   let input = process.env.MVPACK_INPUT ? path.resolve(process.env.MVPACK_INPUT) : INPUT_DIR;
   let det = fs.existsSync(input) ? detectInput(input) : null;
   if (!det?.audio) {
-    log(`📂 input フォルダに曲が見つかりません: ${input}`);
+    log(`\n📂 input フォルダに曲が見つかりません: ${input}`);
     const a = await q("  サンプル素材で試してみますか？ [Y/n] ", "y");
     if (a.toLowerCase().startsWith("n")) { log(`\n👉 ${input} に曲（mp3/wav）・歌詞（JSON/SRT/LRC/txt。なくてもOK）・画像や動画（なくてもOK）を入れて、もう一度 start.bat を実行してください。`); rl.close(); return; }
     input = path.join(PACK_DIR, "input_sample"); det = detectInput(input);
   }
-  log(`\n✅ 曲: ${path.basename(det.audio!)} / 歌詞: ${det.lyrics ? path.basename(det.lyrics) : "なし（自動で書き起こし）"} / 画像 ${det.images.length} 枚 / 動画 ${det.videos.length} 本`);
   const chars = findCharacterMaterial(input);
-  if (chars.length) log(`🧍 キャラ素材: ${chars.map((c) => c.name).join("・")}（立ち絵モーションMVに使えます）`);
-  const noCharWarn = (ids: string[] | null) => { if (ids?.includes("tachie") && !chars.length) log(`  ⚠️ ${TACHIE_MATERIAL_HELP.replace(/\n/g, "\n     ")}`); };
-  log("\nQ1. どう作りますか？\n  1) おまかせ … キャラ素材（input/parts・input/tachie）があれば立ち絵＋リリックモーション、なければ曲と画像から自動で決める\n  2) 半自動（既定・おすすめ） … 見せ方（立ち絵を含む8種。組み合わせOK: 立ち絵＋タイポグラフィ など）・画像テイスト・シーンの細かさ・動画化・歌詞演出・キャラの動きの6問。Enter でおすすめ\n  3) ジャンルを選ぶ … ストーリー／ダンス／リップシンク／ライブ／ボカロ／ファーストテイク風から選ぶ。素材があれば立ち絵にするかも聞く\n  4) こだわり … 決めることごとにおすすめ2〜3案を理由付きで比較（立ち絵も比較候補に入る）");
-  const m0 = await q("  番号 [2]: ", "2");
-  const mode = ({ "1": "1", "2": "semi", "3": "2", "4": "3" } as Record<string, string>)[m0] ?? "semi";
-  const args: string[] = ["--input", input];
-  // 見せ方 (multi-select, combinable) - asked in every mode; semi-auto asks it inside its own question list
-  const pickModes = async (title: string): Promise<string[] | null> => {
-    log(`\n${title}（複数OK: 例 3,5 = ダンス＋リリックモーション / Enter = おまかせ）`);
-    MODE_IDS.forEach((id, i) => log(`  ${i + 1}) ${SHOW_MODES[id].ja} … ${SHOW_MODES[id].desc}`));
-    const a = (await q("  番号 [おまかせ]: ")).normalize("NFKC");
-    const ids = [...new Set(a.split(/[,+、\s]+/).map(Number).filter((n) => n >= 1 && n <= MODE_IDS.length).map((n) => MODE_IDS[n - 1]))];
-    if (!ids.length) return null;
-    noCharWarn(ids); const c = composeCombo(ids); log(`  → ${c.hybrid.ja}（セクションごとの配分）`); c.notes.forEach((n) => log(`     ${n}`));
-    return ids;
-  };
-  const sayParts: string[] = [];
-  if (mode === "1") {
-    if (chars.length) log("\n  キャラ素材があるので、おまかせは「立ち絵モーション＋リリックモーション」で作ります（ほかの見せ方なら番号で）");
-    const m = await pickModes("Q1b. 見せ方を指定しますか？");
-    if (m) sayParts.push(`${m.map((x) => SHOW_MODES[x].ja).join("＋")}で`); else if (chars.length) sayParts.push("立ち絵モーション＋リリックモーションで");
+  const m: Material = { audio: !!det.audio, lyrics: !!det.lyrics, nImages: det.images.length, nVideos: det.videos.length, nChars: chars.length };
+  log(`\n🔎 見つかった素材: ${materialLine(m)}`);
+  log(`   曲: ${path.basename(det.audio!)}${det.lyrics ? ` / 歌詞: ${path.basename(det.lyrics)}` : ""}${chars.length ? ` / キャラ: ${chars.map((c) => c.name).join("・")}` : ""}`);
+
+  // ---- Q1 ----
+  const detected = detectQ1(m);
+  const q1pick = await choose<Q1Key>("Q1. 何がありますか？（見つかった素材から選んであります）", Q1_OPTS, detected);
+  const c1 = checkQ1(q1pick, m); if (c1.warn) log(`  ⚠️ ${c1.warn}`);
+  const q1 = c1.q1;
+
+  // song analysis (free, local) for cost / cut estimates
+  let song: any = null;
+  try { const an = analyzeAudio(det.audio!); song = { title: "", duration: an.duration, fps: 30, bpm: an.bpm, phase: an.phase, beatsPerBar: 4, sections: autoSections(an) as any, energy: an.energy, energyHz: 20, lines: [] }; } catch { /* estimates shown after the real analysis */ }
+  let stillsCost = "", stillsCount = 0;
+  if (song && (q1 === "song" || q1 === "images")) {
+    try {
+      const models = YAML.parse(fs.readFileSync(path.join(PACK_DIR, "gen", "models.yaml"), "utf8")).models;
+      const p = planStills(song, { taste: "anime", models }); stillsCount = p.counts.total;
+            stillsCost = `約${p.counts.total}枚`;
+    } catch { /* models.yaml missing: no estimate */ }
   }
-  if (mode === "semi") {
-    let ctx: SemiCtx = { nImages: det.images.length, hasChar: chars.length > 0 };
-    try { const an = analyzeAudio(det.audio!); const secs = autoSections(an) as any; const song = { title: "", duration: an.duration, fps: 30, bpm: an.bpm, phase: an.phase, beatsPerBar: 4, sections: secs, energy: an.energy, energyHz: 20, lines: [] };
-      ctx = { ...ctx, bpm: an.bpm, duration: an.duration, cuts: estimateCutsFor(song, det.images.length), videoCost: videoCostHint(song) }; log(`\n🎵 曲をざっと解析: BPM ${Math.round(an.bpm)}・${Math.round(an.duration)}秒（カット数・費用は目安）`); }
-    catch { log("\n（曲の事前解析をスキップ。カット数・費用の目安は本番の解析後に表示します）"); }
+
+  const anim = song && m.nImages ? animEstimate(song, m.nImages) : null;
+  // ---- Q2 ----
+  const q2opts = q2Options(q1, m, stillsCost);
+  const q2: Q2Key = await choose("Q2. 映像はどうする？", q2opts, q2opts[0].key, q1 === "song" ? "画像がないので、まずは文字と図形で作る「文字PV」がおすすめです（0円）" : undefined);
+
+  const args: string[] = ["--input", input];
+  // ---- 画像を動画にする: どのシーン → どうやって（既定は無料の手作業。有料APIは見積もりだけで、実行は確認してから） ----
+  let animScope: AnimScope | null = null, animMethod: AnimMethod = "manual", animPick: string[] = [], animCost = "";
+  if (q2 === "animate") {
+    animScope = await choose<AnimScope>("Q2b. どのシーンを動画にしますか？", ANIM_SCOPES(anim?.n ?? { chorus: 1, all: m.nImages }, anim?.cost ?? {}), "chorus");
+    if (animScope === "pick") {
+      log("\n  動かしたい画像の番号（例 1,3）:"); det.images.forEach((f, i) => log(`  ${i + 1}) ${path.basename(f)}`));
+      const a = await q("  番号 [Enter=1]: ", "1");
+      animPick = [...new Set(a.split(/[,、\s]+/).map(Number).filter((n) => n >= 1 && n <= det!.images.length))].map((n) => path.basename(det!.images[n - 1]));
+      if (!animPick.length) animPick = [path.basename(det.images[0])];
+    }
+    const nClips = animScope === "pick" ? animPick.length : anim?.n[animScope] ?? 1;
+    const tot = animScope === "pick" ? undefined : anim?.cost[animScope];
+    animMethod = await choose<AnimMethod>("Q2c. 動画はどうやって作りますか？", ANIM_METHODS(anim?.perClip, tot ? `${tot}（${nClips}本）` : undefined), "manual");
+    animCost = animMethod === "manual" ? `0円（${nClips}本を Grokアプリ等で手作業）` : "PAID";
+    args.push(...animArgs(animScope, animMethod, animPick));
+  }
+  if (q2 === "stills") { // 作った画像も動画にできる（既定は「しない」、するなら無料の手作業が既定）
+    const est = song ? animEstimate(song, Math.max(1, stillsCount)) : null;
+    const sc = await choose<"none" | AnimScope>("Q2b. 作った画像を動画にもする？", [
+      { key: "none", label: "しない（静止画のまま・0円）", why: "画像に動き（ズーム・奥行き・光・拍の揺れ）をつけて使う" },
+      ...ANIM_SCOPES(est?.n ?? { chorus: 1, all: Math.max(1, stillsCount) }, est?.cost ?? {}).map((o) => o.key === "pick" ? { ...o, label: "選んだシーンだけ（画像ができてから番号で選ぶ）", why: "画像を取り込んだあと npm run gen -- plan --shots S003,S007 で選べる。いまはサビの見せ場で作業リストを作る" } : o)], "none");
+    if (sc !== "none") {
+      animScope = sc === "pick" ? "chorus" : sc;
+      const nClips = est?.n[animScope as "chorus" | "all"] ?? 1, tot = est?.cost[animScope as "chorus" | "all"];
+      animMethod = await choose<AnimMethod>("Q2c. 動画はどうやって作りますか？", ANIM_METHODS(est?.perClip, tot ? `${tot}（${nClips}本）` : undefined), "manual");
+      animCost = animMethod === "manual" ? `0円（${nClips}本を Grokアプリ等で手作業）` : "PAID";
+      args.push(...animArgs(animScope, animMethod));
+    }
+  }
+
+  // ---- Q3 ----
+  const q3: Q3Key = await choose("Q3. ここから先は？", Q3_OPTS, Q3_DEFAULT);
+
+  const base = q2Plan(q2);
+  // the visual choice narrows what the folder offers: text PV ignores pictures, 画像だけ ignores videos
+  if (q2 === "textpv" || (q2 === "stills" && m.nImages)) args.push("--text-only");
+  if (q2 === "images" && m.nVideos) args.push("--images-only");
+  let say: string[] = [...base.say], why = base.why;
+  const extra: string[] = [];
+  const flowCtx = { q2, m };
+
+  if (q3 === "semi") {
+    let ctx: SemiCtx = { nImages: hasPictures(q2) ? m.nImages + m.nVideos : 0, hasChar: chars.length > 0, flow: flowCtx };
+    if (song) { ctx = { ...ctx, bpm: song.bpm, duration: song.duration, cuts: estimateCutsFor(song, ctx.nImages ?? 0) }; log(`\n🎵 曲をざっと解析: BPM ${Math.round(song.bpm)}・${Math.round(song.duration)}秒（カット数は目安）`); }
     const ans: Record<string, string[]> = {};
     for (const qq of semiQuestions(ctx)) {
       log(`\n■ ${qq.title}`);
@@ -65,46 +125,65 @@ async function main() {
       if (a.trim()) ans[qq.id] = parsePick(a, qq);
     }
     const plan = semiToPlan(ans, ctx);
-    log("\n📋 この内容で作ります:"); plan.plan.forEach((l) => log(`  ${l}`)); plan.warnings.forEach((w) => log(`  ⚠️ ${w}`));
-    if ((await q("\n  この計画でよいですか？ [Y/n] ", "y")).toLowerCase().startsWith("n")) { log("やめました。もう一度 start で選び直せます。"); rl.close(); return; }
-    sayParts.push(...plan.say);
+    say = q2 === "stills" ? [...plan.say.filter((s) => !/^画像は/.test(s)), q2Plan(q2, (ans.taste ?? ["anime"])[0]).say[0]] : plan.say;
+    if (!say.some((s) => /で$/.test(s) && /[＋]|モーション|タイポ|物語|立ち絵/.test(s)) && plan.combo.length) say.unshift(`${plan.combo.map((x) => SHOW_MODES[x].ja).join("＋")}で`);
+    args.push(...plan.args);
+    extra.push(...plan.plan); plan.warnings.forEach((w) => extra.push(`⚠️ ${w}`));
   }
-  if (mode === "2" || mode === "3") {
-    log("\nQ2. ジャンルは？");
-    PRESET_IDS.forEach((id, i) => log(`  ${i + 1}) ${PRESETS[id].ja} … ${PRESETS[id].desc}`));
-    const g = Number(await q("  番号 [おまかせ]: ", "0"));
-    if (g >= 1 && g <= PRESET_IDS.length) args.push("--preset", PRESET_IDS[g - 1]);
-    if (mode === "2" && chars.length && !(await q("\nQ2b. キャラ素材があります。立ち絵モーションMV（パーツで踊らせる・口パク・縦書き吹き出し）にしますか？ [y/N] ", "n")).toLowerCase().startsWith("n")) sayParts.push("立ち絵モーション＋リリックモーションで");
-  }
-  log("\nQ3. 画面の形は？\n  1) 横長 16:9（YouTube）  2) 縦長 9:16（ショート/TikTok/リール）  3) 正方形 1:1  4) 4:5（Instagram）  5) 全部");
-  const a = await q("  番号 [1]: ", "1");
-  const asp = ["16:9", "9:16", "1:1", "4:5"][Number(a) - 1];
-  if (a === "5") args.push("--aspects", Object.keys(ASPECTS).join(","));
-  else if (asp) args.push("--aspect", asp);
-  const extra: string[] = [];
-  if (mode === "3") {
-    const m = await pickModes("Q3-0. 見せ方（構成の土台）"); if (m) extra.push(`${m.map((x) => SHOW_MODES[x].ja).join("＋")}で`);
+
+  if (q3 === "kodawari") {
+    const modes = allowedModes(q2, m);
+    log(`\nK1. 見せ方（構成の土台。複数OK: 例 1,3 / Enter = おまかせ）`);
+    modes.forEach((id, i) => log(`  ${i + 1}) ${SHOW_MODES[id].ja} … ${SHOW_MODES[id].desc}`));
+    const a = await q("  番号 [おまかせ]: ");
+    const ids = [...new Set(a.split(/[,+、\s]+/).map(Number).filter((n) => n >= 1 && n <= modes.length).map((n) => modes[n - 1]))];
+    if (ids.length) { const c = composeCombo(ids); log(`  → ${c.hybrid.ja}（セクションごとの配分）`); c.notes.forEach((n) => log(`     ${n}`)); say = [...say.filter((s) => /^画像は/.test(s)), `${ids.map((x) => SHOW_MODES[x].ja).join("＋")}で`]; extra.push(`見せ方: ${ids.map((x) => SHOW_MODES[x].ja).join("＋")}`); }
+    const genres = [{ key: "auto", label: "おまかせ（曲から自動）", why: "BPM・音の強さ・歌詞の密度から選ぶ" }, ...allowedPresets(q2).map((id) => ({ key: id, label: PRESETS[id].ja, why: PRESETS[id].desc }))];
+    const g = await choose("K2. ジャンル（演出の型）は？", genres, "auto");
+    if (g !== "auto") { args.push("--preset", g); extra.push(`ジャンル: ${PRESETS[g].ja}`); }
     const gOf: Record<string, string> = { story: "ballad", dance: "idol_pop", live: "rock_edm", vocaloid: "dark", firsttake: "acoustic", lipsync: "idol_pop" };
-    const pre = args[args.indexOf("--preset") + 1]; const genre = args.includes("--preset") ? gOf[pre] ?? null : null;
-    const pickOpt = async (title: string, opts: Option[]) => {
-      log(`\n${title}（プロのおすすめ順）`); opts.forEach((o, i) => log(`  ${i + 1}) ${o.label} … ${o.why}`)); log(`  ${opts.length + 1}) おまかせ`);
-      const k = Number(await q("  番号 [1]: ", "1")); const o = opts[k - 1]; if (o?.say) extra.push(o.say); if (o === TACHIE_OPTION && !chars.length) log(`  ⚠️ ${TACHIE_MATERIAL_HELP.replace(/\n/g, "\n     ")}`);
+    const genre = g !== "auto" ? gOf[g] ?? null : null;
+    const pickOpt = async (title: string, opts: { label: string; say?: string; why: string }[], def = 1) => {
+      log(`\n${title}（プロのおすすめ順）`); opts.forEach((o, i) => log(`  ${i + 1}) ${o.label}${i + 1 === def ? " ★おすすめ" : ""} … ${o.why}`)); log(`  ${opts.length + 1}) おまかせ`);
+      const k = Number(await q(`  番号 [Enter=${def}]: `, String(def))); const o = opts[k - 1]; if (o?.say) { say.push(o.say); extra.push(`${title.replace(/^K\d+\. /, "").replace(/（.*$/, "").replace(/は？$/, "")}: ${o.label}`); } return o;
     };
-    if (!m) await pickOpt("Q3a. MVの構成は？", chars.length ? [TACHIE_OPTION, ...structureOptions(genre, det.images.length ? 0.5 : 0)] : [...structureOptions(genre, det.images.length ? 0.5 : 0), TACHIE_OPTION]);
-    await pickOpt("Q3b. 歌詞の動きの変化は？", VARIETY_OPTIONS);
-    await pickOpt("Q3c. サビの文字の動きは？", lyricOptions(genre, "chorus"));
-    log("\nQ4. 演出の希望を日本語でどうぞ（例: サビはグリッチで。画は0.1秒前から切り替え。キライは割れるように）");
-    const say = await q("  希望 [なし]: ");
-    const tier = await q("Q4b. AI動画のプランは？（例: KlingはProプラン / RunwayはAPI / Klingの残り1200クレジット）[API従量]: ");
-    const all = [...extra, say, tier].filter(Boolean).join("。");
-    if (all) { const r = applyInstruction({}, all); r.changes.forEach((c) => log(`   ✏️ ${c}`)); args.push("--say", all); }
-    const rng = await q("Q5. 曲の一部だけ作りますか？ 例 40-60（秒）[全部]: ");
-    if (/^\d+(\.\d+)?-\d+(\.\d+)?$/.test(rng)) args.push("--range", rng);
-    if ((await q("Q6. DaVinci 用の透過歌詞と FCPXML も作りますか？ [y/N] ", "n")).toLowerCase().startsWith("y")) args.push("--davinci");
-    if ((await q("Q7. 縦型のサビハイライト（約20秒）も作りますか？ [y/N] ", "n")).toLowerCase().startsWith("y")) args.push("--highlight");
+    if (!ids.length) {
+      if (hasPictures(q2)) {
+        const st = structureOptions(genre, 0.5) as Option[];
+        const o = await pickOpt("K3. MVの構成は？", q2 === "tachie" ? [TACHIE_OPTION, ...st] : m.nChars ? [...st, TACHIE_OPTION] : st);
+        if (o) say = say.filter((s) => s === o.say || !/(モーション|タイポ|物語|立ち絵).*で$/.test(s));
+      } else {
+        const o = await pickOpt("K3. MVの構成は？（画像なしで成立するものだけ）", TEXT_STRUCTURES);
+        if (o) say = say.filter((s) => s === o.say || !/(モーション|タイポ|物語|立ち絵).*で$/.test(s));
+      }
+    }
+    await pickOpt("K4. 歌詞の動きの変化は？", VARIETY_OPTIONS, 2);
+    await pickOpt("K5. サビの文字の動きは？", lyricOptions(genre, "chorus"));
+    log("\nK6. 演出の希望を日本語でどうぞ（例: サビはグリッチで。キライは割れるように）");
+    const free = await q("  希望 [なし]: "); if (free) { say.push(free); extra.push(`希望: ${free}`); }
+    if (q2 === "images" || q2 === "stills") { const tier = await q("K6b. AI動画のプランは？（例: KlingはProプラン / Klingの残り1200クレジット）[使わない・API従量]: "); if (tier) say.push(tier); }
+    const rng = await q("K7. 曲の一部だけ作りますか？ 例 40-60（秒）[全部]: ");
+    if (/^\d+(\.\d+)?-\d+(\.\d+)?$/.test(rng)) { args.push("--range", rng); extra.push(`範囲: ${rng} 秒`); }
+    if ((await q("K8. DaVinci 用の透過歌詞と FCPXML も作りますか？ [y/N] ", "n")).toLowerCase().startsWith("y")) args.push("--davinci");
+    if ((await q("K9. 縦型のサビハイライト（約20秒）も作りますか？ [y/N] ", "n")).toLowerCase().startsWith("y")) args.push("--highlight");
   }
+
+  // ---- 画面の形 (all modes) ----
+  log("\nQ4. 画面の形は？");
+  ASPECT_OPTS.forEach(([, l], i) => log(`  ${i + 1}) ${l}${i === 0 ? " ★おすすめ" : ""}`));
+  const a = Number(await q("  番号 [Enter=1]: ", "1")); const asp = ASPECT_OPTS[a - 1] ?? ASPECT_OPTS[0];
+  if (asp[0] === "all") args.push("--aspects", Object.keys(ASPECTS).join(",")); else args.push("--aspect", asp[0]);
+
+  // ---- 確認画面 ----
+  const cost = animCost === "PAID" ? "MCP・動画生成APIで動画を作るときだけ有料（その直前に見積もりを見せて確認します。それまでは0円）" : "0円";
+  if (q2 === "stills" && !stillsCount) why += "（画像の枚数は書き出し後の作り方リストで確認）";
+  log("");
+  if (animScope) extra.unshift(`動画にするシーン: ${animScope === "chorus" ? "サビの見せ場" : animScope === "all" ? "全部" : animPick.join("・")}（作り方: ${animMethod === "manual" ? "無料の手作業" : "MCP・動画生成API（使う直前に確認）"}）`);
+  confirmLines(m, { q1, q2, q3 }, { why, cost, aspect: asp[1], extra }).forEach((l) => log(l));
+  const allSay = [...new Set(say.filter(Boolean))].join("。");
+  if (allSay) { const r = applyInstruction({}, allSay); r.changes.forEach((c) => log(`   ✏️ ${c}`)); args.push("--say", allSay); }
+  if ((await q("\n  開始しますか？ [Enter=開始 / n=やめる] ", "y")).toLowerCase().startsWith("n")) { log("やめました。もう一度 start で選び直せます。"); rl.close(); return; }
   rl.close();
-  if (sayParts.length) { const all = sayParts.join("。"); const r = applyInstruction({}, all); r.changes.forEach((c) => log(`   ✏️ ${c}`)); const i = args.indexOf("--say"); if (i >= 0) args[i + 1] = `${all}。${args[i + 1]}`; else args.push("--say", all); }
   if (process.env.MVPACK_WIZARD_DRYRUN) { log(`WIZARD_ARGS ${JSON.stringify(args)}`); return; }
   log("\n▶ まずプレビュー静止画を作ってから、本番を書き出します。\n");
   await run(args);

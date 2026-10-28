@@ -91,12 +91,19 @@ export async function run(argv: string[]) {
   if (o.song) det.audio = path.resolve(String(o.song));
   if (o.lyrics) { det.lyrics = path.resolve(String(o.lyrics)); const e = path.extname(det.lyrics).slice(1).toLowerCase(); det.lyricsKind = (e === "json" ? "json" : e) as any; }
   if (o["no-lyrics"]) { det.lyrics = undefined; det.lyricsKind = undefined; }
+  // start flow v2: 文字PV ignores pictures in the folder, 画像だけ ignores videos
+  if (o["text-only"]) { det.images = []; det.videos = []; }
+  if (o["images-only"]) det.videos = [];
   if (!det.audio) throw new UserError(`曲ファイルが見つかりません（${inputDir}）`, "input フォルダに mp3 / wav / m4a を1つ入れてください。試すだけなら `npm run mv -- --sample`。");
   const title = String(o.title ?? path.basename(det.audio).replace(/\.[^.]+$/, ""));
   const dir = projectDir(title);
   let cfg: MVConfig = loadConfig(dir, det.config);
   for (const k of ["preset", "aspect"] as const) if (o[k]) (cfg as any)[k] = o[k];
   if (o.range) { const [a, b] = String(o.range).split("-").map(Number); cfg.range = { start: a, end: b }; }
+  if (o["video-scope"]) { // start: 画像を動画にする (persisted so the plan is rebuilt after stills / clips are imported)
+    const sc = String(o["video-scope"]); cfg.gen = { ...(cfg.gen ?? {}), scope: (sc === "none" ? "none" : sc === "all" ? "all" : sc === "pick" ? "pick" : "chorus") as any, method: (o["video-method"] === "paid" ? "paid" : "manual") as any, ...(o["video-images"] ? { images: String(o["video-images"]).split(",").filter(Boolean) } : {}) };
+    saveConfig(dir, cfg);
+  }
   if (o.say) { const r = applyInstruction(cfg, String(o.say)); cfg = r.cfg; r.changes.forEach((c) => log(`  ✏️ ${c}`)); saveConfig(dir, cfg); }
 
   // ---- summary of what was detected / what will be generated ----
@@ -117,9 +124,10 @@ export async function run(argv: string[]) {
   if (o["no-lyrics"]) song.lines = [];
   notes.forEach((n) => log(`  ℹ️ ${n}`));
   if (!tachie && !det.images.length && !det.videos.length && needsStills(cfg.taste, 0)) {
-    const { writeStillsPlan, stillsSummary, stillsInbox } = await import("./stills");
+    const { writeStillsPlan, stillsSummary } = await import("./stills");
+    const { stillsPromptList } = await import("../src/lib/stills");
     const { plan } = writeStillsPlan(dir, {});
-    log(`\n${stillsSummary(plan)}\n   📄 手順と画像リスト: ${path.join(dir, "stills_plan.md")}\n   ① stills_prompts.csv のプロンプトで画像を作る → ② ${stillsInbox(dir)} に保存 → ③ npm run gen -- stills import → ④ npm run mv\n`);
+    log(`\n${stillsSummary(plan)}\n${stillsPromptList(plan)}\n\n   📄 同じ内容: ${path.join(dir, "stills_prompts.csv")}（コピペ用）・${path.join(dir, "stills_plan.md")}\n   ① 上から順に好きなアプリで作る（添付と書いた画像も一緒に入れる）→ ② できた画像を input/made/ に入れる（名前は自由。表のファイル名にすると確実）→ ③ npm run made（または「作ったの入れた」）で取り込んで作り直し\n`);
   }
 
   // ---- media (copied into public/project, scenes + focus cached) ----
@@ -175,15 +183,21 @@ export async function run(argv: string[]) {
   const first = buildProps(song, cfg, media, { audio: `project/${pub[0].name}`, aspect: aspects[0] });
   { const { fontsOfLines } = await import("../src/render/fontsUsed"); await fetchMissing({ ids: fontsOfLines(first.lines) }); }
   // A per-project manifest lets the shared editor (npm run editor -- --project <name>) reopen the exact source files.
+  // 画像を動画にする: adopted takes (timing.perShot.src = project/gen/...) are extra video assets, so a mixed MV
+  // (some scenes video, the rest stills) opens in the editor with each scene on its own asset.
+  const takes = [...new Set(first.shots.map((s) => s.src).filter((s): s is string => !!s && !media.some((m) => m.src === s) && /\.(mp4|mov|webm|m4v)$/i.test(s)))]
+    .filter((s) => fs.existsSync(path.join(PUBLIC_PROJECT, "..", s)));
+  const assetOf = (src?: string) => { const i = media.findIndex((m) => m.src === src); if (i >= 0) return i; const k = takes.indexOf(src ?? ""); return k >= 0 ? media.length + k : 0; };
   if (det.images.length || (det.videos ?? []).length) writeJson(path.join(dir, "out", "editor-input.json"), {
-    title, audio: det.audio, lyrics: path.join(dir, "song.json"), images: det.images, videos: det.videos ?? [],
+    title, audio: det.audio, lyrics: path.join(dir, "song.json"), images: det.images, videos: [...(det.videos ?? []), ...takes.map((s) => path.join(PUBLIC_PROJECT, "..", s))],
     scenes: mergeSceneSlivers(first.shots.map((s, i) => ({ id: s.id, start: s.start, end: s.end,
-      asset: Math.max(0, media.findIndex((m) => m.src === s.src)), transition: i ? Math.min(0.7, s.end - s.start) : 0,
+      asset: assetOf(s.src), transition: i ? Math.min(0.7, s.end - s.start) : 0,
       label: s.section ?? `シーン ${i + 1}` })), song.duration),
     sections: song.sections.map((x) => ({ type: x.type, label: x.label, start: x.start, end: x.end })),
     lyricStyles: first.lines.map((l) => ({ motion: l.style, params: l.params })),
     width: first.width, height: first.height, fps: first.fps,
   });
+  else if (!tachie) writeTextEditorProject(dir, { title, audio: det.audio, song, first });
   if (tachie) {
     const { createTachieProject } = await import("./tachie_project");
     const { moodOf, SHOW_MODES } = await import("../src/lib/mograph");
@@ -285,13 +299,63 @@ export async function run(argv: string[]) {
   addVersion(dir, m, { v, createdAt: new Date().toISOString(), note: String(o.note ?? o.say ?? ""), preset: first.preset!, aspect: aspects.join(","), outputs, configSnapshot: cfg });
   log(`\n🎉 完成！ v${v}\n${Object.values(outputs).map((x) => `  ・${path.join(dir, x)}`).join("\n")}\n`);
   log("次の一手: 気になる所を日本語で Codex に伝える（例「サビはグリッチで」）→ もう一度 npm run mv。良ければ npm run approve -- " + v);
+  await videoTodo(dir, cfg, first.shots as any, det.images);
   await offerEditor(dir, o);
+}
+
+/** 画像を動画にする: shot ids for the scope (pick = the first cut of each chosen image). */
+export function animShots(shots: { id: string; src?: string; section?: string; sectionType?: string }[], scope: string, images: string[] = []): string[] | null {
+  if (scope === "pick") return [...new Set(images.map((n) => shots.find((s) => s.src && path.basename(s.src) === n)?.id).filter(Boolean) as string[])];
+  return null; // chorus / all: npm run gen -- plan reads cfg.gen.scope
+}
+/** writes the video work list (free manual steps + estimate). Never calls a paid API. */
+export async function videoTodo(dir: string, cfg: MVConfig, shots: any[], images: string[]) {
+  const g: any = cfg.gen; if (!g?.scope || g.scope === "none") return null;
+  if (!images.length) { log("\n🎞 画像を動画にする設定があります。画像を作って input/made/ に入れ、npm run made（「作ったの入れた」）で取り込むと、動画のプロンプトと添付の一覧を作ります。"); return null; }
+  const { makePlan, attachText, readPromptEdits } = await import("./gen");
+  const ids = animShots(shots, g.scope, g.images);
+  const { plan } = makePlan(dir, { ...(ids ? { shots: ids.join(",") } : {}), dryAudio: true }) as any;
+  const ed = readPromptEdits(dir), rows: any[] = (plan.rows ?? []).map((r: any) => ({ ...r, prompt: ed[r.shot]?.prompt || r.prompt, skip: !!ed[r.shot]?.skip })), total = plan.total;
+  const list = rows.map((r) => `### ${r.shot}（${r.section ?? ""} ${r.sec}秒）${r.skip ? " — スキップ" : ""}\n- プロンプト: ${r.prompt}\n- 添付: ${attachText(r.attach)}`);
+  const lines = [`# 🎞 画像を動画にする — やることリスト`, "",
+    `対象: ${rows.length} シーン（${g.scope === "chorus" ? "サビの見せ場" : g.scope === "all" ? "全部" : "選んだ画像のシーン"}）。動画にしなかったシーンは静止画のまま。どちらも編集画面で直せます。`, "",
+    "## 無料（おすすめ・0円）: 自分で作って入れるだけ",
+    "1. 下のシーンごとに、プロンプトと「添付」の画像を Grok アプリ / grok.com など好きなアプリの「画像から動画」に入れて作る（`prompts.csv` も同じ内容。書き換え・スキップもここで）",
+    "2. できた動画を `input/made/` に入れる（名前は自由。シーンID 例 S003 を名前に入れると確実。入れなかったシーンは静止画のまま）",
+    "3. `npm run made`（または「作ったの入れた」）→ 自動でシーンに割り当てて作り直し。編集画面でそのまま直せます",
+    "", "## MCP・動画生成APIを使う場合だけ有料", "- `npm run gen -- run`: シーンごとのプロンプトと添付を見せて（書き換え・スキップ可）、見積もりを出してから確認。確認がないと動きません。",
+    "", "## シーンごとのプロンプトと添付", ...list, ""];
+  fs.writeFileSync(path.join(dir, "video_todo.md"), lines.join("\n"));
+  log(`\n🎞 画像を動画にする: ${rows.length} シーン（無料: 自分で作って input/made/ に入れる → npm run made）`);
+  for (const r of rows) log(`  ■ ${r.shot}（${r.section ?? ""} ${r.sec}秒）${r.skip ? " スキップ" : ""}\n    プロンプト: ${r.prompt}\n    添付: ${attachText(r.attach)}`);
+  log(`  📄 同じ内容: ${path.join(dir, "video_todo.md")} / prompts.csv\n  MCP・動画生成APIを使うときだけ有料: その直前に見積もりを見せて確認します（自動では実行しません）`);
+  return { rows, total };
+}
+
+/** 文字PV (no images / videos): the editor needs a picture, so write a plain palette-coloured SVG background
+ * and one scene per section. Every path gets an editor project (pack rule: everything can be fixed in the editor).
+ * The mograph layer (shapes / lines / particles / section transitions) is carried as `mograph` and drawn by the same
+ * renderer in the editor preview and export; editor edits (data.mographEdit / scene.mograph) win. */
+export function writeTextEditorProject(dir: string, o: { title: string; audio: string; song: any; first: any }) {
+  const pal = GENRES[o.first.genre ?? ""]?.palette ?? { fill: "#ffffff", stroke: "#14131a", accent: "#7ad7ff" };
+  const out = path.join(dir, "out"); fs.mkdirSync(out, { recursive: true });
+  const bg = path.join(out, "textpv_bg.svg"), W = o.first.width ?? 1920, H = o.first.height ?? 1080;
+  fs.writeFileSync(bg, `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><defs><linearGradient id="g" x2="1" y2="1"><stop stop-color="${pal.stroke}"/><stop offset="1" stop-color="${pal.accent}" stop-opacity=".55"/></linearGradient></defs><rect width="100%" height="100%" fill="${pal.stroke}"/><rect width="100%" height="100%" fill="url(#g)" opacity=".6"/><circle cx="${W * 0.78}" cy="${H * 0.3}" r="${H * 0.28}" fill="none" stroke="${pal.accent}" stroke-width="6" opacity=".35"/><path d="M0 ${H * 0.8}L${W} ${H * 0.62}" stroke="${pal.fill}" stroke-width="3" opacity=".25"/></svg>`);
+  const secs = o.song.sections?.length ? o.song.sections : [{ type: "other", label: "全体", start: 0, end: o.song.duration }];
+  writeJson(path.join(out, "editor-input.json"), {
+    title: o.title, audio: o.audio, lyrics: path.join(dir, "song.json"), images: [bg], videos: [], textOnly: true,
+    ...(o.first.mograph ? { mograph: o.first.mograph, mographShots: (o.first.shots ?? []).map((s: any) => ({ role: s.role, src: s.src, start: s.start, end: s.end })), mographBeat: o.first.beat } : {}),
+    scenes: secs.map((s: any, i: number) => ({ id: `S${String(i + 1).padStart(3, "0")}`, start: s.start, end: s.end, asset: 0, transition: i ? Math.min(0.7, s.end - s.start) : 0, label: s.label ?? s.type })),
+    sections: secs.map((x: any) => ({ type: x.type, label: x.label, start: x.start, end: x.end })),
+    lyricStyles: o.first.lines.map((l: any) => ({ motion: l.style, params: l.params })),
+    width: o.first.width, height: o.first.height, fps: o.first.fps,
+  });
 }
 
 /** after any menu (おまかせ/半自動/ジャンル/こだわり/mv): offer the shared editor on this project. */
 export async function offerEditor(dir: string, o: Record<string, any>) {
   const name = path.basename(dir), can = fs.existsSync(path.join(dir, "out", "editor-input.json")) || fs.existsSync(path.join(dir, "out", "editor", "editor-state.json"));
-  if (!can) { log("ℹ️ 動画素材を含むため、画面での手直し（編集画面）は静止画の曲のみ対応です。日本語の指示（npm run edit）で直せます。"); return; }
+  if (!can) { log("ℹ️ このプロジェクトには編集画面用のデータがまだありません。もう一度 npm run mv（または start）で作ると編集画面で開けます。日本語の指示（npm run edit）でも直せます。"); return; }
   log(`✏️ 画面で手直しするなら: npm run editor -- --project ${name}\n   （歌詞・シーン・カメラ・エフェクト・タイミング・顔の位置を1つの画面で。日本語の指示 npm run edit -- "サビの歌詞を赤に" も同じ記録に書き込まれるので、手直しが消えることはありません）`);
   const tty = process.stdin.isTTY && process.stdout.isTTY && !process.env.CI;
   if (o["no-editor"] || o.editor === false || (!tty && !o.editor)) return;
