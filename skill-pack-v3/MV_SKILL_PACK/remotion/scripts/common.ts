@@ -97,7 +97,8 @@ export interface Detected { audio?: string; stems: string[]; lyrics?: string; ly
 export function detectInput(dir: string): Detected {
   if (!fs.existsSync(dir)) throw new UserError(`入力フォルダが見つかりません: ${dir}`, `「${path.basename(dir)}」フォルダを作って、曲ファイル（mp3/wav）を入れてください。`);
   const all: string[] = [];
-  const walk = (d: string) => fs.readdirSync(d, { withFileTypes: true }).forEach((e) => { if (e.name.startsWith(".")) return; const p = path.join(d, e.name); e.isDirectory() ? walk(p) : all.push(p); });
+  // input/parts and input/tachie hold character parts (npm run parts / 立ち絵), not scene images
+  const walk = (d: string) => fs.readdirSync(d, { withFileTypes: true }).forEach((e) => { if (e.name.startsWith(".")) return; if (d === dir && e.isDirectory() && /^(parts|tachie)$/i.test(e.name)) return; const p = path.join(d, e.name); e.isDirectory() ? walk(p) : all.push(p); });
   walk(dir);
   const ext = (f: string) => path.extname(f).toLowerCase();
   const audios = all.filter((f) => EXT.audio.includes(ext(f)));

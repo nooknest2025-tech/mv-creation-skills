@@ -51,7 +51,7 @@ export interface MVConfig {
   ramps?: Record<string, string>; // section -> speed ramp
   gen?: { model?: string; perShot?: Record<string, string>; resolution?: string; takes?: number; capUSD?: number; provider?: string; budgetPerShot?: number; imageModel?: string; plans?: Record<string, string | { plan: string; remaining?: number }>; audio?: boolean; autoMerge?: boolean; keepCut?: string[]; scope?: "none" | "chorus" | "all" /* 動画化: which sections get AI video */ };
   pro?: boolean; // false = classic look (no pro director / motion-graphics layer)
-  combo?: string[]; // show modes, multi-select: story | lipsync | dance | live | lyric_motion | typography | mograph
+  combo?: string[]; // show modes, multi-select: story | lipsync | dance | live | lyric_motion | typography | mograph | tachie
   density?: "slow" | "normal" | "fast"; // シーンの細かさ
   mograph?: { off?: boolean; look?: import("./mograph").Look | Record<string, import("./mograph").Look>; palette?: string; transition?: import("./mograph").Transition; accents?: boolean };
   parts?: { rig?: string /* rig.json path (project dir relative) */; rigData?: import("./rig").Rig; preset?: string | Record<string, string>; x?: number; h?: number; off?: boolean };

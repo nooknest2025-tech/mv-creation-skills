@@ -3,12 +3,12 @@
 import { MODE_IDS, SHOW_MODES, composeCombo, moodOf, proposeCombo, type Mood } from "./mograph";
 import { PARTS_PRESETS } from "./rig";
 import { STILL_TASTES, TASTE_JA, SEC_PER_IMAGE } from "./stills";
-const PICTURE_MODES = ["story", "lipsync", "dance", "live"];
+const PICTURE_MODES = ["story", "lipsync", "dance", "live", "tachie"];
 const isStillTaste = (t?: string) => !!t && (STILL_TASTES as readonly string[]).includes(t);
 
 export interface SemiOpt { key: string; label: string; say: string; why: string }
 export interface SemiQ { id: string; title: string; multi?: boolean; options: SemiOpt[]; recommend: string[] }
-export interface SemiCtx { genre?: string | null; bpm?: number; nImages?: number; faceRatio?: number; duration?: number; cuts?: Record<string, number>; videoCost?: Record<string, string> }
+export interface SemiCtx { genre?: string | null; bpm?: number; nImages?: number; faceRatio?: number; duration?: number; cuts?: Record<string, number>; videoCost?: Record<string, string>; hasChar?: boolean /* character material (PSD / parts / 立ち絵) found */ }
 
 export const TASTES: SemiOpt[] = [
   { key: "anime", label: "アニメ", say: "画像はアニメ調で", why: "キャラクターの表情が伝わりやすい。目パチ・口パク・パーツアニメと相性◎" },
@@ -29,7 +29,7 @@ export const LYRIC_LOOKS: SemiOpt[] = [
 export function semiQuestions(c: SemiCtx = {}): SemiQ[] {
   const mood: Mood = moodOf(c.genre, c.bpm ?? 120);
   const n = c.nImages ?? 0;
-  const rec = proposeCombo(mood, c.faceRatio ?? 0, n);
+  const rec = proposeCombo(mood, c.faceRatio ?? 0, n, !!c.hasChar);
   const modes: SemiOpt[] = MODE_IDS.map((id) => ({ key: id, label: SHOW_MODES[id].ja, say: "", why: SHOW_MODES[id].desc }));
   modes.push({ key: "mix", label: "ミックス（おすすめの組み合わせ）", say: "", why: n > 0 ? `${rec.map((m) => SHOW_MODES[m].ja).join("＋")}` : `${rec.map((m) => SHOW_MODES[m].ja).join("＋")}（次の質問で画像テイストをアニメ・実写風・イラストにすると、画像を作って「物語＋リリックモーション」にします）` });
   const cut = (k: string) => (c.cuts?.[k] !== undefined ? `（約${c.cuts[k]}カット）` : "");
@@ -46,9 +46,12 @@ export function semiQuestions(c: SemiCtx = {}): SemiQ[] {
       { key: "chorus", label: `サビなど一部だけ${vc("chorus")}`, say: "動画化はサビだけ", why: "見せ場だけ本物の動き。費用を抑えられる" },
       { key: "all", label: `全部${vc("all")}`, say: "動画化は全部", why: "全編を動画に。費用と生成時間がかかる" }], recommend: ["none"] },
     { id: "lyric", title: "リリックの雰囲気と書体", options: LYRIC_LOOKS, recommend: ["auto"] },
-    { id: "parts", title: "キャラの動き（パーツアニメ。パーツ素材がある時だけ効きます）", options: Object.entries(PARTS_PRESETS).map(([k, p]) => ({ key: k, label: p.ja, say: k === "auto" ? "" : p.say, why: p.why })), recommend: ["auto"] },
+    { id: "parts", title: "キャラの動き（パーツアニメ。パーツ素材がある時だけ効きます）", options: [...Object.entries(PARTS_PRESETS).map(([k, p]) => ({ key: k, label: p.ja, say: k === "auto" ? "" : p.say, why: p.why })), TACHIE_PARTS_OPT], recommend: [c.hasChar ? "tachie" : "auto"] },
   ];
 }
+/** キャラの動き: build a 立ち絵モーションMV (adds the 立ち絵 show mode to whatever 見せ方 was chosen). */
+export const TACHIE_PARTS_OPT: SemiOpt = { key: "tachie", label: "立ち絵モーションMVにする（全身を拍でカクカク踊らせる・口パク・縦書き吹き出し）", say: "", why: "input/parts（PSD・パーツPNG）か input/tachie（全身の立ち絵1枚）にキャラ素材が必要" };
+export const TACHIE_MATERIAL_HELP = "立ち絵モーションMVには、キャラの素材が必要です。次のどれかを入れてください:\n  ① input/parts/<名前>/ にパーツ分けした PNG（同じキャンバスサイズ。名前に 頭・体・左腕・右腕・目・口 など）\n  ② input/parts/ か input/tachie/ に PSD（レイヤー＝パーツ）\n  ③ input/tachie/ に全身の立ち絵1枚（正面・腕を下ろした絵。自動でパーツに分けます。粗いので確認シートを見てください）\n  試すだけなら: npm run parts -- demo（簡易キャラを作ります）";
 /** parse "3,5" / "3+5" / "" -> option keys (1-based numbers). */
 export function parsePick(input: string, q: SemiQ): string[] {
   const s = input.normalize("NFKC").trim();
@@ -62,8 +65,10 @@ export function semiToPlan(ans: Record<string, string[]>, c: SemiCtx = {}): { sa
   const qs = semiQuestions(c), say: string[] = [], plan: string[] = [], warnings: string[] = [];
   const taste = (ans.taste ?? [])[0] ?? semiQuestions(c)[1].recommend[0], n = c.nImages ?? 0, isMix = (ans.show ?? ["mix"]).includes("mix");
   const mood = moodOf(c.genre, c.bpm ?? 120);
-  let combo = (ans.show ?? ["mix"]).includes("mix") ? proposeCombo(mood, c.faceRatio ?? 0, c.nImages ?? 0) : ans.show!.filter((k) => SHOW_MODES[k]);
-  if ((ans.taste ?? [])[0] === "graphic" && !combo.includes("mograph")) combo = [...combo.filter((m) => SHOW_MODES[m].kind === "text"), "mograph"];
+  let combo = (ans.show ?? ["mix"]).includes("mix") ? proposeCombo(mood, c.faceRatio ?? 0, c.nImages ?? 0, !!c.hasChar) : ans.show!.filter((k) => SHOW_MODES[k]);
+  if ((ans.parts ?? (c.hasChar ? ["tachie"] : []))[0] === "tachie" && !combo.includes("tachie")) combo = ["tachie", ...combo.filter((m) => !(isMix && PICTURE_MODES.includes(m)))];
+  if (combo.includes("tachie") && c.hasChar === false) warnings.push(TACHIE_MATERIAL_HELP);
+  if ((ans.taste ?? [])[0] === "graphic" && !combo.includes("mograph")) combo = [...combo.filter((m) => SHOW_MODES[m].kind === "text" || m === "tachie"), "mograph"];
   // picture tastes need pictures: mix -> story + lyric motion (images are generated when input has none)
   if (isMix && isStillTaste(taste) && !combo.some((m) => PICTURE_MODES.includes(m))) combo = ["story", "lyric_motion", ...combo.filter((m) => m === "typography")];
   if (!isMix && isStillTaste(taste) && !combo.some((m) => PICTURE_MODES.includes(m))) warnings.push(`画像テイスト「${TASTE_JA[taste]}」を選びましたが、見せ方が文字・図形だけなので画像が使われません。→ 見せ方に「物語」を足す（例: 「物語＋リリックモーションで」）か、テイストを「図形中心」にしてください。`);

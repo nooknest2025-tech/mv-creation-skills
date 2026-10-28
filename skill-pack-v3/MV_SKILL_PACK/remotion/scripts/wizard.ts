@@ -5,7 +5,9 @@ import { PRESETS, PRESET_IDS } from "../src/lib/presets";
 import { ASPECTS } from "../src/lib/config";
 import { applyInstruction } from "../src/lib/nl";
 import { run } from "./mv";
-import { VARIETY_OPTIONS, lyricOptions, structureOptions, type Option } from "../src/lib/options";
+import { TACHIE_OPTION, VARIETY_OPTIONS, lyricOptions, structureOptions, type Option } from "../src/lib/options";
+import { findCharacterMaterial } from "./tachie_project";
+import { TACHIE_MATERIAL_HELP } from "../src/lib/semi";
 import { MODE_IDS, SHOW_MODES, composeCombo } from "../src/lib/mograph";
 import { parsePick, semiQuestions, semiToPlan, type SemiCtx } from "../src/lib/semi";
 import { analyzeAudio, autoSections } from "./common";
@@ -18,7 +20,7 @@ async function main() {
   const rl = piped ? { question: async (s: string) => { process.stdout.write(s); const a = piped.shift() ?? ""; process.stdout.write(a + "\n"); return a; }, close: () => {} } : readline.createInterface({ input: process.stdin, output: process.stdout });
   const q = async (s: string, def = "") => ((await rl.question(s)).trim() || def);
   log("\n🎬 MVメーカーへようこそ！ いくつか質問します（Enter だけで「おすすめ」を選べます）\n");
-  let input = INPUT_DIR;
+  let input = process.env.MVPACK_INPUT ? path.resolve(process.env.MVPACK_INPUT) : INPUT_DIR;
   let det = fs.existsSync(input) ? detectInput(input) : null;
   if (!det?.audio) {
     log(`📂 input フォルダに曲が見つかりません: ${input}`);
@@ -27,6 +29,9 @@ async function main() {
     input = path.join(PACK_DIR, "input_sample"); det = detectInput(input);
   }
   log(`\n✅ 曲: ${path.basename(det.audio!)} / 歌詞: ${det.lyrics ? path.basename(det.lyrics) : "なし（自動で書き起こし）"} / 画像 ${det.images.length} 枚 / 動画 ${det.videos.length} 本`);
+  const chars = findCharacterMaterial(input);
+  if (chars.length) log(`🧍 キャラ素材: ${chars.map((c) => c.name).join("・")}（立ち絵モーションMVに使えます）`);
+  const noCharWarn = (ids: string[] | null) => { if (ids?.includes("tachie") && !chars.length) log(`  ⚠️ ${TACHIE_MATERIAL_HELP.replace(/\n/g, "\n     ")}`); };
   log("\nQ1. どう作りますか？\n  1) おまかせ（全部自動）\n  2) 半自動（おすすめ: 5〜6問だけ。Enter でプロのおすすめ）\n  3) ジャンルを選ぶ\n  4) こだわり（細かく指定）");
   const m0 = await q("  番号 [2]: ", "2");
   const mode = ({ "1": "1", "2": "semi", "3": "2", "4": "3" } as Record<string, string>)[m0] ?? "semi";
@@ -38,13 +43,17 @@ async function main() {
     const a = (await q("  番号 [おまかせ]: ")).normalize("NFKC");
     const ids = [...new Set(a.split(/[,+、\s]+/).map(Number).filter((n) => n >= 1 && n <= MODE_IDS.length).map((n) => MODE_IDS[n - 1]))];
     if (!ids.length) return null;
-    const c = composeCombo(ids); log(`  → ${c.hybrid.ja}（セクションごとの配分）`); c.notes.forEach((n) => log(`     ${n}`));
+    noCharWarn(ids); const c = composeCombo(ids); log(`  → ${c.hybrid.ja}（セクションごとの配分）`); c.notes.forEach((n) => log(`     ${n}`));
     return ids;
   };
   const sayParts: string[] = [];
-  if (mode === "1") { const m = await pickModes("Q1b. 見せ方を指定しますか？"); if (m) sayParts.push(`${m.map((x) => SHOW_MODES[x].ja).join("＋")}で`); }
+  if (mode === "1") {
+    if (chars.length) log("\n  キャラ素材があるので、おまかせは「立ち絵モーション＋リリックモーション」で作ります（ほかの見せ方なら番号で）");
+    const m = await pickModes("Q1b. 見せ方を指定しますか？");
+    if (m) sayParts.push(`${m.map((x) => SHOW_MODES[x].ja).join("＋")}で`); else if (chars.length) sayParts.push("立ち絵モーション＋リリックモーションで");
+  }
   if (mode === "semi") {
-    let ctx: SemiCtx = { nImages: det.images.length };
+    let ctx: SemiCtx = { nImages: det.images.length, hasChar: chars.length > 0 };
     try { const an = analyzeAudio(det.audio!); const secs = autoSections(an) as any; const song = { title: "", duration: an.duration, fps: 30, bpm: an.bpm, phase: an.phase, beatsPerBar: 4, sections: secs, energy: an.energy, energyHz: 20, lines: [] };
       ctx = { ...ctx, bpm: an.bpm, duration: an.duration, cuts: estimateCutsFor(song, det.images.length), videoCost: videoCostHint(song) }; log(`\n🎵 曲をざっと解析: BPM ${Math.round(an.bpm)}・${Math.round(an.duration)}秒（カット数・費用は目安）`); }
     catch { log("\n（曲の事前解析をスキップ。カット数・費用の目安は本番の解析後に表示します）"); }
@@ -65,6 +74,7 @@ async function main() {
     PRESET_IDS.forEach((id, i) => log(`  ${i + 1}) ${PRESETS[id].ja} … ${PRESETS[id].desc}`));
     const g = Number(await q("  番号 [おまかせ]: ", "0"));
     if (g >= 1 && g <= PRESET_IDS.length) args.push("--preset", PRESET_IDS[g - 1]);
+    if (mode === "2" && chars.length && !(await q("\nQ2b. キャラ素材があります。立ち絵モーションMV（パーツで踊らせる・口パク・縦書き吹き出し）にしますか？ [y/N] ", "n")).toLowerCase().startsWith("n")) sayParts.push("立ち絵モーション＋リリックモーションで");
   }
   log("\nQ3. 画面の形は？\n  1) 横長 16:9（YouTube）  2) 縦長 9:16（ショート/TikTok/リール）  3) 正方形 1:1  4) 4:5（Instagram）  5) 全部");
   const a = await q("  番号 [1]: ", "1");
@@ -78,9 +88,9 @@ async function main() {
     const pre = args[args.indexOf("--preset") + 1]; const genre = args.includes("--preset") ? gOf[pre] ?? null : null;
     const pickOpt = async (title: string, opts: Option[]) => {
       log(`\n${title}（プロのおすすめ順）`); opts.forEach((o, i) => log(`  ${i + 1}) ${o.label} … ${o.why}`)); log(`  ${opts.length + 1}) おまかせ`);
-      const k = Number(await q("  番号 [1]: ", "1")); const o = opts[k - 1]; if (o?.say) extra.push(o.say);
+      const k = Number(await q("  番号 [1]: ", "1")); const o = opts[k - 1]; if (o?.say) extra.push(o.say); if (o === TACHIE_OPTION && !chars.length) log(`  ⚠️ ${TACHIE_MATERIAL_HELP.replace(/\n/g, "\n     ")}`);
     };
-    if (!m) await pickOpt("Q3a. MVの構成は？", structureOptions(genre, det.images.length ? 0.5 : 0));
+    if (!m) await pickOpt("Q3a. MVの構成は？", chars.length ? [TACHIE_OPTION, ...structureOptions(genre, det.images.length ? 0.5 : 0)] : [...structureOptions(genre, det.images.length ? 0.5 : 0), TACHIE_OPTION]);
     await pickOpt("Q3b. 歌詞の動きの変化は？", VARIETY_OPTIONS);
     await pickOpt("Q3c. サビの文字の動きは？", lyricOptions(genre, "chorus"));
     log("\nQ4. 演出の希望を日本語でどうぞ（例: サビはグリッチで。画は0.1秒前から切り替え。キライは割れるように）");
@@ -95,6 +105,7 @@ async function main() {
   }
   rl.close();
   if (sayParts.length) { const all = sayParts.join("。"); const r = applyInstruction({}, all); r.changes.forEach((c) => log(`   ✏️ ${c}`)); const i = args.indexOf("--say"); if (i >= 0) args[i + 1] = `${all}。${args[i + 1]}`; else args.push("--say", all); }
+  if (process.env.MVPACK_WIZARD_DRYRUN) { log(`WIZARD_ARGS ${JSON.stringify(args)}`); return; }
   log("\n▶ まずプレビュー静止画を作ってから、本番を書き出します。\n");
   await run(args);
 }
