@@ -2,8 +2,9 @@
 
 ![書体見本](images/font_specimen.jpg)
 
-パックには、**再配布できる無料フォント（SIL OFL 1.1 / Apache 2.0）を32書体**入れています。登録簿は `fonts.yaml`、ライセンス文は `remotion/public/fonts/`（`OFL_*.txt` / `LICENSE_*.txt`）にあります。
-- 4書体（Klee One・Yuji Boku・Zen Antique・New Tegomin）は容量の都合で同梱していません。`setup.bat`（中で `npm run fonts:fetch`）を実行すると Google Fonts から自動で入ります。
+パックには、**再配布できる無料フォント（SIL OFL 1.1 / Apache 2.0）を111書体**登録しています（`npm run fonts` で一覧）。登録簿は `fonts.yaml`、ライセンス文は `remotion/public/fonts/`（`OFL_*.txt` / `LICENSE_*.txt`）にあります。
+- そのうち13書体はパックに同梱、残り98書体は容量の都合で同梱せず、使うときや `setup.bat`（中で `npm run fonts:fetch`）で Google Fonts から自動で入ります（全部入れるなら `npm run fonts:fetch -- --all`）。
+- 編集画面の書体一覧は別に29書体を自動で用意します（[EDITOR_ja.md](EDITOR_ja.md) の「書体とライセンス」）。
 - 入っていない書体を指定した場合は、同じ分類の書体で代わりに表示します。
 
 ## 雰囲気から選ぶ
