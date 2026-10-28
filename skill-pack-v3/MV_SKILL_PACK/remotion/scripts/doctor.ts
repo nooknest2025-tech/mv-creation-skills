@@ -3,11 +3,11 @@
 import { spawnSync } from "node:child_process";
 import os from "node:os";
 import readline from "node:readline/promises";
-import { REMOTION_DIR, fs, log, path } from "./common";
-import { TOOLS, report, type OS, type Probe } from "./doctor_lib";
+import { REMOTION_DIR, fs, log, path, run as runCmd } from "./common";
+import { TOOLS, report, videoMcps, type OS, type Probe } from "./doctor_lib";
 
 const WIN = process.platform === "win32";
-const run = (c: string, a: string[] = ["--version"]) => { const r = spawnSync(c, a, { shell: WIN, encoding: "utf8", timeout: 20000 }); return { ok: r.status === 0, out: `${r.stdout ?? ""}${r.stderr ?? ""}`.trim().split("\n")[0] }; };
+const run = (c: string, a: string[] = ["--version"]) => { const r = runCmd(c, a, { encoding: "utf8", timeout: 20000 }); return { ok: r.status === 0, out: `${r.stdout ?? ""}${r.stderr ?? ""}`.trim().split("\n")[0] }; };
 export function probeAll(): Probe {
   const P: Probe = {};
   const major = Number(process.versions.node.split(".")[0]);
@@ -20,11 +20,11 @@ export function probeAll(): Probe {
   const g = run("git"); P.git = { ok: g.ok, detail: g.out };
   const py = process.env.MVPACK_PYTHON ?? ["python3", "python", "py"].find((c) => run(c).ok);
   P.python = { ok: !!py, detail: py ? run(py).out : undefined };
-  const imp = (m: string) => !!py && spawnSync(py, ["-c", `import ${m}`], { shell: WIN }).status === 0;
+  const imp = (m: string) => !!py && spawnSync(py, ["-c", `import ${m}`], { shell: false }).status === 0;
   P.pillow = { ok: imp("PIL") && imp("numpy") };
   P.psd_tools = { ok: imp("psd_tools") };
   P.rembg = { ok: imp("rembg") };
-  P.opencv = { ok: !!py && spawnSync(py, ["-c", "import cv2,sys; sys.exit(0 if hasattr(cv2,'CascadeClassifier') else 1)"], { shell: WIN }).status === 0 };
+  P.opencv = { ok: !!py && spawnSync(py, ["-c", "import cv2,sys; sys.exit(0 if hasattr(cv2,'CascadeClassifier') else 1)"], { shell: false }).status === 0 };
   P.whisper = { ok: imp("faster_whisper") };
   let free = Infinity; try { const s = (fs as any).statfsSync(REMOTION_DIR); free = (s.bavail * s.bsize) / 1e9; } catch { /* old node */ }
   P.disk = { ok: free >= 5, detail: Number.isFinite(free) ? `空き ${free.toFixed(1)}GB` : "" };
@@ -35,7 +35,8 @@ export function probeAll(): Probe {
   P.davinci = { ok: dv };
   const cfg = path.join(os.homedir(), ".codex", "config.toml");
   const mcp = fs.existsSync(cfg) ? (fs.readFileSync(cfg, "utf8").match(/^\[mcp_servers\.([^\]]+)\]/gm) ?? []).map((x) => x.slice(13, -1)) : [];
-  P.video_mcp = { ok: mcp.length > 0, detail: mcp.length ? `Codex に登録済み: ${mcp.join(", ")}` : "（未登録: 無料ルートで作ります）" };
+  const vm = videoMcps(mcp);
+  P.video_mcp = { ok: vm.length > 0, detail: vm.length ? `Codex に登録済み: ${vm.join(", ")}` : `未検出（無料ルートで作ります）${mcp.length ? `。ほかの MCP（${mcp.join(", ")}）は動画生成用ではないため数えていません` : ""}` };
   // simulated missing tools (tests / demos)
   for (const id of (process.env.MVPACK_DOCTOR_MISSING ?? "").split(",").filter(Boolean)) P[id] = { ok: false, detail: "（擬似的に未インストール）" };
   return P;

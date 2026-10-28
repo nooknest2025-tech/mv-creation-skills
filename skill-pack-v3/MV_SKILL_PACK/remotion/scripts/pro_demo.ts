@@ -1,11 +1,11 @@
-// npm run pro-demo -- [--out ../../dist/pro_motion_demo.mp4] [--stills]
+// npm run pro-demo -- [--out pro_motion_demo.mp4] [--stills]   → 出力は必ず remotion/out/ の中
 // Short demo of the pro motion core + motion-graphics transitions + parts animation on the bundled sample song.
 // Uses projects/sample_song (run `npm run sample` once) and the original demo character (npm run parts -- demo).
 import { buildProps } from "../src/lib/pipeline";
 import { PALETTES } from "../src/lib/pro";
 import type { Song } from "../src/lib/types";
 import { readJson } from "./project";
-import { INPUT_DIR, PACK_DIR, PROJECTS_DIR, PUBLIC_PROJECT, REMOTION_DIR, fail, fs, log, npx, parseArgs, path } from "./common";
+import { INPUT_DIR, PACK_DIR, PROJECTS_DIR, PUBLIC_PROJECT, REMOTION_DIR, demoOut, fail, fs, log, npx, parseArgs, path } from "./common";
 import { loadRigForRender, runPy, rigFromLayersDir } from "./parts_lib";
 
 async function main() {
@@ -30,7 +30,7 @@ async function main() {
   for (const L of p.lines) { const ms = p.mograph.sections.find((s: any) => L.start >= s.start && L.start < s.end); if (ms) L.params.palette = L.start < 5.6 ? { accent: ms.palette.accent } : { fill: ms.palette.fg, stroke: ms.palette.bg, accent: ms.palette.accent }; }
   for (const L of p.lines) if (L.li === 1 || L.li === 2) { L.params.size = L.li === 2 ? 2.1 : 1.6; L.params.anchor = L.li === 2 ? 3 : 0; } // full-screen typography sections
   p.parts.segments = p.parts.segments.map((s: any) => ({ ...s, preset: s.type === "bridge" ? "groove" : "off" }));
-  const out = path.resolve(String(o.out ?? path.join(PACK_DIR, "..", "..", "..", "dist", "pro_motion_demo.mp4")));
+  const out = demoOut("pro_motion_demo.mp4", o.out);
   const pf = path.join(REMOTION_DIR, "out", "pro_demo_props.json"); fs.mkdirSync(path.dirname(pf), { recursive: true }); fs.writeFileSync(pf, JSON.stringify(p));
   if (o.stills) { for (const f of String(o.stills === true ? "45,100,170,200,250,292,300,330,360,400,440,500,560" : o.stills).split(",")) npx(["remotion", "still", "MV", path.join(REMOTION_DIR, "out", "pro_demo", `f${f}.png`), `--props=${pf}`, `--frame=${f}`, "--log=error"]); log("stills → out/pro_demo/"); return; }
   fs.mkdirSync(path.dirname(out), { recursive: true });

@@ -106,8 +106,9 @@ describe("models.yaml integrity", () => {
   });
 });
 
-const PY = ["/tmp/cv4/bin/python", "python3"].find((p) => { try { execFileSync(p, ["-c", "import numpy, PIL"], { stdio: "ignore" }); return true; } catch { return false; } });
-const FF = (() => { try { execFileSync("ffmpeg", ["-version"], { stdio: "ignore" }); return true; } catch { return false; } })();
+import { ffmpegMissing, pythonWith, skipNote, FF_FIX, PY_FIX } from "./_caps";
+const PY = pythonWith(["numpy", "PIL"]), FFR = ffmpegMissing(), FF = !FFR;
+if (!PY) skipNote("動画クリップの品質チェック（Python）", "numpy / Pillow 入りの Python が見つかりません", PY_FIX); else if (FFR) skipNote("動画クリップの品質チェック（Python）", FFR, FF_FIX);
 describe.skipIf(!PY || !FF)("clip QA (python)", () => {
   it("flags a flickering clip, passes a clean one", () => {
     const d = fs.mkdtempSync(path.join(os.tmpdir(), "qa-"));

@@ -1,3 +1,4 @@
+import { pythonWith, skipNote, PY_FIX } from "./_caps";
 // pro motion core, motion-graphics director, combinable show modes, semi-auto mode, parts animation rig.
 import { describe, expect, it } from "vitest";
 import { spawnSync } from "node:child_process";
@@ -167,7 +168,7 @@ describe("parts animation (パーツアニメ)", () => {
     const p: any = buildProps(song(), { parts: { rigData: rig } } as any, []);
     expect(p.parts.segments.find((s: any) => s.type === "chorus").preset).toMatch(/groove|sing/); expect(p.parts.segments.find((s: any) => s.type === "intro").preset).toBe("idle");
   });
-  const py = ["python3", "python"].find((c) => spawnSync(c, ["-c", "import PIL, numpy"]).status === 0);
+  const py = pythonWith(["PIL", "numpy"]); if (!py) skipNote("パーツ分割（parts.py）", "numpy / Pillow 入りの Python が見つかりません", PY_FIX);
   it.skipIf(!py)("parts.py: demo character -> split a flattened image into rough parts (local, free)", () => {
     const d = fs.mkdtempSync(path.join(os.tmpdir(), "parts-")), script = path.join(__dirname, "..", "scripts", "parts.py");
     expect(spawnSync(py!, [script, "demo", "--out", path.join(d, "demo")]).status).toBe(0);

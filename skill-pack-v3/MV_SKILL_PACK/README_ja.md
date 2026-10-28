@@ -44,6 +44,15 @@ OpenAI Codex に入れると、**日本語で話しかけるだけ**で「サビ
 4. プレビュー静止画を見て Enter → MP4 ができる（`projects/<曲名>/out/`）
 5. 直したい所を Codex に日本語で伝える → もう一度 `start.bat`（v2 ができる。前の版は残る）
 
+## 共通編集UI（ブラウザで直して書き出す）
+歌詞の結合・分割・秒数、シーンの切替・画像位置、モーション（pro_* を含む全カタログ）・書体・色をブラウザで直し、保存した内容で MP4 を書き出せます。どの曲のプロジェクトでも使えます。
+```bash
+cd remotion
+npm run editor -- --demo --project editor-demo   # 見本で試す
+npm run editor -- --project <曲名>               # npm run mv で作った画像MVを開く
+```
+→ 詳しくは [docs/EDITOR_ja.md](docs/EDITOR_ja.md)（確認済み・未確認の範囲も書いています）
+
 ## 基本32スタイル
 `npm run styles` で一覧、`npm run showcase` で全スタイルの見本動画（静止画モードのデモ付き）。
 

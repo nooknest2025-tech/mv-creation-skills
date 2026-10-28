@@ -18,12 +18,13 @@ const ALT = ["kb_in", "drift_l", "kb_out", "parallax", "slow_push", "drift_r", "
 export function review(p: CriticIn): Review {
   const I: Issue[] = [];
   const S = p.shots.filter((s) => s.src), B = beatLen(p.beat as any);
+  const nm = (s: Shot) => { const i = p.shots.indexOf(s); return `シーン${i + 1}（${s.sectionType ? (SEC_JA[s.sectionType] ?? "") + " " : ""}${Math.floor(s.start / 60)}:${String(Math.floor(s.start % 60)).padStart(2, "0")}〜）`; };
   // 1) same camera move 3+ times in a row
   for (let i = 2; i < S.length; i++) {
     if (S[i].move === S[i - 1].move && S[i].move === S[i - 2].move) {
       const s = S[i];
-      if (!s.locked) { const alt = (p.movesAlt ?? ALT).find((m) => m !== s.move && m !== S[i + 1]?.move) ?? "static"; I.push({ rule: "same_move", fixed: true, at: s.id, msg: `${s.id}: 「${MOVE_JA[s.move] ?? s.move}」が3回続くので「${MOVE_JA[alt] ?? alt}」に変更` }); s.move = alt; }
-      else I.push({ rule: "same_move", fixed: false, at: s.id, msg: `${s.id}: 同じ動き（${MOVE_JA[s.move] ?? s.move}）が3回続きます。1カットだけフィックスか引きにすると次が活きます` });
+      if (!s.locked) { const alt = (p.movesAlt ?? ALT).find((m) => m !== s.move && m !== S[i + 1]?.move) ?? "static"; I.push({ rule: "same_move", fixed: true, at: s.id, msg: `${nm(s)}: 「${MOVE_JA[s.move] ?? s.move}」が3回続くので「${MOVE_JA[alt] ?? alt}」に変更` }); s.move = alt; }
+      else I.push({ rule: "same_move", fixed: false, at: s.id, msg: `${nm(s)}: 同じ動き（${MOVE_JA[s.move] ?? s.move}）が3回続きます。1カットだけフィックスか引きにすると次が活きます` });
     }
   }
   // 2) restraint: one hero move per section; big effects not everywhere
@@ -62,7 +63,7 @@ export function review(p: CriticIn): Review {
     if (i === 0) return;
     const off = Math.abs(((s.start - p.beat.phase) / (B / 2)) - Math.round((s.start - p.beat.phase) / (B / 2))) * (B / 2);
     const onLine = p.lines.some((L) => Math.abs(L.chars[0].t0 - s.start) < 0.12);
-    if (off > 0.09 && !onLine) I.push({ rule: "off_beat", fixed: false, at: s.id, msg: `${s.id}: カット点が拍からずれています（${off.toFixed(2)}秒）。拍か歌い出しに合わせると気持ちよく切れます` });
+    if (off > 0.09 && !onLine) I.push({ rule: "off_beat", fixed: false, at: s.id, msg: `${nm(s)}: カット点が拍からずれています（${off.toFixed(2)}秒）。拍か歌い出しに合わせると気持ちよく切れます` });
   });
   // 6) arc: chorus must out-rank the verse (intensity + cut rate); hook & ending payoff
   const avg = (t: string) => { const ls = p.lines.filter((L) => L.sectionType === t); return ls.length ? ls.reduce((a, L) => a + trait(L.style).intensity, 0) / ls.length : NaN; };
@@ -72,14 +73,14 @@ export function review(p: CriticIn): Review {
   const ch = [...new Set(p.lines.filter((L) => L.sectionType === "chorus").map((L) => L.section))];
   if (ch.length >= 2) { const iv = (sec: string) => { const x = p.lines.filter((L) => L.section === sec); return x.reduce((a, L) => a + trait(L.style).intensity, 0) / x.length; };
     if (iv(ch[ch.length - 1]) + 0.02 < iv(ch[0])) I.push({ rule: "arc", fixed: false, msg: `ラスサビ（${ch[ch.length - 1]}）が最初のサビより弱いです。最後のサビで1段上げるか、落ちサビで一度引いてから上げると山ができます` }); }
-  if (!p.calm) S.forEach((s) => { if (s.end - s.start > 4.2 && (s.move === "static" || !s.move) && s.kind === "image") I.push({ rule: "hold", fixed: false, at: s.id, msg: `${s.id}: 動きのない静止画が${(s.end - s.start).toFixed(1)}秒続きます。2秒ごとに画か動きを変えると間延びしません` }); });
+  if (!p.calm) S.forEach((s) => { if (s.end - s.start > 4.2 && (s.move === "static" || !s.move) && s.kind === "image") I.push({ rule: "hold", fixed: false, at: s.id, msg: `${nm(s)}: 動きのない静止画が${(s.end - s.start).toFixed(1)}秒続きます。2秒ごとに画か動きを変えると間延びしません` }); });
   const firstChorus = p.lines.find((L) => L.sectionType === "chorus");
   if (firstChorus && !p.lines.some((L) => L.sectionType === "chorus" && trait(L.style).hero) && !p.calm) I.push({ rule: "hook", fixed: false, msg: "サビに見せ場の文字がありません。サビ頭の1行だけ大きく出すとフックになります" });
   const last = S[S.length - 1];
   if (last && last.end - last.start < B * 2) I.push({ rule: "ending", fixed: false, msg: "最後のカットが短く、余韻がありません。最後は2拍以上ためると締まります" });
   // 7) rhythm variation: a long run of identical shot lengths
   const lens = S.map((s) => +(s.end - s.start).toFixed(2));
-  let run = 1; for (let i = 1; i < lens.length; i++) { run = Math.abs(lens[i] - lens[i - 1]) < 0.05 ? run + 1 : 1; if (run === 10) I.push({ rule: "rhythm", fixed: false, at: S[i].id, msg: `${S[i].id}付近: 同じ長さのカットが10回続きます。感情の山で1カット長く「ため」ると単調さが消えます` }); }
+  let run = 1; for (let i = 1; i < lens.length; i++) { run = Math.abs(lens[i] - lens[i - 1]) < 0.05 ? run + 1 : 1; if (run === 10) I.push({ rule: "rhythm", fixed: false, at: S[i].id, msg: `${nm(S[i])}付近: 同じ長さのカットが10回続きます。感情の山で1カット長く「ため」ると単調さが消えます` }); }
   const bad = I.filter((x) => !x.fixed).length, fixed = I.filter((x) => x.fixed).length;
   const score = Math.max(0, 100 - bad * 6 - fixed * 1);
   return { issues: I, note: directorNote(p, I), score };

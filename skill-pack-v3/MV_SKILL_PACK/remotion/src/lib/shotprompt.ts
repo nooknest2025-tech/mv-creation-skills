@@ -135,17 +135,22 @@ export function proseOf(sp: ShotSpec, o: { motionOnly?: boolean } = {}) {
 // ---- critic for the shot list (variety / coverage / arc / repeated moves) ----
 export interface ShotIssue { rule: string; at?: string; msg: string; fixed: boolean }
 const ORDER: ShotSize[] = ["EWS", "WS", "MS", "MCU", "CU", "ECU", "INSERT"];
-export function reviewShotList(specs: ShotSpec[], locked: Set<string> = new Set()): { issues: ShotIssue[]; score: number } {
+export const SIZE_JA: Record<string, string> = { EWS: "かなり引きの画", WS: "引きの画", MS: "中くらいの画（腰から上）", MCU: "やや寄りの画（胸から上）", CU: "寄りの画（顔）", ECU: "かなり寄りの画（目元など）", INSERT: "小物のアップ" };
+export const MM_JA: Record<string, string> = { push: "寄り", pull: "引き", pan: "首振り（パン）", truck: "横移動", tilt: "上下の首振り", pedestal: "上下移動", orbit: "回り込み", track: "追いかけ", zoom: "ズーム", static: "固定", handheld: "手持ち", shake: "揺れ", crane: "クレーン（上下の大きな移動）", roll: "傾き" };
+const mmJa = (m: string) => MM_JA[m] ?? m;
+/** names: shot id -> friendly 「シーン2（Aメロ 0:12〜）」. */
+export function reviewShotList(specs: ShotSpec[], locked: Set<string> = new Set(), names: Record<string, string> = {}): { issues: ShotIssue[]; score: number } {
   const issues: ShotIssue[] = [];
+  const nm = (id: string) => names[id] ?? id.replace(/^S0*(\d+)$/i, "シーン$1");
   const fix = (sp: ShotSpec, rule: string, msg: string, apply: () => void) => {
     if (locked.has(sp.shot)) issues.push({ rule, at: sp.shot, msg: msg + "（手動ロック中のため提案のみ）", fixed: false });
     else { apply(); issues.push({ rule, at: sp.shot, msg, fixed: true }); }
   };
   for (let i = 1; i < specs.length; i++) {
     const a = specs[i - 1], b = specs[i];
-    if (a.size === b.size && a.section === b.section) fix(b, "same-size", `${b.shot}: 前と同じ${b.sizeEn}が続く → 景別を変えます`, () => {
+    if (a.size === b.size && a.section === b.section) fix(b, "same-size", `${nm(b.shot)}: 前と同じ${SIZE_JA[b.size] ?? "画"}が続く → 画の大きさを変えます`, () => {
       const k = ORDER.indexOf(b.size), n = ORDER[k <= 2 ? k + 2 : k - 2]; b.size = n; b.sizeEn = SIZE_EN[n][0]; b.lens = SIZE_EN[n][1]; });
-    if (a.move.mm === b.move.mm && a.move.mm !== "static") fix(b, "same-move", `${b.shot}: 同じカメラ動作（${b.move.mm}）が連続 → 別の動きに`, () => {
+    if (a.move.mm === b.move.mm && a.move.mm !== "static") fix(b, "same-move", `${nm(b.shot)}: 同じカメラの動き（${mmJa(b.move.mm)}）が続く → 別の動きにします`, () => {
       const alt = b.move.mm === "push" ? MOVES.drift_r : MOVES.kb_in; b.move = { id: b.move.mm === "push" ? "drift_r" : "kb_in", ...alt }; });
   }
   // coverage: each section should open with an establishing (WS/EWS) and contain a CU-ish shot
@@ -160,7 +165,7 @@ export function reviewShotList(specs: ShotSpec[], locked: Set<string> = new Set(
   const v = avg("verse"), c = avg("chorus");
   if (v !== null && c !== null && c < v - 0.5) issues.push({ rule: "arc", msg: "サビの方がAメロより引きの画が多い → サビで寄り・速い動きを増やすと盛り上がりが伝わります", fixed: false });
   const sizes = new Set(specs.map((s) => s.size));
-  if (specs.length >= 6 && sizes.size < 3) issues.push({ rule: "variety", msg: `景別が${sizes.size}種類しかない（単調）`, fixed: false });
+  if (specs.length >= 6 && sizes.size < 3) issues.push({ rule: "variety", msg: `画の大きさ（引き・寄りなど）が${sizes.size}種類しかなく単調です`, fixed: false });
   const score = Math.max(0, 100 - issues.filter((x) => !x.fixed).length * 10 - issues.filter((x) => x.fixed).length * 3);
   return { issues, score };
 }

@@ -1,6 +1,8 @@
 // ONE command: npm run mv [-- --song song.mp3 --lyrics lyrics.json --input ../input --preset auto --aspect 16:9 --yes]
+import { mergeSceneSlivers } from "../src/lib/sceneSlivers";
 // Detects inputs, fills gaps (analysis / Whisper / alignment / abstract visuals), shows a Japanese summary,
 // renders preview stills, then the MP4 (+ Drive variant, DaVinci package, highlight) and a QA report.
+import { needsStills, TASTE_JA } from "../src/lib/stills";
 import { spawnSync } from "node:child_process";
 import readline from "node:readline/promises";
 import { parseLyricJson, parseLyricsFile, sectionTypeOf } from "../src/lib/song";
@@ -28,7 +30,7 @@ function parseAss(src: string) {
   return out.join("\n");
 }
 
-function python() { for (const p of [process.env.MVPACK_PYTHON ?? "", "python3", "python", "py"].filter(Boolean)) { const r = spawnSync(p, ["--version"], { shell: process.platform === "win32" }); if (r.status === 0) return p; } return null; }
+function python() { for (const p of [process.env.MVPACK_PYTHON ?? "", "python3", "python", "py"].filter(Boolean)) { const r = spawnSync(p, ["--version"], { shell: false }); if (r.status === 0) return p; } return null; }
 
 export async function buildSong(det: ReturnType<typeof detectInput>, dir: string, o: Record<string, any>): Promise<{ song: Song; notes: string[] }> {
   const notes: string[] = [];
@@ -53,7 +55,7 @@ export async function buildSong(det: ReturnType<typeof detectInput>, dir: string
       log(det.lyricsKind === "txt" ? "🎤 歌詞テキストを音声に位置合わせ中（faster-whisper・無料）…" : "🎤 歌詞を自動で書き起こし中（faster-whisper・無料）…");
       const vocals = det.stems.find((s) => /vocal|ボーカル/i.test(path.basename(s)) && !/inst|off/i.test(path.basename(s)));
       const args = [path.join(REMOTION_DIR, "scripts", "transcribe.py"), audio, "--out", outJson, "--model", String(o.whisper ?? "small"), ...(det.lyricsKind === "txt" ? ["--text", det.lyrics!] : []), ...(vocals ? ["--vocals", vocals] : [])];
-      const r = spawnSync(py, args, { stdio: "inherit", shell: process.platform === "win32" });
+      const r = spawnSync(py, args, { stdio: "inherit", shell: false });
       if (r.status !== 0) throw new UserError("歌詞の自動処理に失敗しました", "pip install faster-whisper を実行してから再試行。急ぐなら歌詞なし（--no-lyrics）でも作れます。");
     } else notes.push("歌詞の自動処理結果を再利用（やり直すなら --reanalyze）");
     song = parseLyricJson(JSON.parse(fs.readFileSync(outJson, "utf8")), path.basename(audio).replace(/\.[^.]+$/, ""));
@@ -61,9 +63,10 @@ export async function buildSong(det: ReturnType<typeof detectInput>, dir: string
   song.duration = dur || song.duration;
   if (needAnalysis || !song.energy.length) {
     an = analyzeAudio(audio);
-    song.bpm = an.bpm; song.phase = an.phase; song.energy = (() => { const e = an!.energy; const s = [...e].sort((a, b) => a - b); const hi = s[Math.floor(s.length * 0.98)] || 1; return e.map((v) => Math.min(1, v / hi)); })(); song.energyHz = 20;
+    const keepBpm = det.lyricsKind === "json" && (() => { try { const j = JSON.parse(fs.readFileSync(det.lyrics!, "utf8").replace(/^\uFEFF/, "")); return Number(j.analysis?.bpm ?? j.bpm ?? j.audio?.bpm) > 0; } catch { return false; } })(); // the lyric JSON's BPM is the author's truth
+    if (!keepBpm) { song.bpm = an.bpm; song.phase = an.phase; } song.energy = (() => { const e = an!.energy; const s = [...e].sort((a, b) => a - b); const hi = s[Math.floor(s.length * 0.98)] || 1; return e.map((v) => Math.min(1, v / hi)); })(); song.energyHz = 20;
     if (song.sections.length <= 1) song.sections = autoSections({ ...an, energy: song.energy }).map((s) => ({ ...s, type: sectionTypeOf(s.label, s.type) }));
-    notes.push(`音声解析: BPM ${an.bpm} / セクション ${song.sections.length} 個（自動）`);
+    notes.push(keepBpm ? `音の強さを解析（BPM ${song.bpm}・セクション ${song.sections.length} 個は歌詞JSONの値を使用）` : `音声解析: BPM ${an.bpm} / セクション ${song.sections.length} 個（自動）`);
   }
   // manual locks survive re-analysis (timing edits live in mv.config.json -> never overwritten here)
   if (prev && prev.title === song.title) { /* nothing to merge: edits are in config.timing */ }
@@ -100,12 +103,17 @@ export async function run(argv: string[]) {
   log(`\n📂 入力: ${inputDir}`);
   log(`  🎵 曲: ${path.basename(det.audio)}${det.stems.length ? `（ほかに ${det.stems.length} 個の音源: ${det.stems.map((s) => path.basename(s)).join(", ")} → ボーカル音源は歌詞合わせに使用）` : ""}`);
   log(`  📝 歌詞: ${det.lyrics ? `${path.basename(det.lyrics)} … ${KIND_JA[det.lyricsKind!]}` : o["no-lyrics"] ? "なし（歌詞なしで作成）" : "なし → 🤖 音声から自動で書き起こします（faster-whisper・無料）"}`);
-  log(`  🖼  画像: ${det.images.length} 枚　🎞  動画: ${det.videos.length} 本${!det.images.length && !det.videos.length ? " → 🤖 素材なし: 曲に反応する抽象映像を自動生成します" : ""}`);
+  log(`  🖼  画像: ${det.images.length} 枚　🎞  動画: ${det.videos.length} 本${!det.images.length && !det.videos.length ? (needsStills(cfg.taste, 0) ? ` → ⚠️ テイスト「${TASTE_JA[cfg.taste!]}」なのに画像がありません。このあと静止画の生成プランを作ります（それまでは仮に抽象映像で作ります）` : " → 🤖 素材なし: 曲に反応する抽象映像を自動生成します") : ""}`);
   if (det.lyricsKind !== "json") log("  📈 BPM・セクション・音の強さ: 🤖 自動解析します");
 
   const { song, notes } = await buildSong(det, dir, o);
   if (o["no-lyrics"]) song.lines = [];
   notes.forEach((n) => log(`  ℹ️ ${n}`));
+  if (!det.images.length && !det.videos.length && needsStills(cfg.taste, 0)) {
+    const { writeStillsPlan, stillsSummary, stillsInbox } = await import("./stills");
+    const { plan } = writeStillsPlan(dir, {});
+    log(`\n${stillsSummary(plan)}\n   📄 手順と画像リスト: ${path.join(dir, "stills_plan.md")}\n   ① stills_prompts.csv のプロンプトで画像を作る → ② ${stillsInbox(dir)} に保存 → ③ npm run gen -- stills import → ④ npm run mv\n`);
+  }
 
   // ---- media (copied into public/project, scenes + focus cached) ----
   const mediaCache = readJson<Record<string, any>>(path.join(dir, "media_cache.json"), {});
@@ -124,7 +132,7 @@ export async function run(argv: string[]) {
   if (det.images.length && !o["no-faces"]) {
     const py = python(), fdir = path.join(PUBLIC_PROJECT, "faces");
     fs.rmSync(fdir, { recursive: true, force: true });
-    const r = py ? spawnSync(py, [path.join(REMOTION_DIR, "scripts", "faces.py"), "--out", fdir, "--manual", path.join(dir, "faces_manual.json"), ...det.images], { encoding: "utf8", shell: process.platform === "win32" }) : null;
+    const r = py ? spawnSync(py, [path.join(REMOTION_DIR, "scripts", "faces.py"), "--out", fdir, "--manual", path.join(dir, "faces_manual.json"), ...det.images], { encoding: "utf8", shell: false }) : null;
     const fj = path.join(fdir, "faces.json");
     if (r && r.status === 0 && fs.existsSync(fj)) {
       const faces = readJson<Record<string, any>>(fj, {});
@@ -137,7 +145,7 @@ export async function run(argv: string[]) {
   { const py = python(), files = [...det.images, ...(det.videos ?? [])];
     if (py && files.length) {
       const vf = path.join(dir, "visfeat.json");
-      const r = spawnSync(py, [path.join(REMOTION_DIR, "scripts", "visfeat.py"), "--out", vf, ...files], { encoding: "utf8", shell: process.platform === "win32" });
+      const r = spawnSync(py, [path.join(REMOTION_DIR, "scripts", "visfeat.py"), "--out", vf, ...files], { encoding: "utf8", shell: false });
       if (r.status === 0 && fs.existsSync(vf)) { const V = readJson<Record<string, any>>(vf, {}); const byName = Object.fromEntries(Object.entries(V).map(([k, v]) => [path.basename(k), v]));
         let n = 0; for (const m of media) { const v = byName[m.orig]; if (v) { (m as any).vis = v; n++; } }
         const arts = [...new Set(Object.values(V).map((v: any) => v.art))];
@@ -159,13 +167,23 @@ export async function run(argv: string[]) {
   const aspects: Aspect[] = (o.aspects ? String(o.aspects).split(",") : cfg.aspects ?? [cfg.aspect ?? "16:9"]) as Aspect[];
   const first = buildProps(song, cfg, media, { audio: `project/${pub[0].name}`, aspect: aspects[0] });
   { const { fontsOfLines } = await import("../src/render/fontsUsed"); await fetchMissing({ ids: fontsOfLines(first.lines) }); }
+  // A per-project manifest lets the shared editor (npm run editor -- --project <name>) reopen the exact source files.
+  if (det.images.length || (det.videos ?? []).length) writeJson(path.join(dir, "out", "editor-input.json"), {
+    title, audio: det.audio, lyrics: path.join(dir, "song.json"), images: det.images, videos: det.videos ?? [],
+    scenes: mergeSceneSlivers(first.shots.map((s, i) => ({ id: s.id, start: s.start, end: s.end,
+      asset: Math.max(0, media.findIndex((m) => m.src === s.src)), transition: i ? Math.min(0.7, s.end - s.start) : 0,
+      label: s.section ?? `シーン ${i + 1}` })), song.duration),
+    sections: song.sections.map((x) => ({ type: x.type, label: x.label, start: x.start, end: x.end })),
+    lyricStyles: first.lines.map((l) => ({ motion: l.style, params: l.params })),
+    width: first.width, height: first.height, fps: first.fps,
+  });
   if (first.genre) { const g = GENRES[first.genre]; log(`🎼 ジャンル: ${g.ja}（${first.genreWhy}）→ 書体 ${[g.fonts.base, g.fonts.chorus].map((i) => FONT_REG.find((f) => f.id === i)?.family ?? i).join(" / ")}　違えば「ジャンルはロックで」など`); }
   log(`\n🎬 演出: ${PRESETS[first.preset!].ja}（${first.presetWhy}）　画面: ${aspects.map((a) => ASPECTS[a]?.ja ?? a).join(" / ")}`);
   log(`🎞  構成: ${first.structureWhy}　変えるなら「ストーリー＋リップシンクで」「サビだけ歌うシーン」など`);
   for (const n of first.sectionNotes ?? []) log(`   ・${n}`);
   if ((first as any).mographNotes?.length) { log("🎨 プロ演出（図形・色・転換・拍アクセント）: 消すなら「モーショングラフィックスなし」、昔の見た目は「プロ演出オフ」"); for (const n of (first as any).mographNotes) log(`   ・${n}`); }
   if (first.review) { log(`\n${first.review.note}\n  （プロチェック ${first.review.score}/100）`); fs.writeFileSync(path.join(dir, "director_note.md"), `${first.review.note}\n\n## セクションごとの選択理由\n${(first.sectionNotes ?? []).map((n) => `- ${n}`).join("\n")}\n\n## 構成\n- ${first.structureWhy}\n`); }
-  log(`  カット ${first.shots.length} 個 / 歌詞 ${first.lines.length} 行 / 文字スタイル: ${styleSummary(first.lines) || "（歌詞なし）"}`);
+  log(`  カット 約${first.shots.length} 個${cfg.density ? `（シーンの細かさ: ${({ slow: "ゆったり", fast: "テンポよく", normal: "標準" } as any)[cfg.density]}）` : ""} / 歌詞 ${first.lines.length} 行 / 文字スタイル: ${styleSummary(first.lines) || "（歌詞なし）"}`);
   const m = loadManifest(dir, title);
   const v = nextVersion(m);
   const base = `${safeName(title)}_v${v}`;
@@ -246,6 +264,22 @@ export async function run(argv: string[]) {
   addVersion(dir, m, { v, createdAt: new Date().toISOString(), note: String(o.note ?? o.say ?? ""), preset: first.preset!, aspect: aspects.join(","), outputs, configSnapshot: cfg });
   log(`\n🎉 完成！ v${v}\n${Object.values(outputs).map((x) => `  ・${path.join(dir, x)}`).join("\n")}\n`);
   log("次の一手: 気になる所を日本語で Codex に伝える（例「サビはグリッチで」）→ もう一度 npm run mv。良ければ npm run approve -- " + v);
+  await offerEditor(dir, o);
+}
+
+/** after any menu (おまかせ/半自動/ジャンル/こだわり/mv): offer the shared editor on this project. */
+export async function offerEditor(dir: string, o: Record<string, any>) {
+  const name = path.basename(dir), can = fs.existsSync(path.join(dir, "out", "editor-input.json")) || fs.existsSync(path.join(dir, "out", "editor", "editor-state.json"));
+  if (!can) { log("ℹ️ 動画素材を含むため、画面での手直し（編集画面）は静止画の曲のみ対応です。日本語の指示（npm run edit）で直せます。"); return; }
+  log(`✏️ 画面で手直しするなら: npm run editor -- --project ${name}\n   （歌詞・シーン・カメラ・エフェクト・タイミング・顔の位置を1つの画面で。日本語の指示 npm run edit -- "サビの歌詞を赤に" も同じ記録に書き込まれるので、手直しが消えることはありません）`);
+  const tty = process.stdin.isTTY && process.stdout.isTTY && !process.env.CI;
+  if (o["no-editor"] || o.editor === false || (!tty && !o.editor)) return;
+  let yes = !!o.editor;
+  if (!yes) { const rl = (await import("node:readline")).createInterface({ input: process.stdin, output: process.stdout });
+    const a: string = await new Promise((r) => rl.question("いま編集画面を開きますか？ [Y/n] ", r)); rl.close(); yes = !/^(n|no|いいえ|いや)/i.test(a.trim()); }
+  if (!yes) return;
+  const { spawnSync } = await import("node:child_process");
+  spawnSync(process.execPath, [path.join(REMOTION_DIR, "node_modules", "tsx", "dist", "cli.mjs"), path.join(REMOTION_DIR, "scripts", "editor.ts"), "--project", name], { stdio: "inherit", cwd: REMOTION_DIR, windowsHide: false });
 }
 
 if (process.argv[1]?.match(/mv\.ts$/)) run(process.argv.slice(2)).catch(fail);

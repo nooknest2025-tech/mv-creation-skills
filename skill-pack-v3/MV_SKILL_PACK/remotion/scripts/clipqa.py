@@ -48,9 +48,11 @@ def face_sim(a, b):
     return float(0.5 * np.minimum(ha, hb).sum() + 0.5 * max(0, (ga * gb).mean()))
 
 def face_drift(ims, ref=None):
-    try: import cv2
-    except Exception: return None, [], "OpenCV が無いため顔チェックは未実行"
-    det = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+    try:
+        import cv2
+        det = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+        if det.empty(): raise RuntimeError("cascade")
+    except Exception: return None, [], "OpenCV が無い（または一部だけ入っている）ため顔チェックは未実行。入れ直すなら: python -m pip install opencv-python-headless"
     def crop(im):
         g = cv2.cvtColor(np.asarray(im), cv2.COLOR_RGB2GRAY); f = det.detectMultiScale(g, 1.1, 4, minSize=(24, 24))
         if len(f) == 0: return None

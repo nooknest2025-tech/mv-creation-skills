@@ -18,8 +18,8 @@ export interface Timing {
   beatShiftBeats?: number; // shift the beat grid in beats (e.g. 0.5 = half a beat)
   sections?: Section[]; // manual section boundaries (locked)
   perSection?: Record<string, { cutLead?: number; lyricIn?: number; lyricOut?: number; cutBeats?: number }>;
-  perShot?: Record<string, { start?: number; end?: number; src?: string; kind?: "image" | "video"; clipFrom?: number; move?: string; transition?: string; ramp?: string; puppet?: Partial<import("./types").PuppetCfg>; lipsync?: import("./lipsync").LipsyncMeta; lipsyncHistory?: any[] }>;
-  perLine?: Record<string, { start?: number; end?: number; text?: string }>;
+  perShot?: Record<string, { offset?: number; start?: number; end?: number; src?: string; kind?: "image" | "video"; clipFrom?: number; speed?: number; fit?: boolean; tail?: "auto" | "hold" | "loop"; clipTo?: number; segments?: { at: number; speed: number }[]; ease?: number; solve?: number; move?: string; transition?: string; ramp?: string; puppet?: Partial<import("./types").PuppetCfg>; lipsync?: import("./lipsync").LipsyncMeta; lipsyncHistory?: any[] }>;
+  perLine?: Record<string, { offset?: number; start?: number; end?: number; text?: string }>;
   locked?: string[]; // which analysis fields are manual (kept on re-analysis): "bpm" | "beatShift" | "sections" | "lines"
 }
 

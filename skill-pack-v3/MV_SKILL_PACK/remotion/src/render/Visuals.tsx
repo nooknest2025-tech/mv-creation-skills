@@ -1,6 +1,7 @@
 // Visual layer: beat-synced montage of stills/clips with camera moves, pseudo-2.5D parallax, light leaks,
 // particles, beat shake, transitions and per-section grade. Falls back to generative abstract visuals.
 import React from "react";
+import { clipPlan, clipSourceTime } from "../lib/clipspeed";
 import { AbsoluteFill, Freeze, Img, OffthreadVideo, Sequence, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import { PuppetImage } from "./Puppet";
 import { Reactive } from "./AudioReactive";
@@ -8,6 +9,8 @@ import { FinishTop, Glow } from "./Finish";
 import { rampProgress } from "../lib/ramp";
 import { beatPulse, clamp, easeOut, rng } from "../lib/core";
 import type { RenderProps, Shot } from "../lib/types";
+import { CAMERA_MOVES, FxStage, activeFx, cameraPose } from "./SceneFx";
+const PACK_MOVES = new Set(["kb_in", "kb_out", "drift_l", "drift_r", "push", "face_push", "slow_push", "zoom_punch", "whip_l", "whip_r", "crane_up", "shake", "parallax"]);
 
 const src = (s: string) => (/^(https?:|data:|blob:)/.test(s) ? s : staticFile(s));
 
@@ -34,13 +37,20 @@ export function moveTransform(move: string, p: number, seed: number, W: number):
 
 const Media: React.FC<{ shot: Shot; W: number; H: number; fps: number; p: number; extraScale?: number; blur?: number; rp: RenderProps; t: number }> = ({ shot, W, H, fps, p, extraScale = 1, blur = 0, rp, t }) => {
   const q = rampProgress(shot.ramp, p);
-  const m = moveTransform(shot.move, q, shot.start * 1000, W);
+  const useFx = !!CAMERA_MOVES[shot.move] && (!PACK_MOVES.has(shot.move) || !!shot.camStrength || !!shot.camSync);
+  const cp = useFx ? cameraPose(shot.move, { p: q, t, t0: shot.start, dur: Math.max(0.1, shot.end - shot.start), beat: rp.beat, seed: Math.round(shot.start * 1000), W, sync: shot.camSync, accents: rp.accents }, shot.camStrength) : null;
+  const m = cp ?? moveTransform(shot.move, q, shot.start * 1000, W);
+  if (cp) blur = blur + cp.blur + (cp.focus ?? 0);
   const fo = shot.face?.eyes?.length ? faceC(shot.face) : shot.focus;
   const origin = fo ? `${(fo[0] * 100).toFixed(1)}% ${(fo[1] * 100).toFixed(1)}%` : "50% 50%";
-  const style: React.CSSProperties = { width: "100%", height: "100%", objectFit: "cover", objectPosition: origin, transformOrigin: origin, transform: `translate(${m.x * W}px, ${m.y * H}px) scale(${m.s * extraScale}) rotate(${m.r}deg)`, filter: blur ? `blur(${blur}px)` : undefined };
+  const style: React.CSSProperties = { width: "100%", height: "100%", objectFit: "cover", objectPosition: origin, transformOrigin: origin, transform: `translate(${m.x * W}px, ${m.y * H}px) scale(${m.s * extraScale}) rotate(${m.r}deg)${cp?.ry ? ` perspective(1400px) rotateY(${cp.ry}deg)` : ""}`, filter: blur ? `blur(${blur}px)` : undefined };
   if (!shot.src) return <AbsoluteFill style={{ background: "#000" }} />;
   if (shot.kind === "video") {
     const rate = shot.rate ?? 1, dur = shot.end - shot.start;
+    if (shot.speed !== undefined || shot.fit || shot.tail || shot.clipTo !== undefined || shot.segments?.length) { // user speed/stretch/in-point: identical mapping to the editor (audio untouched; clip muted)
+      const at = clipSourceTime(clipPlan(shot, dur, shot.clipDur), p * dur);
+      return <Freeze frame={Math.max(0, Math.round(at * fps))}><OffthreadVideo src={src(shot.src)} muted volume={0} style={style} /></Freeze>;
+    }
     if (shot.ramp && shot.ramp !== "none") {
       // time remap: show the source frame at clipFrom + F(u) * dur * rate
       const sf = Math.round(((shot.clipFrom ?? 0) + q * dur * rate) * fps);
@@ -124,7 +134,8 @@ export const Visuals: React.FC<{ p: RenderProps }> = ({ p }) => {
               {/* pseudo 2.5D: blurred far layer moves slower, sharp mid layer faster, vignette mask fakes depth */}
               <AbsoluteFill><Media shot={{ ...s, move: "drift_l", puppet: undefined }} W={W} H={H} fps={fps} p={prog} extraScale={1.25} blur={Math.min(W, H) * 0.012} rp={p} t={t} /></AbsoluteFill>
               <AbsoluteFill style={{ WebkitMaskImage: "radial-gradient(ellipse 62% 70% at 50% 50%, #000 55%, transparent 80%)", maskImage: "radial-gradient(ellipse 62% 70% at 50% 50%, #000 55%, transparent 80%)" }}><Media shot={s} W={W} H={H} fps={fps} p={prog} extraScale={1.08} rp={p} t={t} /></AbsoluteFill>
-            </> : <AbsoluteFill><Media shot={s} W={W} H={H} fps={fps} p={prog} rp={p} t={t} /></AbsoluteFill>}
+            </> : s.fx?.length || p.effectRanges?.length ? <FxStage W={W} H={H} t={t} frame={frame} fx={activeFx(s.fx, p.effectRanges, t)} t0={s.start} t1={s.end} seed={Math.round(s.start * 13)} beat={p.beat} accents={p.accents} picture={() => <AbsoluteFill><Media shot={s} W={W} H={H} fps={fps} p={prog} rp={p} t={t} /></AbsoluteFill>} />
+              : <AbsoluteFill><Media shot={s} W={W} H={H} fps={fps} p={prog} rp={p} t={t} /></AbsoluteFill>}
           </Sequence>;
         })}
       {hasMedia && p.visuals?.bg && p.visuals.bg !== "none" && <Reactive p={p} sec={shot?.sectionType ?? "other"} hasMedia layer="bg" />}

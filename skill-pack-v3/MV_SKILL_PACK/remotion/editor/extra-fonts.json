@@ -1,0 +1,32 @@
+[
+  {
+    "id": "ankoku_onryou",
+    "family": "Ankoku Onryou",
+    "label": "怨霊（暗黒工房）",
+    "url": "https://www.ankokukoubou.com/font/onryou.zip",
+    "zipEntry": "onryou.TTF",
+    "source": "https://www.ankokukoubou.com/font/onryou.htm",
+    "file": "extra/ankoku_onryou.ttf",
+    "category": "ホラー・ダーク",
+    "jp": true,
+    "moods": ["horror", "dark"],
+    "author": "暗黒工房 / maki",
+    "license": "作者の利用条件（無料・商用可）",
+    "permissionSource": "https://www.ankokukoubou.com/font/ankokuzonji.htm"
+  },
+  {
+    "id": "ankoku_hakidame",
+    "family": "Ankoku Hakidame",
+    "label": "吐き溜（暗黒工房）",
+    "url": "https://www.ankokukoubou.com/font/hakidame.zip",
+    "zipEntry": "hakidame.TTF",
+    "source": "https://www.ankokukoubou.com/font/hakidame.htm",
+    "file": "extra/ankoku_hakidame.ttf",
+    "category": "ホラー・ダーク",
+    "jp": true,
+    "moods": ["horror", "dark"],
+    "author": "暗黒工房 / maki",
+    "license": "作者の利用条件（無料・商用可）",
+    "permissionSource": "https://www.ankokukoubou.com/font/ankokuzonji.htm"
+  }
+]

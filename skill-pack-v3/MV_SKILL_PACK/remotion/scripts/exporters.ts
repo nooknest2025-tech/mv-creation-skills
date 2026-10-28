@@ -1,15 +1,34 @@
 // Finishing / export: audio-safe mux + faststart, Drive-size variant, DaVinci FCPXML, QA checks.
-import { ff, probe, durationOf, fs, path, md5File, UserError } from "./common";
+import crypto from "node:crypto";
+import { ff, ffTry, run, ffmpegCmd, REMOTION_DIR, probe, durationOf, fs, path, md5File, UserError } from "./common";
 
 const COPYABLE = new Set(["aac", "mp3", "alac"]);
 
 /** audio stream md5 (packets, codec copy) - equal when the source audio was not re-encoded. */
 export function audioStreamMd5(file: string): string {
-  const r = ff(["-i", file, "-map", "0:a:0", "-c", "copy", "-f", "md5", "-"]);
-  return String(r.stdout).trim().replace(/^MD5=/, "");
+  const r = ffTry(["-i", file, "-map", "0:a:0", "-c", "copy", "-f", "md5", "-"]);
+  if (r.status === 0) return String(r.stdout).trim().replace(/^MD5=/, "");
+  // minimal ffmpeg (no md5 muxer): hash decoded PCM - still equal when the audio stream was copied
+  const w = ff(["-i", file, "-map", "0:a:0", "-c:a", "pcm_s16le", "-f", "wav", "-"]);
+  const b = w.stdout as Buffer, d = b.indexOf("data", 12, "latin1");
+  return "pcm:" + crypto.createHash("md5").update(b.subarray(d >= 0 ? d + 8 : 44)).digest("hex");
 }
 
 /** mux silent video + ORIGINAL audio (copied bit-exact when possible), H.264 Main yuv420p, +faststart. */
+/** per-packet MD5 list of the first audio stream (ffprobe only; works with Remotion's minimal build too). */
+export function audioPackets(file: string): string[] {
+  const [cmd, ...pre] = ffmpegCmd().probe;
+  const r = run(cmd, [...pre, "-v", "error", "-select_streams", "a:0", "-show_entries", "packet=data_hash", "-show_data_hash", "MD5", "-of", "csv=p=0", file], { encoding: "utf8", cwd: REMOTION_DIR, maxBuffer: 1 << 28 });
+  return String(r.stdout ?? "").split(/\r?\n/).map((l) => l.match(/MD5:[0-9a-f]+/i)?.[0] ?? "").filter(Boolean);
+}
+/** true when the output audio packets are the source packets bit-exact (allowing ≤3 tail packets cut by -shortest). */
+export function audioSame(src: string, out: string): { ok: boolean; detail: string } {
+  const a = audioPackets(src), b = audioPackets(out);
+  if (!a.length || !b.length) return { ok: false, detail: "音声パケットを読めません" };
+  const n = Math.min(a.length, b.length); let same = 0; while (same < n && a[same] === b[same]) same++;
+  return { ok: same >= n - 3 && Math.abs(a.length - b.length) <= 3, detail: `一致パケット ${same}/${a.length}（出力 ${b.length}）` };
+}
+
 export function finalMux(video: string, audio: string, out: string, o: { start?: number; dur?: number; reencodeVideo?: boolean } = {}) {
   const codec = probe(audio).streams?.find((s: any) => s.codec_type === "audio")?.codec_name;
   const copy = COPYABLE.has(codec) && !o.start && !o.dur;
@@ -18,7 +37,11 @@ export function finalMux(video: string, audio: string, out: string, o: { start?:
   args.push("-i", audio);
   if (o.dur) args.push("-t", String(o.dur));
   args.push("-map", "0:v:0", "-map", "1:a:0");
-  args.push(...(o.reencodeVideo ? ["-c:v", "libx264", "-profile:v", "main", "-pix_fmt", "yuv420p", "-crf", "18", "-preset", "medium"] : ["-c:v", "copy"]));
+  // full-range (yuvj420p) renders are not "compatible MP4": convert to limited-range yuv420p
+  const vpix = probe(video).streams?.find((s: any) => s.codec_type === "video")?.pix_fmt;
+  const reencode = o.reencodeVideo || (vpix && vpix !== "yuv420p");
+  if (reencode && vpix !== "yuv420p") args.push("-vf", "scale=out_range=tv,format=yuv420p", "-color_range", "tv");
+  args.push(...(reencode ? ["-c:v", "libx264", "-profile:v", "main", "-pix_fmt", "yuv420p", "-crf", "18", "-preset", "medium"] : ["-c:v", "copy"]));
   args.push(...(copy ? ["-c:a", "copy"] : ["-c:a", "aac", "-b:a", "320k"]), "-shortest", "-movflags", "+faststart", out);
   ff(args);
   return { audioCopied: copy, codec };
@@ -75,8 +98,8 @@ export function qaChecks(o: { out: string; audio: string; expectDur: number; aud
   const dur = Number(p.format.duration);
   R.push({ ok: Math.abs(dur - o.expectDur) < 0.15, item: "尺が曲と一致", detail: `${dur.toFixed(2)}s / 期待 ${o.expectDur.toFixed(2)}s` });
   if (o.audioCopied) {
-    const m1 = audioStreamMd5(o.audio), m2 = audioStreamMd5(o.out);
-    R.push({ ok: m1 === m2, item: "音声は無加工（ストリームmd5一致）", detail: `${m1.slice(0, 10)}… vs ${m2.slice(0, 10)}…` });
+    const same = audioSame(o.audio, o.out);
+    R.push({ ok: same.ok, item: "音声は無加工（音声パケットのmd5一致）", detail: same.detail });
   } else R.push({ ok: !!a, item: "音声（部分書き出し or WAV等のため AAC 320k。元ファイルは無変更）", detail: `元ファイルmd5 ${md5File(o.audio).slice(0, 10)}…（DaVinci用には元WAVをそのまま使用）` });
   const tail = o.lines.filter((L) => L.tEnd > o.endAt - 1.0 && L.tOn < o.endAt);
   R.push({ ok: o.partial || tail.length === 0, item: "エンディング最後の1秒に歌詞が残っていない（きれいに終わる）", detail: o.partial ? "部分書き出しのため対象外" : tail.length ? `${tail.length}行が掛かっています` : "OK" });

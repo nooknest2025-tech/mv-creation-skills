@@ -5,7 +5,7 @@ import { GENRES } from "../src/lib/genres";
 import { FONT_REG } from "../src/lib/fonts";
 import { charTimes } from "../src/lib/song";
 import type { Song } from "../src/lib/types";
-import { PACK_DIR, PUBLIC_PROJECT, REMOTION_DIR, ff, fail, focusPoint, fs, imageSize, log, npx, parseArgs, path } from "./common";
+import { PACK_DIR, PUBLIC_PROJECT, REMOTION_DIR, ff, fail, focusPoint, fs, imageSize, log, npx, parseArgs, path , labelFilter, ffFilterPath, demoOut } from "./common";
 
 // original sample lyrics written for this pack
 const TEXT: Record<string, [string, string, string]> = {
@@ -15,11 +15,15 @@ const TEXT: Record<string, [string, string, string]> = {
   idol_pop: ["きらきら 星に 願いをかけて", "大好きって 言わせてよ", "せーの！"],
   wa: ["桜 舞う 月の夜に", "紅の 花は 風に 散る", "雅"],
   hiphop: ["マイク握って 言葉を刻む 今夜も 街で 韻を踏む", "止まらない ビートに 乗せて 叫ぶ", "Yeah"],
+  acoustic: ["ギター一本で 君に歌う", "飾らない 言葉のままで", "ありがとう"],
+  dark: ["壊れた 世界の 片隅で", "誰にも 見えない 声で 叫ぶ", "消えて"],
+  ambient: ["静かな 朝の 光の中", "ゆっくり ほどける 夢の 続き", "おやすみ"],
 };
-const BPM: Record<string, number> = { ballad: 72, rock_edm: 150, citypop_jazz: 108, idol_pop: 140, wa: 96, hiphop: 92 };
+const DEFAULT_TEXT: [string, string, string] = ["はじめの 音を 重ねて", "ここから 新しい 景色へ", "Go"];
+const BPM: Record<string, number> = { ballad: 72, rock_edm: 150, citypop_jazz: 108, idol_pop: 140, wa: 96, hiphop: 92, acoustic: 84, dark: 128, ambient: 70 };
 
 function songFor(g: string, sec: number): Song {
-  const [a, b, c] = TEXT[g], bpm = BPM[g];
+  const [a, b, c] = TEXT[g] ?? DEFAULT_TEXT, bpm = BPM[g] ?? 110; // new genres still work without demo text
   const mk = (text: string, s: number, e: number) => { const ws = text.split(" "); const tot = ws.join("").length; let acc = s;
     const words = ws.map((w) => { const d = ((e - s) * w.length) / tot; const o = { text: w, start: acc, end: acc + d }; acc += d; return o; });
     return { text, start: s, end: e, ...charTimes(text, s, e, words) }; };
@@ -50,12 +54,12 @@ async function main() {
     log(`🎬 ${GENRES[g].ja}: ${used}`);
     npx(["remotion", "render", "MV", mp4, `--props=${pf}`, "--log=error", "--concurrency=4"]);
     const label = `${GENRES[g].ja}｜${used}`.replace(/:/g, "\\:").replace(/'/g, "");
-    ff(["-y", "-i", mp4, "-f", "lavfi", "-t", String(sec), "-i", "anullsrc=r=48000:cl=stereo", "-vf", `drawtext=fontfile=${font}:text='${label}':x=30:y=26:fontsize=${Math.round(Math.min(props.height / 28, props.width / 48))}:fontcolor=white:box=1:boxcolor=black@0.55:boxborderw=10`,
+    ff(["-y", "-i", mp4, "-f", "lavfi", "-t", String(sec), "-i", "anullsrc=r=48000:cl=stereo", "-vf", labelFilter(`drawtext=fontfile=${ffFilterPath(font)}:text='${label}':x=30:y=26:fontsize=${Math.round(Math.min(props.height / 28, props.width / 48))}:fontcolor=white:box=1:boxcolor=black@0.55:boxborderw=10`),
       "-map", "0:v", "-map", "1:a", "-shortest", "-c:v", "libx264", "-profile:v", "main", "-pix_fmt", "yuv420p", "-crf", "21", "-c:a", "aac", "-b:a", "128k", lab]);
     parts.push(lab);
   });
   const list = path.join(tmp, "list.txt"); fs.writeFileSync(list, parts.map((p) => `file '${p}'`).join("\n"));
-  const out = path.resolve(REMOTION_DIR, String(o.out ?? `out/genre_samples_${aspect.replace(":", "x")}.mp4`));
+  const out = demoOut(`genre_samples_${aspect.replace(":", "x")}.mp4`, o.out);
   ff(["-y", "-f", "concat", "-safe", "0", "-i", list, "-c", "copy", "-movflags", "+faststart", out]);
   log(`✅ ${out}`);
 }

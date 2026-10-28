@@ -16,7 +16,7 @@ export function videoCostHint(song: Song): Record<string, string> {
     const m = models.find((x) => x.kind === "video" && x.verified && x.price_per_sec?.["720p"]);
     if (!m) return {};
     const nCh = song.sections.filter((s) => s.type === "chorus").length || 1, nAll = song.sections.length || 1, per = m.price_per_sec["720p"];
-    const f = (n: number) => `約$${(n * 5 * per).toFixed(2)}・${m.id} 720p・${n}本×5秒・1テイク（API従量の目安。正確には npm run gen -- plan）`;
+    const f = (n: number) => `約$${(n * 5 * per).toFixed(2)}（動画AIで${n}本×5秒・標準画質・1回ずつ作る場合の目安。正確な金額は npm run gen -- plan で確認できます）`;
     return { chorus: f(nCh), all: f(nAll) };
   } catch { return {}; }
 }

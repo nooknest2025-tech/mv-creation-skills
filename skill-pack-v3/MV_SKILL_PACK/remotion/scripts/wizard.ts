@@ -12,7 +12,10 @@ import { analyzeAudio, autoSections } from "./common";
 import { estimateCutsFor, videoCostHint } from "./wizard_lib";
 
 async function main() {
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  // Piped answers (Codex / tests: printf "1\n\n" | npm run start): readline drops lines that arrive before
+  // a question is asked, so read them all first and answer from the queue.
+  const piped = !process.stdin.isTTY ? (await new Promise<string>((ok) => { let b = ""; process.stdin.setEncoding("utf8"); process.stdin.on("data", (c) => (b += c)); process.stdin.on("end", () => ok(b)); })).split(/\r?\n/) : null;
+  const rl = piped ? { question: async (s: string) => { process.stdout.write(s); const a = piped.shift() ?? ""; process.stdout.write(a + "\n"); return a; }, close: () => {} } : readline.createInterface({ input: process.stdin, output: process.stdout });
   const q = async (s: string, def = "") => ((await rl.question(s)).trim() || def);
   log("\n🎬 MVメーカーへようこそ！ いくつか質問します（Enter だけで「おすすめ」を選べます）\n");
   let input = INPUT_DIR;
@@ -53,7 +56,7 @@ async function main() {
       if (a.trim()) ans[qq.id] = parsePick(a, qq);
     }
     const plan = semiToPlan(ans, ctx);
-    log("\n📋 この内容で作ります:"); plan.plan.forEach((l) => log(`  ${l}`));
+    log("\n📋 この内容で作ります:"); plan.plan.forEach((l) => log(`  ${l}`)); plan.warnings.forEach((w) => log(`  ⚠️ ${w}`));
     if ((await q("\n  この計画でよいですか？ [Y/n] ", "y")).toLowerCase().startsWith("n")) { log("やめました。もう一度 start で選び直せます。"); rl.close(); return; }
     sayParts.push(...plan.say);
   }

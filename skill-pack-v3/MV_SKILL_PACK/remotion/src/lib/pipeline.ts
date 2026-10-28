@@ -1,3 +1,4 @@
+import { resolveCamFx } from "./camfx";
 // Pure pipeline: Song + config + media -> RenderProps (runs in Node scripts AND in Remotion Studio).
 import { ASPECTS, type MVConfig } from "./config";
 import { planShots, type MediaItem } from "./cuts";
@@ -22,12 +23,27 @@ export function applyTiming(song: Song, cfg: MVConfig): Song {
     const ps = (sec && (T.perSection?.[sec.label] ?? T.perSection?.[`${sec.type}#${inst}`] ?? T.perSection?.[sec.type])) || {};
     const pl = T.perLine?.[String(i)] ?? {};
     const dIn = (T.lyricIn ?? 0) + (ps.lyricIn ?? 0), dOut = (T.lyricOut ?? 0) + (ps.lyricOut ?? 0);
-    const shift = pl.start !== undefined ? pl.start - L.start : dIn;
-    const n = { ...L, start: L.start + shift, end: (pl.end ?? L.end + dOut + (pl.start !== undefined ? 0 : 0)), chars: L.chars.map((c) => ({ ...c, t0: c.t0 + shift, t1: c.t1 + shift })), words: L.words.map((w) => ({ ...w, t: w.t + shift })) };
+    const lo = pl.start === undefined && Number.isFinite(pl.offset) ? pl.offset! : 0; // 個別 offset は全体に上乗せ（行ごと前後に動かす）
+    const shift = pl.start !== undefined ? pl.start - L.start : dIn + lo;
+    const n = { ...L, start: L.start + shift, end: (pl.end ?? L.end + dOut + lo), chars: L.chars.map((c) => ({ ...c, t0: c.t0 + shift, t1: c.t1 + shift })), words: L.words.map((w) => ({ ...w, t: w.t + shift })) };
     if (pl.end === undefined && pl.start !== undefined) n.end = L.end + shift;
     return n;
   });
   return s;
+}
+
+/** 個別の「画の切替」ずらし (perShot[id].offset 秒, マイナス=早く) を全体設定の上に足す。
+ * カットは境界なので、そのシーンの開始と直前シーンの終わりを一緒に動かす（最短0.1秒は残す）。 */
+export function applyShotOffsets<S extends { id: string; start: number; end: number }>(shots: S[], T: { perShot?: Record<string, { offset?: number }> }, t0 = 0): S[] {
+  const out = shots.map((s) => ({ ...s }));
+  for (let i = 1; i < out.length; i++) {
+    const o = T.perShot?.[out[i].id]?.offset;
+    if (!o || !Number.isFinite(o)) continue;
+    const lo = Math.max(t0, out[i - 1].start + 0.1), hi = out[i].end - 0.1;
+    const nb = Math.min(hi, Math.max(lo, out[i].start + o));
+    out[i].start = nb; out[i - 1].end = nb;
+  }
+  return out;
 }
 
 export function analysisSummary(song: Song) {
@@ -41,6 +57,13 @@ export function pickPreset(song: Song, cfg: MVConfig, hasVideo: boolean) {
   if (cfg.preset && cfg.preset !== "auto" && PRESETS[cfg.preset]) return { preset: PRESETS[cfg.preset], why: "指定" };
   const g = cfg.genre && GENRES[cfg.genre];
   if (g && g.preset && PRESETS[g.preset]) return { preset: PRESETS[g.preset], why: `ジャンル「${g.ja}」から` };
+  // the chosen show mode (見せ方) wins over the BPM-based guess, and the wording matches it
+  if (cfg.combo?.length) {
+    const pic = cfg.combo.find((m) => ["story", "dance", "lipsync", "live"].includes(m));
+    const names = cfg.combo.map((m) => SHOW_MODES[m]?.ja ?? m).join("＋");
+    const id = pic ?? (cfg.combo.includes("typography") || cfg.combo.includes("lyric_motion") ? "vocaloid" : "story");
+    if (PRESETS[id]) return { preset: PRESETS[id], why: `見せ方「${names}」に合わせて` };
+  }
   const a = autoPreset({ ...analysisSummary(song), hasVideo });
   return { preset: PRESETS[a.id], why: a.why };
 }
@@ -56,7 +79,7 @@ export function pickGenre(song: Song, cfg: MVConfig): { id: string | null; why: 
   return { ...autoGenre(song), explicit: false };
 }
 import { letterboxPx } from "./finish";
-import { directPro, moodOf, proposeCombo } from "./mograph";
+import { directPro, moodOf, proposeCombo, SHOW_MODES } from "./mograph";
 import { autoPartsPreset } from "./rig";
 export function buildProps(song0: Song, cfg: MVConfig, media: MediaItem[], o: { overlayOnly?: boolean; audio?: string; aspect?: string } = {}): RenderProps & { presetWhy: string; genre?: string; genreWhy?: string; structure?: string; structureWhy?: string; sectionNotes?: string[]; review?: Review } {
   if (o.audio && /_lipsync\.(wav|mp3)$/i.test(o.audio)) throw new Error("口パク用に切り出した音声は最終ミックスに使えません（元の曲を1本だけ使います）");
@@ -81,21 +104,25 @@ export function buildProps(song0: Song, cfg: MVConfig, media: MediaItem[], o: { 
     const ps = T.perSection?.[s.section ?? ""] ?? T.perSection?.[s.sectionType ?? ""] ?? {};
     const lead = (T.cutLead ?? 0.05) + (ps.cutLead ?? 0); // default: cut ~1.5 frames before the beat (reads as "on the beat")
     const m = T.perShot?.[s.id] ?? {};
-    return { ...s, start: i === 0 ? s.start : Math.max(start, (m.start ?? s.start) - lead), end: (m.end ?? s.end) - (i === shots.length - 1 ? 0 : lead), ...(m.src ? { src: m.src, focus: undefined, kind: m.kind ?? (/\.(mp4|mov|webm)$/i.test(m.src) ? "video" : "image"), clipFrom: m.clipFrom ?? 0 } : {}), ...(m.move ? { move: m.move } : {}), ...(m.transition ? { transition: m.transition } : {}),
+    return { ...s, start: i === 0 ? s.start : Math.max(start, (m.start ?? s.start) - lead), end: (m.end ?? s.end) - (i === shots.length - 1 ? 0 : lead), ...(m.src ? { src: m.src, focus: undefined, kind: m.kind ?? (/\.(mp4|mov|webm)$/i.test(m.src) ? "video" : "image"), clipFrom: m.clipFrom ?? 0 } : {}), ...(m.clipFrom !== undefined && !m.src ? { clipFrom: m.clipFrom } : {}), ...(m.speed !== undefined ? { speed: m.speed } : {}), ...(m.fit ? { fit: true } : {}), ...(m.tail ? { tail: m.tail } : {}), ...(m.clipTo !== undefined ? { clipTo: m.clipTo } : {}), ...(m.segments?.length ? { segments: m.segments } : {}), ...(m.ease !== undefined ? { ease: m.ease } : {}), ...(m.solve !== undefined ? { solve: m.solve } : {}), ...(m.move ? { move: m.move } : {}), ...(m.transition ? { transition: m.transition } : {}),
       ...(m.ramp ?? cfg.ramps?.[s.sectionType ?? ""] ?? cfg.ramps?.[s.section ?? ""] ?? cfg.ramps?.all ? { ramp: m.ramp ?? cfg.ramps?.[s.sectionType ?? ""] ?? cfg.ramps?.[s.section ?? ""] ?? cfg.ramps?.all } : {}),
       puppet: s.kind === "image" ? resolvePuppet(preset.puppet, cfg.puppet, cfg.puppetSections?.[s.sectionType ?? ""], cfg.puppetSections?.[s.section ?? ""], m.puppet) : undefined };
   });
+  shots = shots.map((s) => s.kind === "video" && (s.speed !== undefined || s.fit || s.tail || s.clipTo !== undefined || s.segments?.length) ? { ...s, clipDur: (media as any[]).find((x) => x.src === s.src)?.duration } : s);
   // hybrid structure (section -> shot role mix), chosen by fit unless the user named one
   const genre = pickGenre(song, cfg);
   const sel = cfg.structure ?? "auto";
   const faceRatio = media.length ? media.filter((m) => m.face?.eyes?.length).length / media.length : 0;
   const st = sel === "none" ? null : comboModes && (cfg.combo?.length || sel === "auto") && mog?.combo ? { id: mog.combo.id, why: `${HYBRIDS[mog.combo.id].ja}${cfg.combo?.length ? "（指定）" : "（自動提案）"}: ${mog.combo.notes.join("｜")}` } : sel === "auto" ? pickHybrid(genre.id, faceRatio, media.length) : HYBRIDS[sel] ? { id: sel, why: `${HYBRIDS[sel].ja}（指定）: ${HYBRIDS[sel].why}` } : (() => { throw new Error(`構成「${sel}」は未知です: ${HYBRID_IDS.join(", ")}`); })();
-  shots.forEach((s) => { if (T.perShot?.[s.id]) s.locked = true; });
+  shots = applyShotOffsets(shots, T, start);
+  shots.forEach((s) => { const m = T.perShot?.[s.id]; if (m && Object.keys(m).some((k) => k !== "offset")) s.locked = true; });
   if (st) shots = applyHybrid(shots, st.id, { keepMouth: cfg.puppet?.mouth !== undefined, pool: media.filter((m) => m.kind === "image").map((m) => ({ ...m })) });
   // lip-sync / dance takes: fixed on their audio window (respects extended/shifted in/out from the gen plan)
   const ls = Object.fromEntries(Object.entries(T.perShot ?? {}).filter(([, v]) => v?.lipsync).map(([k, v]) => [k, v!.lipsync]));
   let lipsyncNotes: string[] = [];
   if (Object.keys(ls).length) { const r = applyLipsync(shots, ls, fps); shots = r.shots; lipsyncNotes = r.notes; }
+  // camera strength / beat sync / effects per shot (auto per section + mode; config and per-shot edits win)
+  shots = shots.map((s) => { const m: any = T.perShot?.[s.id] ?? {}; const c = resolveCamFx((cfg as any).camfx, s, { ...(m.camStrength ? { camStrength: m.camStrength } : {}), ...(m.camSync ? { camSync: m.camSync } : {}), ...(m.fx ? { fx: m.fx } : {}) }); return { ...s, ...(c.move && !m.move ? { move: c.move } : {}), camStrength: c.camStrength, camSync: c.camSync, fx: c.fx }; });
   const lyricCfg = { ...(preset.lyric ?? {}), ...(cfg.lyrics ?? {}), sections: { ...(preset.lyric.sections ?? {}), ...(cfg.lyrics?.sections ?? {}), ...(cfg.sectionStyles ?? {}) } };
   if (cfg.lyrics?.default === undefined && preset.lyric.default !== undefined) lyricCfg.default = preset.lyric.default;
   if (genre.id) { // genre recipe drives auto styles: drop the preset's lyric table (user tables stay)
@@ -130,6 +157,7 @@ export function buildProps(song0: Song, cfg: MVConfig, media: MediaItem[], o: { 
     overlayOnly: !!o.overlayOnly, textSize: lyricCfg.size ?? preset.textSize ?? 1, textY: defY,
     safeBottom: asp.safeBottom, preset: preset.id, presetWhy: why, genre: genre.id ?? undefined, genreWhy: genre.why,
     energy: downsample(song.energy, song.energyHz, 10), energyHz: song.energy.length ? 10 : 0,
+    effectRanges: (cfg as any).camfx?.ranges, accents: (cfg as any).mograph?.accents?.length && typeof (cfg as any).mograph.accents[0] === "number" ? (cfg as any).mograph.accents : undefined,
     visuals: { ...preset.visuals, ...(cfg.visuals ?? {}) }, ...(mog ? { mograph: mog } : {}), finish: { ...preset.finish, ...(cfg.finish ?? {}) },
   };
   const lb = letterboxPx(props.finish, props.width, props.height);

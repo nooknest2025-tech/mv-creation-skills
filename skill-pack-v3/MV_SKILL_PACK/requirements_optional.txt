@@ -2,5 +2,7 @@
 # 目パチ・口パクの顔検出（OpenCV 5 は検出器が無いので 4.x）
 opencv-python-headless<5
 numpy
+# パーツ分割・動画クリップの品質チェック
+pillow
 # 歌詞の自動書き起こし
 faster-whisper
