@@ -32,7 +32,7 @@ async function main() {
   const chars = findCharacterMaterial(input);
   if (chars.length) log(`🧍 キャラ素材: ${chars.map((c) => c.name).join("・")}（立ち絵モーションMVに使えます）`);
   const noCharWarn = (ids: string[] | null) => { if (ids?.includes("tachie") && !chars.length) log(`  ⚠️ ${TACHIE_MATERIAL_HELP.replace(/\n/g, "\n     ")}`); };
-  log("\nQ1. どう作りますか？\n  1) おまかせ（全部自動）\n  2) 半自動（おすすめ: 5〜6問だけ。Enter でプロのおすすめ）\n  3) ジャンルを選ぶ\n  4) こだわり（細かく指定）");
+  log("\nQ1. どう作りますか？\n  1) おまかせ … キャラ素材（input/parts・input/tachie）があれば立ち絵＋リリックモーション、なければ曲と画像から自動で決める\n  2) 半自動（既定・おすすめ） … 見せ方（立ち絵を含む8種。組み合わせOK: 立ち絵＋タイポグラフィ など）・画像テイスト・シーンの細かさ・動画化・歌詞演出・キャラの動きの6問。Enter でおすすめ\n  3) ジャンルを選ぶ … ストーリー／ダンス／リップシンク／ライブ／ボカロ／ファーストテイク風から選ぶ。素材があれば立ち絵にするかも聞く\n  4) こだわり … 決めることごとにおすすめ2〜3案を理由付きで比較（立ち絵も比較候補に入る）");
   const m0 = await q("  番号 [2]: ", "2");
   const mode = ({ "1": "1", "2": "semi", "3": "2", "4": "3" } as Record<string, string>)[m0] ?? "semi";
   const args: string[] = ["--input", input];

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { splitSceneAt, mergeSceneWithNext, resolveClipChains, clipEndTime } from "../editor/timeline";
 import { clipPlan, clipSourceTime } from "../src/lib/clipspeed";
 const D = 10, L = 30;
-const src = (sc: any[], t: number) => { const i = sc.findLastIndex((s) => s.start <= t), e = sc[i + 1]?.start ?? D; return clipSourceTime(clipPlan(sc[i], e - sc[i].start, L), t - sc[i].start); };
+const src = (sc: any[], t: number) => { const i = ((r) => r < 0 ? -1 : sc.length - 1 - r)([...sc].reverse().findIndex((s: any) => s.start <= t)), e = sc[i + 1]?.start ?? D; return clipSourceTime(clipPlan(sc[i], e - sc[i].start, L), t - sc[i].start); };
 const same = (a: any[], b: any[]) => { for (let t = 0; t < D - 0.01; t += 0.1) expect(src(b, t)).toBeCloseTo(src(a, t), 2); };
 const V = { video: true, clipDur: L };
 const chain = (sc: any[]) => resolveClipChains(sc, D, () => true, () => L);
