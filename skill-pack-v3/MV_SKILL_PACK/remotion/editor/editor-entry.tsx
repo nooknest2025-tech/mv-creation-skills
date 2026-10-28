@@ -2,7 +2,8 @@ import React from 'react';
 import {createRoot} from 'react-dom/client';
 import {lyricRange,sceneRange,loopStep} from './loop';
 import {sceneName} from '../src/lib/editstate';
-import {snapTime,pinDefault,resizeBoundary,sceneEdges,sceneBoundaryIndex,resizeSceneOnly,moveSceneOnly,resetClipForAsset,ADD_ASSET_EXT,isVideoName,moveLyricEdge,moveLyric,slideInPoint,fmt} from './timeline';
+import {History,isTextField} from './history';
+import {snapTime,pinDefault,resizeBoundary,sceneEdges,sceneBoundaryIndex,splitSceneAt,mergeSceneWithNext,resolveClipChains,resizeSceneOnly,moveSceneOnly,resetClipForAsset,ADD_ASSET_EXT,isVideoName,moveLyricEdge,moveLyric,slideInPoint,fmt} from './timeline';
 import {clipPlan,clipSummary,trimSpan,SPEED_PRESETS,TAILS,SPEED_MIN,SPEED_MAX} from '../src/lib/clipspeed';
 import {Scene,isVideoAsset,CATALOG,FONT_OPTIONS,POSITIONS,EFFECTS,TRANSITIONS,CAMERA_MOVES,EFFECT_FX,STRENGTH,SYNC,sceneMove} from './editor-scene';
 const root=createRoot(document.getElementById('stage')!);
@@ -26,7 +27,17 @@ function draw(){root.render(<Scene data={data} t={t}/>);$('time').textContent=t.
 let pxs=40;
 function status(){ $('status').textContent=dirty?'未保存（プレビューに反映中）':`編集版 ${revision} 保存済み`;$('render').disabled=dirty||busy;$('save').disabled=!dirty||busy;if(lastJob?.status==='done'&&(dirty||lastJob.revision!==revision))$('exportStatus').textContent=`書き出し未反映（前の出力は編集版 ${lastJob.revision}）`;}
 function sanitizeRamps(){for(let i=0;i<data.scenes.length;i++){const s=data.scenes[i];if(!s.segments)continue;const d=sceneDur(i);s.segments=s.segments.filter((g:any,k:number)=>k===0||g.at<d-.05);if(s.segments.length<2){delete s.segments;delete s.solve}else if(s.solve!==undefined&&s.solve>=s.segments.length)s.solve=s.segments.length-1}}
-function change(){if(data){sanitizeRamps();data.scenes.forEach((s:any,i:number)=>{const d=sceneDur(i);if((s.transition??1.1)>d)s.transition=Math.floor(d*100)/100})}dirty=true;mode='live';draw();status();refreshLineList();refreshSceneList();drawTimeline();refreshClip()}
+const hist=new History(100,700);let applyingHistory=false,pointerHeld=false;
+document.addEventListener('pointerdown',()=>{pointerHeld=true},true);document.addEventListener('pointerup',()=>{pointerHeld=false;hist.cut()},true);document.addEventListener('contextmenu',()=>{pointerHeld=false;hist.cut()},true);window.addEventListener('blur',()=>{pointerHeld=false});
+function undoUi(){const u=document.getElementById('undoBtn') as HTMLButtonElement|null,r=document.getElementById('redoBtn') as HTMLButtonElement|null;if(u)u.disabled=!hist.canUndo;if(r)r.disabled=!hist.canRedo}
+function applySnapshot(snap:string|null,label:string){if(!snap)return;const sceneTab=$('scenesTab').getAttribute('aria-pressed')==='true',cs=currentScene(),line=$('lookLine')?.value;
+ applyingHistory=true;try{for(const k of Object.keys(data))delete data[k];Object.assign(data,JSON.parse(snap));tables();appearance();sceneInspector();
+  const l=data.lyrics.find((x:any)=>x.id===line)??data.lyrics[0];$('lookLine').value=l.id;$('lookLine').dispatchEvent(new Event('change'));
+  if(sceneTab)selectSceneUi(Math.min(cs,data.scenes.length-1));else showTab(false);change();refreshClip()}finally{applyingHistory=false}
+ dirty=true;status();drawTimeline();draw();undoUi();$('sample').textContent=label}
+function undo(){applySnapshot(hist.undo(JSON.stringify(data)),'元に戻しました（Ctrl+Y でやり直し）')}
+function redo(){applySnapshot(hist.redo(),'やり直しました')}
+function change(){if(data){sanitizeRamps();resolveClipChains(data.scenes,data.duration,(x:any)=>isVideoAsset(data.assets[x.asset]),clipLen);data.scenes.forEach((s:any,i:number)=>{const d=sceneDur(i);if((s.transition??1.1)>d)s.transition=Math.floor(d*100)/100})}dirty=true;mode='live';draw();status();refreshLineList();refreshSceneList();drawTimeline();refreshClip();if(data&&!applyingHistory){hist.record(JSON.stringify(data),Date.now(),pointerHeld);undoUi()}}
 function input(value:any,fn:(v:number)=>void,label:string,min=0,max=data.duration,step=.05){const e=document.createElement('input');e.type='number';e.value=value;e.min=String(min);e.max=String(max);e.step=String(step);e.setAttribute('aria-label',label);e.oninput=()=>{if(e.value===''||!Number.isFinite(Number(e.value)))return;fn(Number(e.value));change()};return e}
 function cell(tr:any,content:any){const td=document.createElement('td');if(typeof content==='string')td.textContent=content;else td.append(content);tr.append(td);return td}
 function seek(at:number,play=false){t=Math.max(0,Math.min(data.duration,at));audio.currentTime=t;draw();if(play)audio.play().catch(()=>{})}
@@ -77,7 +88,7 @@ function sceneInspector(){
  let show=()=>{const s=data.scenes[current];$('sceneTitle').textContent=sceneName(s,current,data.sections);for(const [id,key,fallback] of [['sceneStart','start',0],['sceneFade','transition',1.1],['sceneAsset','asset',0],['sceneZoom','zoom',1],['sceneX','x',0],['sceneY','y',0]])$(String(id)).value=s[String(key)]??fallback;$('sceneEnd').value=data.scenes[current+1]?.start??data.duration;$('sceneStart').disabled=current===0;$('sceneEnd').disabled=current===data.scenes.length-1;refreshSceneList()};
  const select=(i:number)=>{current=i;show();cue(data.scenes[i].start)};
  $('sceneList').replaceChildren();data.scenes.forEach((s:any,i:number)=>{const b=document.createElement('button');b.className='lyricItem';b.dataset.scene=s.id;b.setAttribute('aria-label',`${sceneName(s,i,data.sections)}を選択`);const name=document.createElement('span');name.textContent=sceneName(s,i,data.sections);const timing=document.createElement('small');timing.className='sceneTime';b.append(name,timing);b.onclick=()=>select(i);$('sceneList').append(b)});
- refreshSceneList=()=>{for(const b of $('sceneList').children){const i=data.scenes.findIndex((s:any)=>s.id===b.dataset.scene),s=data.scenes[i];b.setAttribute('aria-pressed',String(i===current));b.querySelector('.sceneTime').textContent=`${s.start.toFixed(2)}–${(data.scenes[i+1]?.start??data.duration).toFixed(2)}`}};
+ refreshSceneList=()=>{for(const b of $('sceneList').children){const i=data.scenes.findIndex((s:any)=>s.id===b.dataset.scene),s=data.scenes[i];if(!s)continue;b.setAttribute('aria-pressed',String(i===current));b.querySelector('.sceneTime').textContent=`${s.start.toFixed(2)}–${(data.scenes[i+1]?.start??data.duration).toFixed(2)}`}};
  const fillAssets=()=>{const sel=$('sceneAsset');sel.replaceChildren();data.assets.forEach((asset:any,index:number)=>{const o=document.createElement('option');o.value=String(index);o.textContent=(isVideoAsset(asset)?'🎞 ':'')+(asset.label??('素材 '+(index+1)));sel.append(o)});sel.value=String(data.scenes[current].asset)};
  const setAsset=(n:number)=>{const s=data.scenes[current];if(s.asset===n)return;s.asset=n;resetClipForAsset(s,isVideoAsset(data.assets[n]));change();show();preview()};
  $('sceneAsset').onchange=()=>setAsset(Number($('sceneAsset').value));
@@ -132,7 +143,7 @@ function clipPanel(cur:()=>number,preview:()=>void){
  $('clipFit').onchange=()=>{const s=S();if($('clipFit').checked){s.fit=true;delete s.segments;delete s.solve}else delete s.fit;change();preview()};
  const num=(id:string,fn:(v:number)=>void)=>{$(id).oninput=()=>{const v=Number($(id).value);if($(id).value===''||!Number.isFinite(v))return;fn(v);change()}};
  const len=()=>clipLen(S())??1e9;
- num('clipFrom',v=>{const s=S();s.clipFrom=Math.max(0,Math.min(v,(s.clipTo??len())-.05))});
+ num('clipFrom',v=>{const s=S();delete s.clipChain;s.clipFrom=Math.max(0,Math.min(v,(s.clipTo??len())-.05))});
  num('clipTo',v=>{const s=S();s.clipTo=Math.min(len(),Math.max(v,(s.clipFrom??0)+.05))});
  const ensureRamp=()=>{const s=S();if(!s.segments||s.segments.length<2){s.segments=[{at:0,speed:s.speed??1},{at:Math.round(D()*.5*100)/100,speed:s.speed??1}];s.solve=1;s.ease??=.5;delete s.fit}};
  $('rampOn').onchange=()=>{const s=S();if($('rampOn').checked)ensureRamp();else{delete s.segments;delete s.solve;delete s.ease}change();preview()};
@@ -149,7 +160,7 @@ function clipPanel(cur:()=>number,preview:()=>void){
  strip.onpointerdown=(e:PointerEvent)=>{const s=S(),L=clipLen(s);if(!L)return;const x=fx(strip,e)*L,a=s.clipFrom??0,b=s.clipTo??L;drag={c:strip,k:Math.abs(x-a)<=Math.abs(x-b)?'in':'out'};strip.setPointerCapture(e.pointerId)};
  bar.onpointerdown=(e:PointerEvent)=>{ensureRamp();drag={c:bar,k:'at'};bar.setPointerCapture(e.pointerId);move(e)};
  const move=(e:PointerEvent)=>{if(!drag)return;const s=S(),L=clipLen(s)??1;const f=fx(drag.c,e);const tip=$('tlTip');let msg='';
-  if(drag.k==='in'){s.clipFrom=Math.round(Math.max(0,Math.min(f*L,(s.clipTo??L)-.05))*100)/100;msg=`IN ${s.clipFrom.toFixed(2)}秒`}
+  if(drag.k==='in'){delete s.clipChain;s.clipFrom=Math.round(Math.max(0,Math.min(f*L,(s.clipTo??L)-.05))*100)/100;msg=`IN ${s.clipFrom.toFixed(2)}秒`}
   else if(drag.k==='out'){s.clipTo=Math.round(Math.min(L,Math.max(f*L,(s.clipFrom??0)+.05))*100)/100;msg=`OUT ${s.clipTo.toFixed(2)}秒`}
   else{s.segments[1].at=Math.round(Math.max(.05,Math.min(D()-.05,f*D()))*100)/100;msg=`切替 場面の ${s.segments[1].at.toFixed(2)}秒目`}
   tip.hidden=false;tip.textContent=msg;tip.style.left=e.clientX+12+'px';tip.style.top=e.clientY-34+'px';change()};
@@ -174,9 +185,21 @@ function clipPanel(cur:()=>number,preview:()=>void){
 const PIN_KEY='mvEditor.pinTimeline';
 const pinWanted=()=>{let v:string|null=null;try{v=localStorage.getItem(PIN_KEY)}catch{}return pinDefault(v,innerHeight)};
 function timeline(){
- const host=$('timeline');host.innerHTML=`<div class="tlBar"><b>タイムライン</b><button id="pinToggle" class="pinToggle" aria-pressed="false" title="映像はいつも上に固定。タイムラインも一緒に固定するか">タイムラインも固定 OFF</button><label>ズーム <input id="tlZoom" type="range" min="10" max="200" value="${pxs}" aria-label="タイムラインのズーム"></label><span class="hint tlKeys">端をドラッグ：隣も連動 ／ Ctrl＋ドラッグ：そのシーンだけ ／ Shift・Alt：拍に吸着しない</span></div>
+ const host=$('timeline');host.innerHTML=`<div class="tlBar"><b>タイムライン</b><button id="pinToggle" class="pinToggle" aria-pressed="false" title="映像はいつも上に固定。タイムラインも一緒に固定するか">タイムラインも固定 OFF</button><label>ズーム <input id="tlZoom" type="range" min="10" max="200" value="${pxs}" aria-label="タイムラインのズーム"></label><button id="tlSplit" title="赤い線の位置でシーンを切る（S キー）">✂ ここで切る（S）</button><span class="hint tlKeys">端をドラッグ：隣も連動 ／ Ctrl＋ドラッグ：そのシーンだけ ／ Shift・Alt：拍に吸着しない ／ 右クリック：切る・つなげる ／ Ctrl+Z：元に戻す</span></div>
  <div id="tlScroll"><div id="tlInner"><div id="tlBeats"></div><div class="tlRow" id="tlScenes"></div><div class="tlRow" id="tlLyrics"></div><div id="tlHead"></div></div></div><div id="tlTip" hidden></div>`;
  const sc=$('tlScroll'),tip=$('tlTip');
+ const sceneAt=(x:number)=>{let k=0;data.scenes.forEach((s:any,i:number)=>{if(s.start<=x+1e-6)k=i});return k};
+ const opt=(i:number)=>({video:isVideoAsset(data.assets[data.scenes[i].asset]),clipDur:clipLen(data.scenes[i])});
+ const restructure=(sel:number,msg:string)=>{hist.cut();tables();sceneInspector();selectSceneUi(sel);change();hist.cut();$('sample').textContent=msg;$('error').textContent=''};
+ const doSplit=(x:number,i=sceneAt(x))=>{const err=splitSceneAt(data.scenes,i,snapTime(x,data.bpm||120,data.phase??0,0.0001),data.duration,opt(i));if(err){$('error').textContent=err;return}restructure(i+1,`シーンを ${fmt(data.scenes[i+1].start)} で2つに切りました（Ctrl+Z で戻せます）`)};
+ const doMerge=(i:number)=>{const err=mergeSceneWithNext(data.scenes,i,data.duration,opt(i));if(err){$('error').textContent=err;return}restructure(i,'次のシーンとつなげました（Ctrl+Z で戻せます）')};
+ $('tlSplit').onclick=()=>doSplit(t);
+ document.addEventListener('keydown',e=>{if((e.key==='s'||e.key==='S')&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&!isTextField(e.target)&&!/SELECT/.test((e.target as HTMLElement)?.tagName??'')){e.preventDefault();doSplit(t)}});
+ const menu=document.createElement('div');menu.id='tlMenu';menu.hidden=true;document.body.append(menu);const hideMenu=()=>{menu.hidden=true};document.addEventListener('pointerdown',e=>{if(!menu.contains(e.target as Node))hideMenu()});
+ sc.addEventListener('contextmenu',(e:MouseEvent)=>{const blk=(e.target as HTMLElement).closest('[data-scene]') as HTMLElement|null;if(!blk)return;e.preventDefault();const i=Number(blk.dataset.scene),r=$('tlInner').getBoundingClientRect(),x=Math.max(0,Math.min(data.duration,(e.clientX-r.left)/pxs));
+  menu.replaceChildren();const item=(label:string,fn:()=>void,dis=false)=>{const b=document.createElement('button');b.textContent=label;b.disabled=dis;b.onclick=()=>{hideMenu();fn()};menu.append(b)};
+  item(`✂ ここで切る（${fmt(x)}）`,()=>doSplit(x,i));item('⇥ 次とつなげる',()=>doMerge(i),i>=data.scenes.length-1);
+  menu.style.left=e.clientX+'px';menu.style.top=e.clientY+'px';menu.hidden=false});
  const pb=$('pinToggle'),pinSync=()=>{const on=pinWanted();document.body.classList.toggle('pinTimeline',on);const top=$('stickyTop'),tl=$('timeline');if(on){if(tl.parentElement!==top)top.append(tl)}else if(tl.parentElement===top)top.after(tl);pb.setAttribute('aria-pressed',String(on));pb.textContent='タイムラインも固定 '+(on?'ON':'OFF')};pb.onclick=()=>{try{localStorage.setItem(PIN_KEY,pinWanted()?'0':'1')}catch{}pinSync()};pinSync();
  $('tlZoom').oninput=()=>{const mid=(sc.scrollLeft+sc.clientWidth/2)/pxs;pxs=Number($('tlZoom').value);drawTimeline();sc.scrollLeft=mid*pxs-sc.clientWidth/2};
  const el=(cls:string,x0:number,x1:number,txt:string,attrs:any)=>{const d=document.createElement('div');d.className=cls;d.style.left=x0*pxs+'px';d.style.width=Math.max(2,(x1-x0)*pxs)+'px';d.textContent=txt;for(const k in attrs)d.dataset[k]=attrs[k];d.title=txt;return d};
@@ -188,7 +211,7 @@ function timeline(){
   $('tlHead').style.left=t*pxs+'px'};
  let drag:any=null;
  const at=(e:PointerEvent)=>{const r=$('tlInner').getBoundingClientRect();return Math.max(0,Math.min(data.duration,(e.clientX-r.left)/pxs))};
- sc.addEventListener('pointerdown',(e:PointerEvent)=>{const tg=e.target as HTMLElement,blk=tg.closest('[data-scene],[data-lyric]') as HTMLElement|null;const x=at(e);
+ sc.addEventListener('pointerdown',(e:PointerEvent)=>{if(e.button!==0)return;const tg=e.target as HTMLElement,blk=tg.closest('[data-scene],[data-lyric]') as HTMLElement|null;const x=at(e);
   if(!blk){cue(x);return}
   const edge=tg.dataset.edge;
   if(blk.dataset.scene){const i=Number(blk.dataset.scene),s=data.scenes[i];selectSceneUi(i);
@@ -199,7 +222,7 @@ function timeline(){
   if(drag.kind==='cut'){const v=resizeBoundary(data.scenes,drag.i,snap(x),data.duration);msg=`切替 ${fmt(v)}（前の場面 ${sceneDur(drag.i-1).toFixed(2)}秒／この場面 ${sceneDur(drag.i).toFixed(2)}秒）`}
   else if(drag.kind==='soloEdge'){const v=resizeSceneOnly(data.scenes,drag.i,drag.edge,snap(x),data.duration);msg=`このシーンだけ：${drag.edge==='start'?'開始':'終わり'} ${fmt(v)}（長さ ${sceneDur(drag.i).toFixed(2)}秒）`}
   else if(drag.kind==='soloMove'){if(Math.abs(x-drag.x0)*pxs<3&&!drag.moved)return;drag.moved=true;moveSceneOnly(data.scenes,drag.i,drag.s0,drag.e0,snap(drag.s0+(x-drag.x0))-drag.s0,data.duration);msg=`このシーンだけ移動：${fmt(data.scenes[drag.i].start)}〜${fmt(data.scenes[drag.i].start+sceneDur(drag.i))}`}
-  else if(drag.kind==='slide'){const s=data.scenes[drag.i];const L=clipLen(s);if(drag.to0!==undefined){const w=drag.to0-drag.from0;s.clipFrom=slideInPoint(drag.from0,x-drag.x0,drag.rate,L!==undefined?L-w+.05:undefined);s.clipTo=+(s.clipFrom+w).toFixed(3)}else s.clipFrom=slideInPoint(drag.from0,x-drag.x0,drag.rate,L);drag.moved=true;msg=`使う部分 IN ${s.clipFrom.toFixed(2)}秒`+(s.clipTo!==undefined?`〜OUT ${s.clipTo.toFixed(2)}秒`:'')}
+  else if(drag.kind==='slide'){const s=data.scenes[drag.i];delete s.clipChain;const L=clipLen(s);if(drag.to0!==undefined){const w=drag.to0-drag.from0;s.clipFrom=slideInPoint(drag.from0,x-drag.x0,drag.rate,L!==undefined?L-w+.05:undefined);s.clipTo=+(s.clipFrom+w).toFixed(3)}else s.clipFrom=slideInPoint(drag.from0,x-drag.x0,drag.rate,L);drag.moved=true;msg=`使う部分 IN ${s.clipFrom.toFixed(2)}秒`+(s.clipTo!==undefined?`〜OUT ${s.clipTo.toFixed(2)}秒`:'')}
   else if(drag.kind==='lyr'){const l=data.lyrics.find((l:any)=>l.id===drag.id);const v=moveLyricEdge(l,drag.edge,snap(x),data.duration);msg=`${drag.edge==='start'?'開始':'終了'} ${fmt(v)}（長さ ${(l.end-l.start).toFixed(2)}秒）`}
   else{const l=data.lyrics.find((l:any)=>l.id===drag.id);if(Math.abs(x-drag.x0)*pxs<3&&!drag.moved)return;drag.moved=true;const len=l.end-l.start;moveLyric(l,snap(drag.s0+(x-drag.x0))-l.start,data.duration);msg=`歌詞 ${fmt(l.start)}〜${fmt(l.start+len)}`}
   tip.hidden=false;tip.textContent=msg+(free?'　（自由）':'　（拍にくっつく・Shift/Altで自由）');tip.style.left=e.clientX+12+'px';tip.style.top=e.clientY-34+'px';change()});
@@ -251,7 +274,7 @@ function tables(){
  audio.pause();let begin=performance.now();let demo=JSON.parse(JSON.stringify(data));demo.lyrics=[{...l,start:0,end:3.5,motion:key}];mode='sample';function tick(now:number){if(mode!=='sample')return;const dt=(now-begin)/1000%4;root.render(<Scene data={demo} t={dt}/>);requestAnimationFrame(tick)}requestAnimationFrame(tick)};$('gallery').append(b)})
 }
 async function api(path:string,body?:any){const r=await fetch(path,body===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json();if(!r.ok)throw Error(d.error||r.statusText);return d}
-async function load(){const state=await api('/api/state');data=state.data;revision=state.revision;audio.src=data.audioFile;$('projectTitle').textContent=data.title??'MVエディター';$('bpmNote').textContent=`この曲のテンポ: ${Math.round(data.bpm||120)} BPM（曲データから自動で読み込み）`;document.title=(data.title??'MV')+'｜編集';$('seek').max=data.duration;tables();appearance();sceneInspector();timeline();exportPanel();fit();draw();dirty=false;status();$('catalogCount').textContent=`モーション${styles.length}種・書体${FONT_OPTIONS.length}種`}
+async function load(){const state=await api('/api/state');data=state.data;revision=state.revision;audio.src=data.audioFile;$('projectTitle').textContent=data.title??'MVエディター';$('bpmNote').textContent=`この曲のテンポ: ${Math.round(data.bpm||120)} BPM（曲データから自動で読み込み）`;document.title=(data.title??'MV')+'｜編集';$('seek').max=data.duration;tables();appearance();sceneInspector();timeline();exportPanel();fit();draw();hist.reset(JSON.stringify(data));undoUi();dirty=false;status();$('catalogCount').textContent=`モーション${styles.length}種・書体${FONT_OPTIONS.length}種`}
 audio.onpause=()=>{$('play').textContent='再生'};audio.onplay=()=>{mode='live';$('sample').textContent='';$('play').textContent='一時停止'};
 $('play').onclick=()=>{mode='live';loopRange=null;loopUi();if(audio.paused)audio.play().catch(e=>$('error').textContent=e.message);else audio.pause();draw()};$('seek').oninput=()=>{mode='live';loopRange=null;loopUi();seek(Number($('seek').value))};$('live').onclick=()=>{mode='live';$('sample').textContent='';draw()};
 $('save').onclick=async()=>{try{const r=await api('/api/save',{revision,data});revision=r.revision;dirty=false;$('error').textContent='';status()}catch(e:any){$('error').textContent=e.message}};
@@ -299,3 +322,7 @@ load().then(()=>{requestAnimationFrame(tick);poll();toolTabs()}).catch(e=>$('err
 
 
 
+
+{const sv=$('save');const u=document.createElement('button');u.id='undoBtn';u.textContent='↶';u.title='元に戻す（Ctrl+Z）';u.setAttribute('aria-label','元に戻す');u.onclick=undo;const r=document.createElement('button');r.id='redoBtn';r.textContent='↷';r.title='やり直す（Ctrl+Y／Ctrl+Shift+Z）';r.setAttribute('aria-label','やり直す');r.onclick=redo;u.className=r.className='histBtn';sv.before(u,r);undoUi()}
+document.addEventListener('keydown',e=>{if(!(e.ctrlKey||e.metaKey)||e.altKey||isTextField(e.target))return;const k=e.key.toLowerCase();
+ if(k==='z'&&!e.shiftKey){e.preventDefault();undo()}else if(k==='y'||(k==='z'&&e.shiftKey)){e.preventDefault();redo()}});

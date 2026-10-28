@@ -31,10 +31,12 @@ def validate(d):
     orig=json.loads((ROOT/'original-source.json').read_text(encoding='utf-8'))
     if any(d.get(k)!=orig.get(k) for k in ['width','height','fps']):raise ValueError('画面サイズとfpsは元の設定を保持してください')
     if d.get('audioFile')!=orig['audioFile'] or d.get('assets')!=orig['assets']:raise ValueError('元素材の指定は保持してください')
-    if d.get('duration')!=orig['duration'] or not 1<=len(d['lyrics'])<=200 or len(d['scenes'])!=len(orig['scenes']):raise ValueError('曲尺・場面数または歌詞グループ数を確認してください')
+    if d.get('duration')!=orig['duration'] or not 1<=len(d['lyrics'])<=200 or not 1<=len(d['scenes'])<=300:raise ValueError('曲尺・場面数（1〜300）または歌詞グループ数を確認してください')
+    sids=[s.get('id') for s in d['scenes']]
+    if any(not isinstance(x,str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,64}',x) for x in sids) or len(set(sids))!=len(sids):raise ValueError('場面IDを確認してください（切る・つなげるで重複しないように）')
     def finite(x):return isinstance(x,(float,int)) and math.isfinite(x)
     for i,s in enumerate(d['scenes']):
-        if s['id']!=orig['scenes'][i]['id'] or not finite(s['start']) or not 0<=s['start']<d['duration'] or s['asset'] not in range(len(orig['assets'])):raise ValueError('場面の設定を確認してください')
+        if not finite(s['start']) or not 0<=s['start']<d['duration'] or s['asset'] not in range(len(orig['assets'])):raise ValueError('場面の設定を確認してください')
         if i==0 and s['start']!=0:raise ValueError('最初の場面は0秒からです')
         if i and s['start']<=d['scenes'][i-1]['start']+.05:raise ValueError('切替秒は前の場面より後にしてください')
         end=d['scenes'][i+1]['start'] if i<len(d['scenes'])-1 else d['duration']
@@ -46,6 +48,7 @@ def validate(d):
         for key in ['cameraMove','cameraStrength','cameraSync']:
             if key in s and not (isinstance(s[key],str) and len(s[key])<40):raise ValueError('カメラの設定を確認してください')
         if 'speed' in s and not (finite(s['speed']) and .1<=s['speed']<=4):raise ValueError('動画の速さは0.1〜4倍です')
+        if 'clipChain' in s and not isinstance(s['clipChain'],bool):raise ValueError('つなぎの設定を確認してください')
         if 'fit' in s and not isinstance(s['fit'],bool):raise ValueError('「場面の長さに合わせる」の設定を確認してください')
         if s.get('tail','auto') not in ['auto','hold','loop']:raise ValueError('動画が足りないときの動きを確認してください')
         a=orig['assets'][s['asset']];clip=a.get('duration') if isinstance(a,dict) else None
