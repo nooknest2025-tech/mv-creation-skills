@@ -1,6 +1,6 @@
 {
   "name": "mvpack-remotion",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "description": "MV skill pack - Remotion lyric motion system (32 styles)",
   "type": "module",

@@ -126,3 +126,8 @@ input に画像・動画が無く、テイストがアニメ・実写風・イ�
 3. おすすめは無料ルート: Grok アプリ / grok.com などで stills_prompts.csv を上から順に生成し、`gen/stills/<曲名>/` に保存
    - 有料APIは、タクさんが金額を確認してから `npm run gen -- stills run --image <方法のID> --confirm <合計金額>` のみ（AI が勝手に実行しない）
 4. `npm run gen -- stills import` → `npm run mv`（シーン画像は `input/AI生成画像/` に入り、そのまま使われる）
+
+## リリースのルール（メンテナー向け）
+- リリースごとに `skill-pack-v3/MV_SKILL_PACK/remotion/package.json`（と package-lock.json のルート）の version を上げ、リポジトリのルート `CHANGELOG.md` に項目を足し、README のバージョン表記も合わせる。
+- 直しだけ → パッチ（2.0.0 → 2.0.1）、機能を足した → マイナー（2.0.0 → 2.1.0）、使い方が大きく変わる → メジャー。
+- マージ後に `vX.Y.Z` タグと GitHub Release（CHANGELOG の内容）を作る。
