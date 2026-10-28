@@ -31,7 +31,9 @@ npm run editor -- --project <曲名>
 npm run editor -- --project <名前> --audio 曲.wav --lyrics 歌詞.json --images 画像1.png,画像2.png --videos 動画1.mp4
 #   見本: --lyrics editor/sample/lyrics.json --images editor/sample/scene1.svg,editor/sample/scene2.svg
 ```
-表示された `http://127.0.0.1:5194/editor.html` をブラウザで開きます（ポート変更は `--port 5200`）。
+表示された `http://127.0.0.1:5195/editor.html` をブラウザで開きます（使用中なら自動で次の番号を使います。変更は `--port 5200`）。
+
+「MP4を書き出す」を押すと、PCの「名前を付けて保存」画面が出ます。保存場所とファイル名を選ぶと書き出しが始まります（キャンセルすれば何もしません）。前回のフォルダは覚えています。
 止めるときはターミナルで Ctrl+C。もう一度同じコマンドで起動すると、**保存済みの編集から再開**します。
 
 歌詞 JSON の形: `{"duration": 曲の秒数, "lines": [{"text": "歌詞", "start": 0.4, "end": 2.5}, ...]}`（`song.json` もそのまま使えます）。

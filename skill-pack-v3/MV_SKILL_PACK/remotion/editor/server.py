@@ -2,12 +2,12 @@
 import os,json,re,math,threading,subprocess,time,hashlib,shutil
 from pathlib import Path
 import sys;sys.path.insert(0,str(Path(__file__).resolve().parent))
-from exportpath import safe_name,unique_path,check_folder,pick_folder,open_folder,next_version
+from exportpath import safe_name,unique_path,check_folder,pick_folder,open_folder,next_version,save_as,resolve_target
 from http.server import SimpleHTTPRequestHandler,ThreadingHTTPServer
 import argparse
 parser=argparse.ArgumentParser()
 parser.add_argument('--root',required=True)
-parser.add_argument('--port',type=int,default=5194)
+parser.add_argument('--port',type=int,default=5195)
 args=parser.parse_args()
 EDITOR=Path(__file__).resolve().parent
 ROOT=Path(args.root).resolve()
@@ -175,6 +175,9 @@ class Handler(SimpleHTTPRequestHandler):
                     shutil.copyfile(STATE,history/f'rev-{current["revision"]}-{time.time_ns()}.json')
                     new={'revision':rev,'data':body['data']};temp=STATE.with_suffix('.tmp');temp.write_text(json.dumps(new,ensure_ascii=False,indent=2),encoding='utf-8');temp.replace(STATE)
                     return self.respond({'revision':rev})
+                if self.path=='/api/save-as':
+                    info=export_info();path,ok=save_as(info['folder'],info['suggestedName'])
+                    return self.respond({'path':path,'available':ok,'cancelled':ok and not path,**info})
                 if self.path=='/api/pick-folder':
                     folder,ok=pick_folder(body.get('initial') or export_info()['folder'])
                     return self.respond({'folder':folder,'available':ok})
@@ -188,10 +191,13 @@ class Handler(SimpleHTTPRequestHandler):
                 if self.path=='/api/render':
                     if JOB['status']=='running':return self.respond({'error':'書き出し中です'},409)
                     validate(current['data']);stamp=time.time_ns();name=f'edit-r{current["revision"]}-{stamp}'
-                    folder=check_folder(body.get('folder') or export_info()['folder'])
-                    if body.get('folder'):(ROOT/SETTINGS_NAME).write_text(json.dumps({**settings(),'folder':str(folder)},ensure_ascii=False,indent=2),encoding='utf-8')
+                    title=current['data'].get('title') or 'MV'
+                    if body.get('path'):out=resolve_target(body['path']);folder=out.parent  # chosen in the Save-As dialog (overwrite confirmed there)
+                    else:
+                        folder=check_folder(body.get('folder') or export_info()['folder'])
+                        out=unique_path(folder,safe_name(body.get('name'),title,next_version(folder,title)))
+                    if body.get('path') or body.get('folder'):(ROOT/SETTINGS_NAME).write_text(json.dumps({**settings(),'folder':str(folder)},ensure_ascii=False,indent=2),encoding='utf-8')
                     snapshot=ROOT/(name+'.json');snapshot.write_text(json.dumps(current,ensure_ascii=False,indent=2),encoding='utf-8')
-                    out=unique_path(folder,safe_name(body.get('name'),current['data'].get('title') or 'MV',next_version(folder,current['data'].get('title') or 'MV')))
                     JOB={'status':'running','revision':current['revision'],'progress':0,'snapshot':snapshot.name,'hash':hashlib.sha256(snapshot.read_bytes()).hexdigest()}
                     threading.Thread(target=render,args=(snapshot,out),daemon=True).start();return self.respond(JOB)
                 self.respond({'error':'見つかりません'},404)

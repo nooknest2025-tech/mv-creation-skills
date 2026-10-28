@@ -256,25 +256,24 @@ audio.onpause=()=>{$('play').textContent='再生'};audio.onplay=()=>{mode='live'
 $('play').onclick=()=>{mode='live';loopRange=null;loopUi();if(audio.paused)audio.play().catch(e=>$('error').textContent=e.message);else audio.pause();draw()};$('seek').oninput=()=>{mode='live';loopRange=null;loopUi();seek(Number($('seek').value))};$('live').onclick=()=>{mode='live';$('sample').textContent='';draw()};
 $('save').onclick=async()=>{try{const r=await api('/api/save',{revision,data});revision=r.revision;dirty=false;$('error').textContent='';status()}catch(e:any){$('error').textContent=e.message}};
 let exportFolder='';
-function exportPanel(){const box=document.createElement('details');box.className='exportPanel';box.open=true;
- box.innerHTML=`<summary>MP4の保存先とファイル名</summary><div class="lookControls"><label class="wide">保存先フォルダ <span id="exFolder" class="exPath"></span></label><div class="wide lineNav"><button id="exPick">保存先を選ぶ</button><button id="exDefault">元に戻す（プロジェクトの out）</button></div>
- <div class="wide" id="exManual" hidden><label>フォルダのパスを貼り付け <input id="exPath" placeholder="例：C:\\Users\\あなた\\Videos\\MV" aria-label="保存先フォルダのパス"></label><button id="exPathSet">このフォルダにする</button></div>
- <label class="wide">ファイル名 <input id="exName" aria-label="書き出すファイル名"></label><p class="hint wide">同じ名前のファイルがあるときは「 (2)」などを付けて、上書きしません。</p></div>
- <div id="exDone" hidden><p>保存しました：<b id="exSaved" class="exPath"></b></p><button id="exOpen">フォルダを開く</button></div>`;
- const tl=$('timeline');(tl.parentElement?.id==='stickyTop'?$('stickyTop'):tl).after(box);
- const apply=(d:any)=>{exportFolder=d.folder;$('exFolder').textContent=d.folder+(d.folder===d.default?'（いつもの場所）':'');if(!$('exName').dataset.touched)$('exName').value=d.suggestedName};
- const err=(e:any)=>{$('error').textContent=e.message};
- const setFolder=async(f:string)=>{try{apply(await api('/api/export-settings',{revision,folder:f}));$('error').textContent='';$('exManual').hidden=true}catch(e){err(e)}};
- $('exName').oninput=()=>{$('exName').dataset.touched='1'};
- $('exPick').onclick=async()=>{try{$('exPick').disabled=true;$('exPick').textContent='PCの画面でフォルダを選んでください…';const r=await api('/api/pick-folder',{revision,initial:exportFolder});if(!r.available){$('exManual').hidden=false;$('exPath').value=exportFolder;$('error').textContent='フォルダ選択の画面を開けなかったので、パスを貼り付けてください'}else if(r.folder)await setFolder(r.folder)}catch(e){err(e)}finally{$('exPick').disabled=false;$('exPick').textContent='保存先を選ぶ'}};
- $('exPathSet').onclick=()=>setFolder($('exPath').value);
- $('exDefault').onclick=async()=>{const d=await api('/api/export-settings');setFolder(d.default)};
- $('exOpen').onclick=async()=>{try{await api('/api/open-folder',{revision})}catch(e){err(e)}};
- api('/api/export-settings').then(apply).catch(err)}
-const refreshExportName=()=>api('/api/export-settings').then((d:any)=>{if(!$('exName').dataset.touched)$('exName').value=d.suggestedName}).catch(()=>{});
-$('render').onclick=async()=>{try{const r=await api('/api/render',{revision,folder:exportFolder,name:$('exName').value});busy=true;lastJob=r;status();poll()}catch(e:any){$('error').textContent=e.message}};
+/* 「MP4を書き出す」→ PCの「名前を付けて保存」画面 → 書き出し。画面が出せないPCではページ内の入力欄。 */
+function exportPanel(){
+ const hdr=$('render');const res=document.createElement('span');res.id='exDone';res.hidden=true;res.className='exDone';res.innerHTML='保存先：<b id="exSaved" class="exPath"></b><button id="exOpen">フォルダを開く</button>';hdr.after(res);
+ const m=document.createElement('div');m.id='exModal';m.hidden=true;m.className='exModal';m.innerHTML=`<div class="exCard" role="dialog" aria-label="MP4の保存先"><h3>MP4の保存先</h3><p class="hint">PCの保存画面を開けなかったので、ここで指定してください。</p>
+ <label>保存先フォルダ <input id="exPath" aria-label="保存先フォルダのパス" placeholder="例：C:\\Users\\あなた\\Videos"></label><label>ファイル名 <input id="exName" aria-label="書き出すファイル名"></label><p class="hint">同じ名前があるときは「 (2)」を付けて上書きしません。</p>
+ <div class="lineNav"><button id="exGo" class="primary">この場所に書き出す</button><button id="exCancel">やめる</button></div></div>`;document.body.append(m);
+ $('exOpen').onclick=async()=>{try{await api('/api/open-folder',{revision})}catch(e:any){$('error').textContent=e.message}};
+ $('exCancel').onclick=()=>{m.hidden=true};
+ $('exGo').onclick=()=>{m.hidden=true;startExport({folder:$('exPath').value,name:$('exName').value})};
+ api('/api/export-settings').then((d:any)=>{exportFolder=d.folder}).catch(()=>{})}
+async function startExport(dest:any){try{const r=await api('/api/render',{revision,...dest});busy=true;lastJob=r;status();poll()}catch(e:any){$('error').textContent=e.message;if(!dest.path){$('exModal').hidden=false}}}
+const refreshExportName=()=>{};
+$('render').onclick=async()=>{if(busy)return;$('error').textContent='';const b=$('render');b.disabled=true;const label=b.textContent;b.textContent='PCの保存画面で場所を選んでください…';
+ try{const r=await api('/api/save-as',{revision});exportFolder=r.folder;
+  if(!r.available){$('exPath').value=r.folder;$('exName').value=r.suggestedName;$('exModal').hidden=false;return}
+  if(!r.path)return; await startExport({path:r.path})}catch(e:any){$('error').textContent=e.message}finally{b.textContent=label;status()}};
 $('refreshCatalog').onclick=async()=>{try{$('refreshCatalog').disabled=true;if(dirty){const s=await api('/api/save',{revision,data});revision=s.revision;dirty=false}await api('/api/reload-catalog',{revision});window.location.reload()}catch(e:any){$('error').textContent=e.message;$('refreshCatalog').disabled=false}};
-async function poll(){try{lastJob=await api('/api/job');$('exportStatus').textContent=lastJob.status==='running'?`書き出し中 ${lastJob.progress??0}%`:lastJob.status==='done'?`書き出し済み：編集版 ${lastJob.revision}`:lastJob.status==='failed'?`書き出し失敗：${lastJob.error}`:'まだ書き出していません';$('result').hidden=lastJob.status!=='done';$('exDone').hidden=lastJob.status!=='done'||!lastJob.path;if(lastJob.path)$('exSaved').textContent=lastJob.path;if(lastJob.status==='done'&&!lastJob.url)$('result').hidden=true;if(lastJob.status==='done'&&lastJob.url){$('result').href=lastJob.url;$('result').textContent='書き出したMP4を開く';$('result').dataset.revision=lastJob.revision}const was=busy;busy=lastJob.status==='running';status();if(busy)setTimeout(poll,1500);else if(was){$('exName').dataset.touched='';refreshExportName()}}catch(e:any){$('error').textContent=e.message}}
+async function poll(){try{lastJob=await api('/api/job');$('exportStatus').textContent=lastJob.status==='running'?`書き出し中 ${lastJob.progress??0}%`:lastJob.status==='done'?`書き出し済み：編集版 ${lastJob.revision}`:lastJob.status==='failed'?`書き出し失敗：${lastJob.error}`:'まだ書き出していません';$('result').hidden=lastJob.status!=='done';$('exDone').hidden=lastJob.status!=='done'||!lastJob.path;if(lastJob.path){const sv=$('exSaved');sv.textContent=lastJob.path.split(/[\\/]/).pop();sv.title=lastJob.path;$('exOpen').title=lastJob.folder??''}if(lastJob.status==='done'&&!lastJob.url)$('result').hidden=true;if(lastJob.status==='done'&&lastJob.url){$('result').href=lastJob.url;$('result').textContent='書き出したMP4を開く';$('result').dataset.revision=lastJob.revision}const was=busy;busy=lastJob.status==='running';status();if(busy)setTimeout(poll,1500);}catch(e:any){$('error').textContent=e.message}}
 window.addEventListener('resize',fit);window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue=''}});
 {const bar=$('play').parentElement;const lt=document.createElement('button');lt.id='loopToggle';lt.onclick=()=>{loopOn=!loopOn;loopUi()};const sp=document.createElement('button');sp.id='stopRange';sp.textContent='停止';sp.onclick=stopRange;const ls=document.createElement('span');ls.id='loopState';bar.append(lt,sp,ls);loopUi()}
 document.addEventListener('keydown',e=>{if(e.code!=='Space')return;const tag=(e.target as HTMLElement)?.tagName;if(/INPUT|SELECT|TEXTAREA|BUTTON/.test(tag??'')&&!(tag==='INPUT'&&(e.target as HTMLInputElement).type==='range'))return;e.preventDefault();mode='live';if(audio.paused){if(loopRange)seek(Math.max(loopRange()[0],Math.min(audio.currentTime,loopRange()[1]-.05)),true);else audio.play().catch(()=>{})}else audio.pause()});

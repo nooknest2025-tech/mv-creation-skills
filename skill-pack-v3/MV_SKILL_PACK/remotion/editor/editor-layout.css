@@ -42,3 +42,5 @@ body{height:100vh;overflow:hidden;font-size:13px}main{max-width:none;margin:0;pa
 #clipStrip{height:62px}#rampBar{height:34px}
 .addAsset{display:flex;flex-direction:column;gap:4px;padding:8px;border:1px dashed #78916d;border-radius:6px;font-size:12px}.addAsset.over{background:#40573f}.addAsset input{max-width:100%}
 .exportPanel{margin-top:10px}.exPath{display:block;font-family:ui-monospace,monospace;font-size:12px;color:#f4efdf;background:#1d2a22;padding:5px 7px;border-radius:5px;overflow-wrap:anywhere;margin-top:4px}#exManual input{width:100%}#exDone{margin-top:8px}
+.exDone{display:inline-flex;align-items:center;gap:6px;font-size:11px;max-width:340px}.exDone{white-space:nowrap}.exDone .exPath{display:inline-block;margin:0;max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.exDone button{font-size:11px;padding:4px 8px}
+.exModal{position:fixed;inset:0;background:#000a;z-index:100;display:flex;align-items:center;justify-content:center}.exCard{background:#1c2c23;border:1px solid #78916d;border-radius:10px;padding:18px;width:min(520px,92vw)}.exCard label{display:block;margin:10px 0}.exCard input{width:100%}

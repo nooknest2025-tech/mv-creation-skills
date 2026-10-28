@@ -7,6 +7,16 @@ const py = ["python3", "python"].find((c) => spawnSync(c, ["--version"]).status 
 const runPy = (code: string) => { const r = spawnSync(py!, ["-c", `import sys,json;sys.path.insert(0,${JSON.stringify(path.join(R, "editor"))})\nfrom exportpath import *\n${code}`], { encoding: "utf8" }); if (r.status) throw Error(r.stderr); return JSON.parse(r.stdout); };
 
 describe.skipIf(!py)("MP4の保存先：名前と場所のルール", () => {
+  it("Save-As result: folder created if needed, name kept (overwrite was confirmed in the dialog), .mp4 enforced", () => {
+    const d = fs.mkdtempSync(path.join(os.tmpdir(), "mv-sa-")); fs.writeFileSync(path.join(d, "完成.mp4"), "");
+    const out = runPy(`r=[]\nfor p in [${JSON.stringify(path.join(d, "完成.mp4"))}, ${JSON.stringify(path.join(d, "sub", "x"))}, 'rel.mp4', '']:\n  try:r.append(['ok',str(resolve_target(p))])\n  except ValueError as e:r.append(['ng',str(e)])\nprint(json.dumps(r,ensure_ascii=False))`);
+    expect(out[0]).toEqual(["ok", fs.realpathSync(path.join(d, "完成.mp4"))]); expect(out[1][1]).toBe(path.join(fs.realpathSync(d), "sub", "x.mp4"));
+    expect(out[2][0]).toBe("ng"); expect(out[3][0]).toBe("ng");
+  });
+  it("default editor port is 5195 (5194 collides with another app)", async () => {
+    const src = fs.readFileSync(path.join(R, "scripts/editor.ts"), "utf8"); expect(src).toContain("DEFAULT_EDITOR_PORT=5195");
+    expect(fs.readFileSync(path.join(R, "editor/server.py"), "utf8")).toContain("default=5195");
+  });
   it("file name: default <title>_v<n>.mp4, Windows-unsafe characters removed, no folders", () => {
     const out = runPy(`print(json.dumps([safe_name('', '夏の歌', 3), safe_name('a:b*c?.MP4'), safe_name('..\\\\..\\\\evil'), safe_name('CON'), safe_name('  完成版  ')]))`);
     expect(out).toEqual(["夏の歌_v3.mp4", "a_b_c_.mp4", "evil.mp4", "_CON.mp4", "完成版.mp4"]);
@@ -34,6 +44,7 @@ describe.skipIf(!py)("MP4の保存先：名前と場所のルール", () => {
       const target = path.join(dir, "私の動画", "MV");
       const [ok, s] = await post("/api/export-settings", { folder: target }); expect(ok).toBe(200); expect(fs.realpathSync(s.folder)).toBe(fs.realpathSync(target));
       expect((await (await fetch(url + "/api/export-settings")).json()).folder).toBe(s.folder);
+      const [, sa] = await post("/api/save-as", {}); expect(sa).toMatchObject({ available: false, path: "" }); expect(sa.suggestedName).toMatch(/\.mp4$/);
       const [bad, e] = await post("/api/export-settings", { folder: "relative" }); expect(bad).toBe(400); expect(e.error).toMatch(/フルパス/);
     } finally { srv.kill(); }
   }, 20000);

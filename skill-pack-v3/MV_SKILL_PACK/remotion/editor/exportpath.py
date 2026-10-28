@@ -32,6 +32,36 @@ def check_folder(path):
 TK="import tkinter as t,tkinter.filedialog as f,sys\nr=t.Tk();r.withdraw();r.attributes('-topmost',True);r.update()\nd=f.askdirectory(parent=r,initialdir=sys.argv[1] or None,title='MP4の保存先フォルダを選ぶ',mustexist=False)\nprint(d or '',end='')"
 PS=("Add-Type -AssemblyName System.Windows.Forms;$f=New-Object System.Windows.Forms.FolderBrowserDialog;$f.Description='MP4の保存先フォルダを選ぶ';"
     "$f.SelectedPath=$env:MV_INIT;$w=New-Object System.Windows.Forms.Form;$w.TopMost=$true;if($f.ShowDialog($w) -eq 'OK'){[Console]::OutputEncoding=[Text.Encoding]::UTF8;Write-Output $f.SelectedPath}")
+TK_SAVE=("import tkinter as t,tkinter.filedialog as f,sys\nr=t.Tk();r.withdraw();r.attributes('-topmost',True);r.lift();r.update();r.focus_force()\n"
+ "d=f.asksaveasfilename(parent=r,initialdir=sys.argv[1] or None,initialfile=sys.argv[2],defaultextension='.mp4',filetypes=[('MP4 動画','*.mp4')],title='MP4の保存先を選ぶ',confirmoverwrite=True)\n"
+ "sys.stdout.buffer.write((d or '').encode('utf-8'))")
+PS_SAVE=("Add-Type -AssemblyName System.Windows.Forms;$f=New-Object System.Windows.Forms.SaveFileDialog;$f.Title='MP4の保存先を選ぶ';$f.Filter='MP4 動画 (*.mp4)|*.mp4';"
+    "$f.DefaultExt='mp4';$f.AddExtension=$true;$f.OverwritePrompt=$true;$f.InitialDirectory=$env:MV_INIT;$f.FileName=$env:MV_NAME;$w=New-Object System.Windows.Forms.Form;$w.TopMost=$true;"
+    "if($f.ShowDialog($w) -eq 'OK'){[Console]::OutputEncoding=[Text.Encoding]::UTF8;Write-Output $f.FileName}")
+def _shown():
+    """the editor server may be started hidden (windowsHide / minimized cmd): force the dialog process to show normally."""
+    if os.name!='nt':return {}
+    si=subprocess.STARTUPINFO();si.dwFlags|=subprocess.STARTF_USESHOWWINDOW;si.wShowWindow=1;return {'startupinfo':si}
+def save_as(initialdir='',initialfile='MV_v1.mp4'):
+    """native Save-As dialog in a separate process (http server threads never touch Tk).
+    returns (path or '' when cancelled, available)."""
+    if os.environ.get('MV_NO_PICKER'):return '',False
+    try:
+        r=subprocess.run([sys.executable,'-c',TK_SAVE,str(initialdir or ''),str(initialfile or '')],capture_output=True,timeout=1800,**_shown())
+        if r.returncode==0:return r.stdout.decode('utf-8','replace').strip(),True
+    except Exception:pass
+    if os.name=='nt':
+        try:
+            r=subprocess.run(['powershell','-NoProfile','-STA','-Command',PS_SAVE],capture_output=True,text=True,encoding='utf-8',timeout=1800,env={**os.environ,'MV_INIT':str(initialdir or ''),'MV_NAME':str(initialfile or '')},**_shown())
+            if r.returncode==0:return r.stdout.strip(),True
+        except Exception:pass
+    return '',False
+def resolve_target(path):
+    """validated absolute .mp4 path chosen by the user (overwrite already confirmed in the dialog)."""
+    s=str(path or '').strip().strip('"')
+    if not s:raise ValueError('保存するファイルを指定してください')
+    p=Path(s);folder=check_folder(p.parent if p.is_absolute() else s)
+    return folder/safe_name(p.name)
 def pick_folder(initial=''):
     """native dialog on the user's PC. returns (folder or '', available:boolean)."""
     if os.environ.get('MV_NO_PICKER'):return '',False
