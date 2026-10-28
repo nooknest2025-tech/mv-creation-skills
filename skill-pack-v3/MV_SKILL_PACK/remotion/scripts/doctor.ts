@@ -1,3 +1,4 @@
+import { readFileSync as readVer } from "node:fs";
 // npm run doctor (= npm run setup): 必要なアプリを調べ、足りない物を日本語で説明。--fix で1つずつ確認しながらインストール。
 // 擬似テスト: MVPACK_DOCTOR_MISSING=ffmpeg,python npm run doctor
 import { spawnSync } from "node:child_process";
@@ -47,6 +48,7 @@ async function main() {
   const args = process.argv.slice(2);
   const P = probeAll(), r = report(P, osOf());
   if (args.includes("--json")) { console.log(JSON.stringify({ os: osOf(), probe: P, missing: r.lines.filter((l) => !l.ok).map((l) => ({ id: l.tool.id, need: l.tool.need, cost: l.tool.cost, fix: l.fix })) }, null, 1)); if (r.blocking.length) process.exitCode = 1; return; }
+  try { log(`MV制作パック バージョン ${JSON.parse(readVer(new URL("../package.json", import.meta.url), "utf8")).version}`); } catch {}
   log(r.text);
   if (args.includes("--fix") && r.fixes.length) {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
