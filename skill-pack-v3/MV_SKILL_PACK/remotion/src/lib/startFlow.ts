@@ -6,7 +6,7 @@ import { HYBRIDS, HYBRID_IDS } from "./hybrids";
 import { PRESETS, PRESET_IDS } from "./presets";
 
 export type Q1Key = "song" | "images" | "videos" | "chars";
-export type Q2Key = "textpv" | "images" | "videos" | "stills" | "tachie";
+export type Q2Key = "textpv" | "images" | "videos" | "stills" | "tachie" | "animate";
 export type Q3Key = "auto" | "semi" | "kodawari";
 export interface Material { audio: boolean; lyrics: boolean; nImages: number; nVideos: number; nChars: number }
 export interface Opt<K extends string = string> { key: K; label: string; why: string }
@@ -33,18 +33,19 @@ export function checkQ1(pick: Q1Key, m: Material): { q1: Q1Key; warn?: string } 
 }
 
 /** Q2 options for the material; first = recommended. stillsCost: e.g. "無料（手作業）0円／有料なら最安 $0.12". */
-export function q2Options(q1: Q1Key, m: Material, stillsCost?: string): Opt<Q2Key>[] {
+export function q2Options(q1: Q1Key, m: Material, stillsCost?: string, animateCost?: string): Opt<Q2Key>[] {
   const o: Record<Q2Key, Opt<Q2Key>> = {
     textpv: { key: "textpv", label: "文字と図形だけ（文字PV・0円）", why: "動く歌詞と図形・線・粒で作る。画像がなくても成立し、費用0円" },
     images: { key: "images", label: "画像だけで作る（0円）", why: `手持ちの画像 ${m.nImages} 枚に動きをつけ、動く歌詞を重ねる` },
     videos: { key: "videos", label: `動画も入れる（0円）`, why: `動画 ${m.nVideos} 本${m.nImages ? `＋画像 ${m.nImages} 枚` : ""}を使い、良い場面をビートで切る` },
-    stills: { key: "stills", label: `画像を作る（無料の手作業 or 有料${stillsCost ? `：${stillsCost}` : ""}）`, why: "曲に合う画像の作り方リスト（キャラ→背景→シーン）を用意。無料なら Grok アプリ等で手作業、有料APIは金額を確認してからだけ。画像ができるまでは文字PVで仮に作ります" },
+    stills: { key: "stills", label: "画像を作る（無料：Grokアプリ等で手作業）", why: `曲に合う画像の作り方リスト（キャラ→背景→シーン${stillsCost ? `・${stillsCost}` : ""}）を用意し、Grok アプリ等で無料で作って取り込む。画像ができるまでは文字PVで仮に作ります` },
+    animate: { key: "animate", label: "画像を動画にする（全部 or 選んだシーンだけ／基本は無料の手作業）", why: `画像から短い動画を作り、そのシーンだけ動画に差し替える（残りは静止画のまま）。Grok アプリ等で無料の手作業→取り込み${animateCost === undefined ? "" : ""}` },
     tachie: { key: "tachie", label: "立ち絵で作る（0円）", why: `キャラ ${m.nChars} 人を拍で踊らせ、口パク・縦書き吹き出しの歌詞` },
   };
   const keys: Q2Key[] = q1 === "song" ? ["textpv", "stills"]
-    : q1 === "images" ? ["images", "textpv", "stills"]
+    : q1 === "images" ? ["images", "animate", "textpv", "stills"]
     : q1 === "videos" ? ["videos", ...(m.nImages ? ["images" as const] : []), "textpv"]
-    : ["tachie", ...(m.nVideos ? ["videos" as const] : []), ...(m.nImages ? ["images" as const] : []), "textpv"];
+    : ["tachie", ...(m.nVideos ? ["videos" as const] : []), ...(m.nImages ? ["images" as const, "animate" as const] : []), "textpv"];
   return keys.map((k) => o[k]);
 }
 export const Q3_OPTS: Opt<Q3Key>[] = [
@@ -55,7 +56,7 @@ export const Q3_OPTS: Opt<Q3Key>[] = [
 export const Q3_DEFAULT: Q3Key = "auto";
 
 /** does this visual choice put pictures on screen (now)? stills = later, after the images are made. */
-export const hasPictures = (q2: Q2Key) => q2 === "images" || q2 === "videos" || q2 === "tachie";
+export const hasPictures = (q2: Q2Key) => q2 === "images" || q2 === "videos" || q2 === "tachie" || q2 === "animate";
 /** show modes (SHOW_MODES ids) allowed for the Q2 choice. */
 export function allowedModes(q2: Q2Key, m: Material): string[] {
   const text = ["lyric_motion", "typography", "mograph"];
@@ -84,6 +85,7 @@ export function q2Plan(q2: Q2Key, taste = "anime"): { say: string[]; args: strin
     case "images": return { say: ["画像は手持ちの素材で"], args: [], why: "手持ちの画像に動きをつけて、動く歌詞を重ねる" };
     case "videos": return { say: ["画像は手持ちの素材で"], args: [], why: "動画の良い場面をビートで切り、動く歌詞を重ねる" };
     case "stills": return { say: [`画像は${({ anime: "アニメ", photo: "実写", illust: "イラスト" } as Record<string, string>)[taste] ?? "アニメ"}調で`, "物語＋リリックモーションで"], args: [], why: "画像の作り方リストを用意。画像ができるまでは文字PVで仮に作り、画像を入れて作り直すと物語＋動く歌詞になる" };
+    case "animate": return { say: ["画像は手持ちの素材で"], args: [], why: "手持ちの画像で作り、選んだシーンを動画AIの短い動画に差し替える（残りは静止画）。動画ができるまでは静止画のまま完成させます" };
     case "tachie": return { say: ["立ち絵モーション＋リリックモーションで"], args: [], why: "キャラ素材を拍で踊らせ、口パクと縦書き吹き出しの歌詞" };
   }
 }
@@ -101,3 +103,18 @@ export function confirmLines(m: Material, c: Choice, o: { why: string; cost: str
     "  できあがり: MP4（projects/<曲名>/out/）と編集画面用のプロジェクト（あとから全部直せます: npm run editor -- --project <曲名>）",
   ];
 }
+
+/** 「画像を動画にする」: which scenes and how (default = free manual, never a paid call without confirmation). */
+export type AnimScope = "chorus" | "all" | "pick";
+export type AnimMethod = "manual" | "paid";
+export const ANIM_SCOPES = (n: { chorus: number; all: number }, _cost: { chorus?: string; all?: string } = {}): Opt<AnimScope>[] => [
+  { key: "chorus", label: `選んだシーンだけ: サビの見せ場（約${n.chorus}本）`, why: "見せ場だけ本物の動き。手作業なら0円" },
+  { key: "pick", label: "選んだシーンだけ: 画像を番号で選ぶ", why: "動かしたい画像を選ぶ（例 1,3）。その画像のシーンだけ動画にする" },
+  { key: "all", label: `全部（約${n.all}本）`, why: "全編を動画に。手作業なら0円（手間は多め）" },
+];
+export const ANIM_METHODS = (_perClip?: string, _total?: string): Opt<AnimMethod>[] => [
+  { key: "manual", label: "無料（Grokアプリ等で手作業→取り込み）", why: "プロンプト一覧（prompts.csv）と元画像を Grok アプリ / grok.com の「画像から動画」に入れて作り、npm run gen -- import で取り込む。0円" },
+  { key: "paid", label: "MCP・動画生成APIを使う（有料。使う直前に見積もりを見せて毎回確認）", why: "Pollo などの MCP や Grok Imagine API で作る。いまは作業リストを作るだけで、生成するときに金額を見せて確認します（自動では実行しません）" },
+];
+/** args for npm run mv. */
+export const animArgs = (scope: AnimScope, method: AnimMethod, images: string[] = []) => ["--video-scope", scope, "--video-method", method, ...(scope === "pick" && images.length ? ["--video-images", images.join(",")] : [])];

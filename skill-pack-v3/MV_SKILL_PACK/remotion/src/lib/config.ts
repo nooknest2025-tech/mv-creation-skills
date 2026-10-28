@@ -49,7 +49,7 @@ export interface MVConfig {
   visuals?: import("./types").VisualFx; // audio-reactive layers
   finish?: import("./types").FinishFx; // in-Remotion finishing
   ramps?: Record<string, string>; // section -> speed ramp
-  gen?: { model?: string; perShot?: Record<string, string>; resolution?: string; takes?: number; capUSD?: number; provider?: string; budgetPerShot?: number; imageModel?: string; plans?: Record<string, string | { plan: string; remaining?: number }>; audio?: boolean; autoMerge?: boolean; keepCut?: string[]; scope?: "none" | "chorus" | "all" /* 動画化: which sections get AI video */ };
+  gen?: { method?: "manual" | "paid" /* 画像を動画にする: free manual (default) or MCP / video API (paid, confirmed) */; images?: string[] /* scope "pick": image file names */; model?: string; perShot?: Record<string, string>; resolution?: string; takes?: number; capUSD?: number; provider?: string; budgetPerShot?: number; imageModel?: string; plans?: Record<string, string | { plan: string; remaining?: number }>; audio?: boolean; autoMerge?: boolean; keepCut?: string[]; scope?: "none" | "chorus" | "all" /* 動画化: which sections get AI video */ };
   pro?: boolean; // false = classic look (no pro director / motion-graphics layer)
   combo?: string[]; // show modes, multi-select: story | lipsync | dance | live | lyric_motion | typography | mograph | tachie
   density?: "slow" | "normal" | "fast"; // シーンの細かさ

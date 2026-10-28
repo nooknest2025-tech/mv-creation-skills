@@ -31,7 +31,7 @@ export function semiQuestions(c: SemiCtx = {}): SemiQ[] {
   if (c.flow) return flowQuestions(c, baseQuestions(c));
   return baseQuestions(c);
 }
-const FLOW_TASTE: Record<Q2Key, string> = { textpv: "graphic", images: "own", videos: "own", tachie: "own", stills: "anime" };
+const FLOW_TASTE: Record<Q2Key, string> = { textpv: "graphic", images: "own", animate: "own", videos: "own", tachie: "own", stills: "anime" };
 /** start flow v2: drop / narrow the questions Q1・Q2 already answered, add ジャンル (folded in from the old menu). */
 function flowQuestions(c: SemiCtx, qs: SemiQ[]): SemiQ[] {
   const { q2, m } = c.flow!, allow = new Set(allowedModes(q2, m)), out: SemiQ[] = [];

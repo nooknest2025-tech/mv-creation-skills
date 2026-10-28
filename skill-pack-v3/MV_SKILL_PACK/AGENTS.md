@@ -24,7 +24,9 @@
 ## プロの演出（全自動でも手動でも必ず適用）— 詳細 `docs/PRO_DIRECTION_ja.md`
 - **「開始」「MV作って」と言われたら**、ウィザード（`npm run start`）と同じ順で**1問ずつ**聞く（毎回おすすめを先に示し「そのままでよければOK」で進める。まとめて質問しない）:
   1. 何がありますか？ — input フォルダを見て答えを先に言う（例「曲と歌詞（lyrics.json）が見つかりました。画像・動画・キャラ素材はありません」）。選択肢: 曲と歌詞だけ（SRT/LRC/JSON等の歌詞データもOK）／＋画像／＋動画素材／＋キャラ素材（立ち絵・パーツ）。無い素材を言われたら置き場所を案内し、見つかった素材で続ける。
-  2. 映像はどうする？ — 1 に合うものだけ（`src/lib/startFlow.ts` の `q2Options`）: 文字と図形だけ（文字PV・0円。`--text-only`）／画像だけで作る／動画も入れる／画像を作る（無料の手作業 or 有料。`planStills` の枚数と金額を見せる。**有料APIは金額を見せて確認が取れたときだけ**）／立ち絵で作る。曲と歌詞だけなら文字PVをすすめる。
+  2. 映像はどうする？ — Q1 に合うものだけ（`src/lib/startFlow.ts` の `q2Options`）: 文字と図形だけ（文字PV。`--text-only`）／画像だけで作る／画像を動画にする（全部 or 選んだシーンだけ。`--video-scope chorus|all|pick --video-method manual|paid`）／動画も入れる／画像を作る（無料：Grokアプリ等で手作業。続けて「作った画像を動画にもする？（しない／全部／選んだシーンだけ）」）／立ち絵で作る。**ウィザードと会話の選択肢に金額は出さない**（全部無料が基本）。
+  - 無料の道: シーンごとのプロンプトと添付（役割: キャラ参照／スタイル参照／背景参照／開始画（first frame）／終了画、ファイルの場所）を画面とファイル（`stills_prompts.csv`・`prompts.csv`・`video_todo.md`）で渡す → ユーザーが好きなアプリで作って `input/made/` に入れる → 「作ったの入れた」と言われたら `npm run made`（名前は自由、S003/scene_003 があればそのシーン、混在OK、取り込み後に作り直し）。
+  - 有料は MCP（Pollo など）・生成APIにつなぐときだけ。**呼ぶ直前に毎回**、シーンごとのプロンプトと添付（書き換え・スキップ可）と見積もりを見せて確認を取る（`npm run gen -- run` も同じ。確認なしで実行しない）。
   3. ここから先は？ — おまかせ（既定・追加の質問なし）／半自動（`semiQuestions` に `flow: { q2, m }` を渡し、1・2 に合う質問と選択肢だけ。ジャンルもここで聞く）／こだわり（`allowedModes`・`allowedPresets`、画像なしなら `TEXT_STRUCTURES`）。画像がないのに画像前提の構成・アニメ画像生成を既定にしない。
   4. 画面の形 → 確認（素材・作り方と理由・費用。`confirmLines`）→ OK で作る。どの道でも `projects/<曲>/out/editor-input.json`（編集画面用プロジェクト）ができる（文字PVは単色SVG背景＋セクションごとのシーン）。
 - 旧フラグ（`--preset`・`--say`・`--aspect` など）と自然文の指示（「立ち絵＋タイポグラフィで」等）はそのまま使える。
@@ -87,7 +89,8 @@
 | 承認（ロック） | `npm run approve -- 2` |
 | 動画素材の自動カット検出 | `npm run scenes` |
 | 生成AIの計画・見積もり | `npm run models` / `npm run gen -- plan [--provider pollo]` / `npm run gallery` |
-| 画像がない曲の静止画づくり | `npm run gen -- stills`（枚数・方法・費用）→ 画像を作る → `npm run gen -- stills import` → `npm run mv` |
+| 画像がない曲の静止画づくり | `npm run gen -- stills`（プロンプトと添付の一覧）→ 好きなアプリで作って `input/made/` に入れる → `npm run made`（「作ったの入れた」） |
+| 自分で作った画像・動画の取り込み | `npm run made`（`input/made/` を見てシーンに割り当て → 作り直し。`--no-build` で取り込みだけ） |
 | MCP・アプリで作った動画の取り込み | `npm run gen -- import <ファイル/URL> --shot S012 --from <サービス名>` |
 | 目・口の位置を手で指定 | `npm run faces` |
 | プリセット比較動画 | `npm run presets-demo -- --project <曲名>` |

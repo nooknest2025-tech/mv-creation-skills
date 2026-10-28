@@ -1,6 +1,7 @@
 import React from 'react';
 import {markEdited,STAGE_STYLES} from '../src/lib/lyricEdits';
 import {stagePanel} from './stage-panel';
+import {mographPanel} from './mograph-panel';
 let origSource:any=null;
 import {createRoot} from 'react-dom/client';
 import {lyricRange,sceneRange,loopStep} from './loop';
@@ -105,7 +106,7 @@ function sceneInspector(){
  const dz=$('assetDrop');dz.ondragover=(e:DragEvent)=>{e.preventDefault();dz.classList.add('over')};dz.ondragleave=()=>dz.classList.remove('over');dz.ondrop=(e:DragEvent)=>{e.preventDefault();dz.classList.remove('over');const f=e.dataTransfer?.files?.[0];if(f)addFile(f)};
  for(const [id,key] of [['sceneStart','start'],['sceneFade','transition'],['sceneZoom','zoom'],['sceneX','x'],['sceneY','y']])$(id).oninput=()=>{const v=$(id).value;if(v==='')return;data.scenes[current][key]=key==='camera'?v==='true':Number(v);change()};
  $('sceneEnd').oninput=()=>{if($('sceneEnd').value!==''&&data.scenes[current+1]){data.scenes[current+1].start=Number($('sceneEnd').value);change()}};
- const clipUi=clipPanel(()=>current,preview);refreshClip=clipUi;const fxUi0=camFxPanel(()=>current,preview);const fxUi=()=>{fxUi0();clipUi()};const show0=show;show=()=>{show0();fxUi()};const stUi=stagePanel($('sceneAppearance'),{data:()=>data,current:()=>current,change,now:()=>t});const show1=show;show=()=>{show1();stUi()};
+ const clipUi=clipPanel(()=>current,preview);refreshClip=clipUi;const fxUi0=camFxPanel(()=>current,preview);const fxUi=()=>{fxUi0();clipUi()};const show0=show;show=()=>{show0();fxUi()};const stUi=stagePanel($('sceneAppearance'),{data:()=>data,current:()=>current,change,now:()=>t});const show1=show;show=()=>{show1();stUi()};const moUi=mographPanel($('sceneAppearance'),{data:()=>data,current:()=>current,change,preview});const show2=show;show=()=>{show2();moUi()};
  $('scenePreview').onclick=preview;$('prevScene').onclick=()=>select(Math.max(0,current-1));$('nextScene').onclick=()=>select(Math.min(data.scenes.length-1,current+1));$('sceneCenter').onclick=()=>{data.scenes[current].x=0;data.scenes[current].y=0;show();change()};
  selectSceneUi=(i:number)=>{current=i;showTab(true,false);show();drawTimeline()};
  const tab=(scenes:boolean,cueIt=true)=>{$('lineList').hidden=scenes;$('sceneList').hidden=!scenes;$('appearance').hidden=scenes;$('sceneAppearance').hidden=!scenes;$('lyricsTab').setAttribute('aria-pressed',String(!scenes));$('scenesTab').setAttribute('aria-pressed',String(scenes));$('listTitle').textContent=scenes?'シーンを選ぶ':'歌詞を選ぶ';if(scenes){show();if(cueIt)cue(data.scenes[current].start)}};showTab=tab;

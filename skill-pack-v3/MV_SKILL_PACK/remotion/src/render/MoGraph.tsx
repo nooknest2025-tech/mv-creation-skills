@@ -16,29 +16,39 @@ const shotAt = (p: RenderProps, t: number) => p.shots.find((s) => t >= s.start &
 export const isSolid = (p: RenderProps, t: number) => !!p.mograph && (p.mograph.solo || ["typo", "mograph"].includes(shotAt(p, t)?.role ?? "") || !p.shots.some((s) => s.src));
 const bgWord = (p: RenderProps, s: MoSection) => (s.type === "chorus" ? "CHORUS" : s.type === "pre_chorus" ? "BUILD UP" : s.type === "verse" ? "VERSE" : s.type === "bridge" ? "BRIDGE" : s.type.toUpperCase());
 
+/** editor edits of the mograph layer (whole video: data.mographEdit, per scene: scene.mograph). Unset = the built-in plan, pixel-identical. */
+export interface MoEdit { off?: boolean; look?: MoSection["look"]; colors?: Partial<Record<"bg" | "fg" | "accent" | "sub", string>>; intensity?: number; speed?: number; density?: number; transition?: MoSection["transition"] }
+/** the section as edited (same object when there is no look/colour edit). */
+export const editSec = (s: MoSection | undefined, ed?: MoEdit): MoSection | undefined => !s || !ed || (!ed.look && !ed.colors && !ed.transition) ? s : { ...s, look: ed.look ?? s.look, transition: ed.transition ?? s.transition, palette: ed.colors ? { ...s.palette, ...ed.colors } : s.palette };
 export const MoGraphBg: React.FC<{ p: RenderProps }> = ({ p }) => {
   const frame = useCurrentFrame(); const { width: W, height: H, fps } = useVideoConfig();
-  const t = p.startAt + frame / fps, s = secAt(p, t);
+  return <>{moBg(p, p.startAt + frame / fps, W, H)}</>;
+};
+/** the background mograph layer at time t (pure: shared by the Remotion render and the editor preview / export). */
+export function moBg(p: Pick<RenderProps, "mograph" | "shots" | "beat">, t: number, W: number, H: number, ed?: MoEdit): React.ReactElement | null {
+  const s = editSec(secAt(p as RenderProps, t), ed);
   if (!p.mograph || !s) return null;
-  const solid = isSolid(p, t), U = Math.min(W, H), pal = s.palette, B = beatLen(p.beat);
-  const bx = (t - p.beat.phase) / B, beatI = Math.floor(bx), beatF = bx - beatI, barI = Math.floor(bx / p.beat.beatsPerBar);
-  const role = shotAt(p, t)?.role;
-  const strong = solid ? 1 : role === "lyric" ? 0.7 : 0.45; // over pictures the graphics stay secondary
+  const solid = isSolid(p as RenderProps, t), U = Math.min(W, H), pal = s.palette, B = beatLen(p.beat);
+  const SP = ed?.speed ?? 1, IN = ed?.intensity ?? 1, DN = ed?.density ?? 1, cnt = (n: number) => Math.max(0, Math.round(n * DN));
+  if (ed?.off) return <AbsoluteFill style={{ overflow: "hidden" }}>{solid && <AbsoluteFill style={{ background: pal.bg }} />}</AbsoluteFill>;
+  const bx = ((t - p.beat.phase) / B) * SP, beatI = Math.floor(bx), beatF = bx - beatI, barI = Math.floor(bx / p.beat.beatsPerBar);
+  const role = shotAt(p as RenderProps, t)?.role;
+  const strong = (solid ? 1 : role === "lyric" ? 0.7 : 0.45) * IN; // over pictures the graphics stay secondary
   const els: React.ReactNode[] = [];
   // pose-to-pose helper: move to a new pose on every beat with snappy easing, slow drift in the hold
   const pose = (key: string, k: number) => { const a = rng(key, k), b = rng(key, k + 1); const q = EASE.snappy(clamp(beatF / 0.35)); return { x: a.next() + (b.next() - a.next()) * q, y: a.next() + (b.next() - a.next()) * q, r: (a.next() - 0.5) * 90 + ((b.next() - 0.5) * 90 - (a.next() - 0.5) * 90) * q, d: beatF * 0.02 }; };
   if (s.parallax) { // large low-opacity background text, slow parallax
-    const word = bgWord(p, s), px = H * 0.42;
-    els.push(<div key="bgt" style={{ position: "absolute", left: -((t - s.start) * W * 0.02) - W * 0.05, top: H * 0.5 - px * 0.6, fontFamily: HEAVY, fontSize: px, whiteSpace: "pre", color: pal.fg, opacity: 0.07 * (solid ? 1 : 0.6), letterSpacing: -px * 0.04 }}>{word} {word}</div>);
+    const word = bgWord(p as RenderProps, s), px = H * 0.42;
+    els.push(<div key="bgt" style={{ position: "absolute", left: -((t - s.start) * SP * W * 0.02) - W * 0.05, top: H * 0.5 - px * 0.6, fontFamily: HEAVY, fontSize: px, whiteSpace: "pre", color: pal.fg, opacity: 0.07 * (solid ? 1 : 0.6) * IN, letterSpacing: -px * 0.04 }}>{word} {word}</div>);
   }
-  if (s.look === "blocks") for (let k = 0; k < 3; k++) {
+  if (s.look === "blocks") for (let k = 0; k < cnt(3); k++) {
     const r = rng("blk", barI, k), q = EASE.snappy(clamp(((bx / p.beat.beatsPerBar) % 1) * 4 - k * 0.15));
     const w = W * r.uniform(0.18, 0.4), h = H * r.uniform(0.12, 0.3), x = W * r.uniform(-0.05, 0.8), y = H * r.uniform(0, 0.8);
-    els.push(<div key={`b${k}`} style={{ position: "absolute", left: x, top: y, width: w * q, height: h, background: [pal.accent, pal.sub, pal.fg][k], opacity: strong * (k === 2 ? 0.25 : 0.9) }} />);
+    els.push(<div key={`b${k}`} style={{ position: "absolute", left: x, top: y, width: w * q, height: h, background: [pal.accent, pal.sub, pal.fg][k % 3], opacity: strong * (k === 2 ? 0.25 : 0.9) }} />);
   }
   if (s.look === "geo" || s.look === "burst") {
-    const shapes = ["circle", "tri", "rect", "line"];
-    shapes.forEach((sh, k) => { const o = pose(`geo${k}`, Math.floor(beatI / (k + 1))), sz = U * (0.12 + k * 0.05), x = (0.1 + o.x * 0.8) * W, y = (0.1 + o.y * 0.8) * H;
+    const shapes = Array.from({ length: cnt(4) }, (_, k) => ["circle", "tri", "rect", "line"][k % 4]);
+    shapes.forEach((sh, k) => { const o = pose(`geo${k}`, Math.floor(beatI / (k + 1))), sz = U * (0.12 + (k % 4) * 0.05), x = (0.1 + o.x * 0.8) * W, y = (0.1 + o.y * 0.8) * H;
       const st: React.CSSProperties = { position: "absolute", left: x - sz / 2, top: y - sz / 2, width: sz, height: sh === "line" ? Math.max(2, U * 0.004) : sz, transform: `rotate(${o.r}deg) scale(${1 + o.d})`, opacity: strong * 0.85 };
       if (sh === "circle") els.push(<div key={`g${k}`} style={{ ...st, borderRadius: "50%", border: `${Math.max(2, U * 0.005)}px solid ${pal.accent}` }} />);
       else if (sh === "rect") els.push(<div key={`g${k}`} style={{ ...st, border: `${Math.max(2, U * 0.005)}px solid ${pal.fg}` }} />);
@@ -47,14 +57,14 @@ export const MoGraphBg: React.FC<{ p: RenderProps }> = ({ p }) => {
   }
   if (s.look === "burst" || s.particlesOnBeat) { // concentric burst + particles from the beat
     const q = EASE.expoOut(clamp(beatF / 0.9)), [cx, cy] = gridAnchor(hash("burst", beatI) % 9).map((v, i) => v * (i ? H : W));
-    if (s.look === "burst") for (let k = 0; k < 4; k++) { const r = U * (0.08 + q * 0.9) * (1 - k * 0.18); els.push(<div key={`r${k}`} style={{ position: "absolute", left: cx - r, top: cy - r, width: r * 2, height: r * 2, borderRadius: "50%", border: `${Math.max(2, U * 0.006 * (1 - q))}px solid ${k % 2 ? pal.accent : pal.fg}`, opacity: strong * (1 - q) }} />); }
+    if (s.look === "burst") for (let k = 0; k < cnt(4); k++) { const r = U * (0.08 + q * 0.9) * (1 - k * 0.18); els.push(<div key={`r${k}`} style={{ position: "absolute", left: cx - r, top: cy - r, width: r * 2, height: r * 2, borderRadius: "50%", border: `${Math.max(2, U * 0.006 * (1 - q))}px solid ${k % 2 ? pal.accent : pal.fg}`, opacity: strong * (1 - q) }} />); }
     const rr = rng("pt", beatI);
-    for (let k = 0; k < 14; k++) { const a = rr.uniform(0, Math.PI * 2), d = U * rr.uniform(0.1, 0.45) * q, sz = U * rr.uniform(0.006, 0.016);
+    for (let k = 0; k < cnt(14); k++) { const a = rr.uniform(0, Math.PI * 2), d = U * rr.uniform(0.1, 0.45) * q, sz = U * rr.uniform(0.006, 0.016);
       els.push(<div key={`p${k}`} style={{ position: "absolute", left: cx + Math.cos(a) * d, top: cy + Math.sin(a) * d, width: sz, height: sz, background: k % 3 ? pal.accent : pal.fg, transform: `rotate(${a * 57}deg)`, opacity: strong * (1 - q) }} />); }
   }
   if (s.look === "mono") { // diagonal line sweep on every bar
     const q = EASE.inOut(clamp(((bx / p.beat.beatsPerBar) % 1) * 2));
-    for (let k = 0; k < 3; k++) els.push(<div key={`sw${k}`} style={{ position: "absolute", left: -W * 0.3 + q * W * 1.6 - k * U * 0.05, top: -H * 0.2, width: Math.max(2, U * (0.004 + k * 0.004)), height: H * 1.4, background: k === 1 ? pal.accent : pal.fg, transform: "rotate(25deg)", opacity: strong * 0.7 }} />);
+    for (let k = 0; k < cnt(3); k++) els.push(<div key={`sw${k}`} style={{ position: "absolute", left: -W * 0.3 + q * W * 1.6 - k * U * 0.05, top: -H * 0.2, width: Math.max(2, U * (0.004 + k * 0.004)), height: H * 1.4, background: k === 1 ? pal.accent : pal.fg, transform: "rotate(25deg)", opacity: strong * 0.7 }} />);
   }
   if (s.look === "hud") { // fg UI: crosshair, frame corners, monospace greeble
     const [cx, cy] = (() => { const o = pose("hud", Math.floor(beatI / 2)); return [(0.25 + o.x * 0.5) * W, (0.25 + o.y * 0.5) * H]; })();
@@ -62,18 +72,18 @@ export const MoGraphBg: React.FC<{ p: RenderProps }> = ({ p }) => {
     els.push(<div key="ch" style={{ position: "absolute", left: cx - L, top: cy - th / 2, width: L * 2, height: th, background: pal.accent }} />, <div key="cv" style={{ position: "absolute", left: cx - th / 2, top: cy - L, width: th, height: L * 2, background: pal.accent }} />,
       <div key="cc" style={{ position: "absolute", left: cx - L * 0.6, top: cy - L * 0.6, width: L * 1.2, height: L * 1.2, borderRadius: "50%", border: `${th}px solid ${pal.fg}`, opacity: 0.8 }} />);
     for (const [x, y, rx, ry] of [[0.04, 0.06, 1, 1], [0.96, 0.06, -1, 1], [0.04, 0.94, 1, -1], [0.96, 0.94, -1, -1]]) els.push(<div key={`c${x}${y}`} style={{ position: "absolute", left: x * W - (rx < 0 ? L : 0), top: y * H - (ry < 0 ? L : 0), width: L, height: L, borderTop: ry > 0 ? `${th}px solid ${pal.fg}` : undefined, borderBottom: ry < 0 ? `${th}px solid ${pal.fg}` : undefined, borderLeft: rx > 0 ? `${th}px solid ${pal.fg}` : undefined, borderRight: rx < 0 ? `${th}px solid ${pal.fg}` : undefined, opacity: 0.7 }} />);
-    els.push(<div key="gr" style={{ position: "absolute", left: W * 0.05, top: H * 0.09, fontFamily: "monospace", fontSize: gs, letterSpacing: gs * 0.3, color: pal.fg, opacity: 0.6, whiteSpace: "pre", lineHeight: 1.6 }}>{`T+${t.toFixed(2)}  BPM ${Math.round(p.beat.bpm)}  BAR ${String(barI + 1).padStart(3, "0")}\nX ${(cx / W).toFixed(3)}  Y ${(cy / H).toFixed(3)}`}</div>);
+    els.push(<div key="gr" style={{ position: "absolute", left: W * 0.05, top: H * 0.09, fontFamily: "monospace", fontSize: gs, letterSpacing: gs * 0.3, color: pal.fg, opacity: 0.6 * IN, whiteSpace: "pre", lineHeight: 1.6 }}>{`T+${t.toFixed(2)}  BPM ${Math.round(p.beat.bpm)}  BAR ${String(barI + 1).padStart(3, "0")}\nX ${(cx / W).toFixed(3)}  Y ${(cy / H).toFixed(3)}`}</div>);
   }
   if (s.look === "tanzaku") { // slow, flat, looping
-    for (let k = 0; k < 5; k++) { const x = ((k / 5 + (t - s.start) * 0.006) % 1) * W; els.push(<div key={`v${k}`} style={{ position: "absolute", left: x, top: H * 0.08, width: Math.max(1, U * 0.0015), height: H * 0.84, background: pal.fg, opacity: 0.18 }} />); }
-    const r = U * 0.16; els.push(<div key="sun" style={{ position: "absolute", left: W * 0.5 - r + Math.sin(t * 0.2) * U * 0.02, top: H * 0.3 - r, width: r * 2, height: r * 2, borderRadius: "50%", background: pal.accent, opacity: 0.22 * (solid ? 1 : 0.5) }} />);
+    for (let k = 0; k < cnt(5); k++) { const x = ((k / 5 + (t - s.start) * SP * 0.006) % 1) * W; els.push(<div key={`v${k}`} style={{ position: "absolute", left: x, top: H * 0.08, width: Math.max(1, U * 0.0015), height: H * 0.84, background: pal.fg, opacity: 0.18 * IN }} />); }
+    const r = U * 0.16; els.push(<div key="sun" style={{ position: "absolute", left: W * 0.5 - r + Math.sin(t * SP * 0.2) * U * 0.02, top: H * 0.3 - r, width: r * 2, height: r * 2, borderRadius: "50%", background: pal.accent, opacity: 0.22 * (solid ? 1 : 0.5) * IN }} />);
   }
   const tex = s.textures.includes("halftone") ? <AbsoluteFill style={{ backgroundImage: `radial-gradient(${pal.fg} 22%, transparent 24%)`, backgroundSize: `${U * 0.012}px ${U * 0.012}px`, opacity: 0.07 }} /> : null;
   return <AbsoluteFill style={{ overflow: "hidden", filter: s.mono ? "grayscale(1)" : undefined }}>
     {solid && <AbsoluteFill style={{ background: pal.bg }} />}
     {tex}{els}
   </AbsoluteFill>;
-};
+}
 
 /** lyric-layer transform for beat accents (bump / camera rotate / scream shake) and RGB split while hot. */
 export function accentStyle(p: RenderProps, t: number): React.CSSProperties {
@@ -89,11 +99,16 @@ export function accentStyle(p: RenderProps, t: number): React.CSSProperties {
 
 export const MoGraphTop: React.FC<{ p: RenderProps }> = ({ p }) => {
   const frame = useCurrentFrame(); const { width: W, height: H, fps } = useVideoConfig();
-  const t = p.startAt + frame / fps, m = p.mograph;
+  return <>{moTop(p, p.startAt + frame / fps, W, H, frame, fps)}</>;
+};
+/** the top mograph layer (section transitions, accent flash, grain). edFor(i) = edit of the section starting the transition. */
+export function moTop(p: Pick<RenderProps, "mograph" | "lines">, t: number, W: number, H: number, frame: number, fps: number, edAt?: (t: number) => MoEdit | undefined): React.ReactElement | null {
+  const m = p.mograph;
   if (!m) return null;
   const U = Math.min(W, H), D = Math.hypot(W, H), els: React.ReactNode[] = [];
-  m.sections.forEach((s, i) => {
-    if (i === 0 || s.transition === "cut") return;
+  m.sections.forEach((s0, i) => {
+    const ed = edAt?.(s0.start), s = editSec(s0, ed)!;
+    if (i === 0 || s.transition === "cut" || ed?.off) return;
     const B = s.start, prev = m.sections[i - 1], col = s.palette.bg, cin = 0.34, cout = 0.3, slow = s.transition === "slow_wipe" ? 2.2 : 1;
     if (t < B - cin * slow || t > B + cout * slow) return;
     const qi = EASE.in(clamp((t - (B - cin * slow)) / (cin * slow))), qo = EASE.expoOut(clamp((t - B) / (cout * slow))), cover = t < B;
@@ -119,11 +134,11 @@ export const MoGraphTop: React.FC<{ p: RenderProps }> = ({ p }) => {
       case "slow_wipe": { const q = cover ? qi * 0.5 : 0.5 + qo * 0.5; const x = (q * 1.4 - 0.2) * W; els.push(<div key={`tr${i}`} style={{ position: "absolute", left: x - W * 0.2, top: 0, width: W * 0.2, height: H, background: `linear-gradient(90deg, transparent, ${s.palette.fg}55 70%, ${s.palette.fg})`, opacity: 0.6 }} />, <div key={`tr${i}l`} style={{ position: "absolute", left: x, top: 0, width: Math.max(2, U * 0.003), height: H, background: s.palette.accent }} />); break; }
     }
   });
-  const a = accentState(m.accents, t, fps), s = secAt(p, t);
+  const edNow = edAt?.(t), a = edNow?.off ? { invert: false } : accentState(m.accents, t, fps), s = edNow?.off ? undefined : secAt(p as RenderProps, t);
   const grain = s?.textures.includes("grain");
   return <AbsoluteFill style={{ pointerEvents: "none", overflow: "hidden" }}>
     {els}
     {a.invert && <AbsoluteFill style={{ background: "#fff", mixBlendMode: "difference" }} />}
     {grain && <svg width={W} height={H} style={{ position: "absolute", inset: 0, opacity: 0.09, mixBlendMode: "overlay" }}><filter id="gr"><feTurbulence type="fractalNoise" baseFrequency={0.9} numOctaves={2} seed={frame % 97} /></filter><rect width={W} height={H} filter="url(#gr)" /></svg>}
   </AbsoluteFill>;
-};
+}

@@ -28,7 +28,20 @@ def export_info():
     return {'folder':folder,'default':str(ROOT),'suggestedName':safe_name('',title,next_version(folder,title))}
 def read():return json.loads(STATE.read_text(encoding='utf-8'))
 LYRIC_EDIT_KEYS=['motion','params','font','fill','stroke','accent','scale','y','position','angle','effect','effectOffset','motionDuration','entrance','departure','transitionDuration','stageStyle']
-SCENE_EDIT_KEYS=['stage','camera','cameraMove','cameraStrength','cameraSync','zoom','x','y']
+MO_LOOKS=['none','blocks','geo','burst','hud','tanzaku','mono']
+MO_TRANS=['cut','circle','rect','ripple','cloud','glyph_zoom','push_text','diag_sweep','slow_wipe']
+def check_mo(e):
+    """mirror of src/lib/mographEdit.ts checkMoEdit"""
+    if e is None:return
+    num=lambda x:isinstance(x,(int,float)) and not isinstance(x,bool) and math.isfinite(x)
+    if not isinstance(e,dict) or any(k not in ['off','look','colors','intensity','speed','density','transition'] for k in e):raise ValueError('図形レイヤーの設定を確認してください')
+    if 'off' in e and not isinstance(e['off'],bool):raise ValueError('図形のオン・オフを確認してください')
+    if 'look' in e and e['look'] not in MO_LOOKS:raise ValueError('図形の種類を確認してください')
+    if 'transition' in e and e['transition'] not in MO_TRANS:raise ValueError('転換の種類を確認してください')
+    if 'colors' in e and (not isinstance(e['colors'],dict) or any(k not in ['bg','fg','accent','sub'] or not re.fullmatch(r'#[0-9a-fA-F]{6}',str(v)) for k,v in e['colors'].items())):raise ValueError('図形の色は #RRGGBB で指定してください')
+    for k,lo,hi in [('intensity',0,2),('speed',.25,3),('density',0,3)]:
+        if k in e and not (num(e[k]) and lo<=e[k]<=hi):raise ValueError(f'図形の{k}は{lo}〜{hi}です')
+SCENE_EDIT_KEYS=['stage','camera','cameraMove','cameraStrength','cameraSync','zoom','x','y','mograph']
 STAGE_STYLES=['auto','tate','bigBehind','band','pop','ghost','center']
 def mark_edited(d):
     """v6.5 (mirror of src/lib/lyricEdits.tsx): built-in look = default, editor edits always win. `edited` = keys that differ from original-source.json."""
@@ -49,6 +62,8 @@ def mark_edited(d):
         else:l.pop('edited',None)
     if isinstance(d.get('stage'),dict) and d['stage'] and not orig.get('stage'):d['editedStage']=True
     else:d.pop('editedStage',None)
+    if isinstance(d.get('mographEdit'),dict) and d['mographEdit'] and d['mographEdit']!=orig.get('mographEdit'):d['editedMograph']=True
+    else:d.pop('editedMograph',None)
     for x in d.get('scenes',[]):
         e=diff(x,S.get(x.get('id')),SCENE_EDIT_KEYS)
         if e:x['edited']=e
@@ -59,6 +74,9 @@ def validate(d):
     if any(d.get(k)!=orig.get(k) for k in ['width','height','fps']):raise ValueError('画面サイズとfpsは元の設定を保持してください')
     if d.get('audioFile')!=orig['audioFile'] or d.get('assets')!=orig['assets']:raise ValueError('元素材の指定は保持してください')
     if d.get('duration')!=orig['duration'] or not 1<=len(d['lyrics'])<=200 or not 1<=len(d['scenes'])<=300:raise ValueError('曲尺・場面数（1〜300）または歌詞グループ数を確認してください')
+    if d.get('mograph')!=orig.get('mograph') or d.get('mographShots')!=orig.get('mographShots'):raise ValueError('元の図形レイヤーの設計は保持してください（変更は mographEdit / 場面の mograph に）')
+    check_mo(d.get('mographEdit'))
+    for s in d['scenes']:check_mo(s.get('mograph'))
     sids=[s.get('id') for s in d['scenes']]
     if any(not isinstance(x,str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,64}',x) for x in sids) or len(set(sids))!=len(sids):raise ValueError('場面IDを確認してください（切る・つなげるで重複しないように）')
     def finite(x):return isinstance(x,(float,int)) and math.isfinite(x)

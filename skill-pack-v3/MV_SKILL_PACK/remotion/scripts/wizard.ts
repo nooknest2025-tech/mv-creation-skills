@@ -14,7 +14,8 @@ import { findCharacterMaterial } from "./tachie_project";
 import { TACHIE_MATERIAL_HELP, parsePick, semiQuestions, semiToPlan, type SemiCtx } from "../src/lib/semi";
 import { SHOW_MODES, composeCombo } from "../src/lib/mograph";
 import { planStills } from "../src/lib/stills";
-import { estimateCutsFor, videoCostHint } from "./wizard_lib";
+import { animEstimate, estimateCutsFor } from "./wizard_lib";
+import { ANIM_METHODS, ANIM_SCOPES, animArgs, type AnimMethod, type AnimScope } from "../src/lib/startFlow";
 import { Q1_OPTS, Q3_DEFAULT, Q3_OPTS, TEXT_STRUCTURES, allowedModes, allowedPresets, checkQ1, confirmLines, detectQ1, hasPictures, materialLine, q2Options, q2Plan, type Material, type Q1Key, type Q2Key, type Q3Key } from "../src/lib/startFlow";
 
 const ASPECT_OPTS = [["16:9", "横長 16:9（YouTube）"], ["9:16", "縦長 9:16（ショート/TikTok/リール）"], ["1:1", "正方形 1:1"], ["4:5", "4:5（Instagram）"], ["all", "全部"]] as const;
@@ -62,19 +63,49 @@ async function main() {
     try {
       const models = YAML.parse(fs.readFileSync(path.join(PACK_DIR, "gen", "models.yaml"), "utf8")).models;
       const p = planStills(song, { taste: "anime", models }); stillsCount = p.counts.total;
-      const paid = p.costs.filter((c) => !c.free && c.usd != null).sort((a, b) => a.usd! - b.usd!)[0];
-      stillsCost = `約${p.counts.total}枚。手作業なら0円${paid ? `／有料なら約$${paid.usd}` : ""}`;
+            stillsCost = `約${p.counts.total}枚`;
     } catch { /* models.yaml missing: no estimate */ }
   }
 
+  const anim = song && m.nImages ? animEstimate(song, m.nImages) : null;
   // ---- Q2 ----
   const q2opts = q2Options(q1, m, stillsCost);
   const q2: Q2Key = await choose("Q2. 映像はどうする？", q2opts, q2opts[0].key, q1 === "song" ? "画像がないので、まずは文字と図形で作る「文字PV」がおすすめです（0円）" : undefined);
 
+  const args: string[] = ["--input", input];
+  // ---- 画像を動画にする: どのシーン → どうやって（既定は無料の手作業。有料APIは見積もりだけで、実行は確認してから） ----
+  let animScope: AnimScope | null = null, animMethod: AnimMethod = "manual", animPick: string[] = [], animCost = "";
+  if (q2 === "animate") {
+    animScope = await choose<AnimScope>("Q2b. どのシーンを動画にしますか？", ANIM_SCOPES(anim?.n ?? { chorus: 1, all: m.nImages }, anim?.cost ?? {}), "chorus");
+    if (animScope === "pick") {
+      log("\n  動かしたい画像の番号（例 1,3）:"); det.images.forEach((f, i) => log(`  ${i + 1}) ${path.basename(f)}`));
+      const a = await q("  番号 [Enter=1]: ", "1");
+      animPick = [...new Set(a.split(/[,、\s]+/).map(Number).filter((n) => n >= 1 && n <= det!.images.length))].map((n) => path.basename(det!.images[n - 1]));
+      if (!animPick.length) animPick = [path.basename(det.images[0])];
+    }
+    const nClips = animScope === "pick" ? animPick.length : anim?.n[animScope] ?? 1;
+    const tot = animScope === "pick" ? undefined : anim?.cost[animScope];
+    animMethod = await choose<AnimMethod>("Q2c. 動画はどうやって作りますか？", ANIM_METHODS(anim?.perClip, tot ? `${tot}（${nClips}本）` : undefined), "manual");
+    animCost = animMethod === "manual" ? `0円（${nClips}本を Grokアプリ等で手作業）` : "PAID";
+    args.push(...animArgs(animScope, animMethod, animPick));
+  }
+  if (q2 === "stills") { // 作った画像も動画にできる（既定は「しない」、するなら無料の手作業が既定）
+    const est = song ? animEstimate(song, Math.max(1, stillsCount)) : null;
+    const sc = await choose<"none" | AnimScope>("Q2b. 作った画像を動画にもする？", [
+      { key: "none", label: "しない（静止画のまま・0円）", why: "画像に動き（ズーム・奥行き・光・拍の揺れ）をつけて使う" },
+      ...ANIM_SCOPES(est?.n ?? { chorus: 1, all: Math.max(1, stillsCount) }, est?.cost ?? {}).map((o) => o.key === "pick" ? { ...o, label: "選んだシーンだけ（画像ができてから番号で選ぶ）", why: "画像を取り込んだあと npm run gen -- plan --shots S003,S007 で選べる。いまはサビの見せ場で作業リストを作る" } : o)], "none");
+    if (sc !== "none") {
+      animScope = sc === "pick" ? "chorus" : sc;
+      const nClips = est?.n[animScope as "chorus" | "all"] ?? 1, tot = est?.cost[animScope as "chorus" | "all"];
+      animMethod = await choose<AnimMethod>("Q2c. 動画はどうやって作りますか？", ANIM_METHODS(est?.perClip, tot ? `${tot}（${nClips}本）` : undefined), "manual");
+      animCost = animMethod === "manual" ? `0円（${nClips}本を Grokアプリ等で手作業）` : "PAID";
+      args.push(...animArgs(animScope, animMethod));
+    }
+  }
+
   // ---- Q3 ----
   const q3: Q3Key = await choose("Q3. ここから先は？", Q3_OPTS, Q3_DEFAULT);
 
-  const args: string[] = ["--input", input];
   const base = q2Plan(q2);
   // the visual choice narrows what the folder offers: text PV ignores pictures, 画像だけ ignores videos
   if (q2 === "textpv" || (q2 === "stills" && m.nImages)) args.push("--text-only");
@@ -85,7 +116,7 @@ async function main() {
 
   if (q3 === "semi") {
     let ctx: SemiCtx = { nImages: hasPictures(q2) ? m.nImages + m.nVideos : 0, hasChar: chars.length > 0, flow: flowCtx };
-    if (song) { ctx = { ...ctx, bpm: song.bpm, duration: song.duration, cuts: estimateCutsFor(song, ctx.nImages ?? 0), videoCost: videoCostHint(song) }; log(`\n🎵 曲をざっと解析: BPM ${Math.round(song.bpm)}・${Math.round(song.duration)}秒（カット数・費用は目安）`); }
+    if (song) { ctx = { ...ctx, bpm: song.bpm, duration: song.duration, cuts: estimateCutsFor(song, ctx.nImages ?? 0) }; log(`\n🎵 曲をざっと解析: BPM ${Math.round(song.bpm)}・${Math.round(song.duration)}秒（カット数は目安）`); }
     const ans: Record<string, string[]> = {};
     for (const qq of semiQuestions(ctx)) {
       log(`\n■ ${qq.title}`);
@@ -144,9 +175,10 @@ async function main() {
   if (asp[0] === "all") args.push("--aspects", Object.keys(ASPECTS).join(",")); else args.push("--aspect", asp[0]);
 
   // ---- 確認画面 ----
-  const cost = q2 === "stills" ? `今回の書き出しは0円。画像は ${stillsCost || "作り方リストを見て"}（有料APIは金額を確認してからだけ。勝手には使いません）` : "0円（有料APIは使いません）";
+  const cost = animCost === "PAID" ? "MCP・動画生成APIで動画を作るときだけ有料（その直前に見積もりを見せて確認します。それまでは0円）" : "0円";
   if (q2 === "stills" && !stillsCount) why += "（画像の枚数は書き出し後の作り方リストで確認）";
   log("");
+  if (animScope) extra.unshift(`動画にするシーン: ${animScope === "chorus" ? "サビの見せ場" : animScope === "all" ? "全部" : animPick.join("・")}（作り方: ${animMethod === "manual" ? "無料の手作業" : "MCP・動画生成API（使う直前に確認）"}）`);
   confirmLines(m, { q1, q2, q3 }, { why, cost, aspect: asp[1], extra }).forEach((l) => log(l));
   const allSay = [...new Set(say.filter(Boolean))].join("。");
   if (allSay) { const r = applyInstruction({}, allSay); r.changes.forEach((c) => log(`   ✏️ ${c}`)); args.push("--say", allSay); }

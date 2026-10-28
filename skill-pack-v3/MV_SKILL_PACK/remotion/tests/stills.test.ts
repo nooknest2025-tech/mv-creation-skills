@@ -47,7 +47,7 @@ describe("1. still-image generation plan (no input images)", () => {
   it("plan text says how many images, which route and the total in Japanese", () => {
     const p = planStills(rockSong(), { taste: "anime", density: "slow", models }), md = stillsMd(p, "突き刺していいよ");
     expect(md).toMatch(new RegExp(`合計 ${p.counts.total} 枚`)); expect(md).toMatch(/おすすめの方法: 無料/); expect(md).toMatch(/0円/);
-    expect(md).toMatch(/--confirm/); expect(md).toMatch(/stills import/); expect(md).toMatch(/npm run mv/);
+    expect(md).toMatch(/直前に見積もり/); expect(md).toMatch(/input\/made/); expect(md).toMatch(/npm run made/); expect(md).not.toMatch(/有料API:/);
   });
   it("import puts scene images where npm run mv finds them, refs into project assets; paid run needs --confirm", async () => {
     const S = await import("../scripts/stills");

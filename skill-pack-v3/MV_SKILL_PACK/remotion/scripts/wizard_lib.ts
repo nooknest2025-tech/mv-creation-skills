@@ -20,3 +20,14 @@ export function videoCostHint(song: Song): Record<string, string> {
     return { chorus: f(nCh), all: f(nAll) };
   } catch { return {}; }
 }
+/** 「画像を動画にする」 estimates: clip counts (サビの見せ場 = 1 per chorus section, 全部 = every cut) and the API price per 5 s clip. */
+export function animEstimate(song: Song, nImages: number): { n: { chorus: number; all: number }; perClip?: string; cost: { chorus?: string; all?: string } } {
+  const nCh = song.sections.filter((s) => s.type === "chorus").length || 1, nAll = Math.max(nCh, estimateCutsFor(song, nImages).normal ?? nImages);
+  try {
+    const models = YAML.parse(fs.readFileSync(path.join(PACK_DIR, "gen", "models.yaml"), "utf8")).models as any[];
+    const m = models.find((x) => x.kind === "video" && x.verified && x.price_per_sec?.["720p"]);
+    if (!m) return { n: { chorus: nCh, all: nAll }, cost: {} };
+    const per = m.price_per_sec["720p"] * 5, f = (k: number) => `約$${(k * per).toFixed(2)}`;
+    return { n: { chorus: nCh, all: nAll }, perClip: `5秒 約$${per.toFixed(2)}`, cost: { chorus: f(nCh), all: f(nAll) } };
+  } catch { return { n: { chorus: nCh, all: nAll }, cost: {} }; }
+}
