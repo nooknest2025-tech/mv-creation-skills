@@ -15,6 +15,8 @@ export function structureOptions(genre: string | null, faceRatio: number, n = 3)
 export function lyricOptions(genre: string | null, secType = "chorus"): Option[] {
   return fitSet({ genre, secType, energy: secType === "chorus" ? 0.9 : 0.4, cps: 4, bpm: 120, text: "" }, 3).map((f) => ({ label: CATALOG[f.style].short, say: `${secType === "chorus" ? "サビ" : "Aメロ"}は${CATALOG[f.style].short}で`, why: f.why.join("・") || "曲に合う" }));
 }
+/** こだわり: 立ち絵モーションMV as one of the structure comparisons (needs character material). */
+export const TACHIE_OPTION: Option = { label: "立ち絵モーションMV（パーツアニメ）", say: "立ち絵で", why: "キャラの立ち絵をパーツに分け、拍でカクカク踊らせて口パク。縦書き吹き出しの歌詞・ゲスト演出。ボカロ・ゆっくり系に◎（キャラ素材が必要）" };
 export const VARIETY_OPTIONS: Option[] = [
   { label: "統一感重視", say: "リリックは統一感重視", why: "1曲を1つの世界観で通す。バラード・弾き語り向き" },
   { label: "標準（おすすめ）", say: "", why: "セクションごとに変え、同じセクションの繰り返しは同じ動き（モチーフ）" },

@@ -18,6 +18,7 @@ export const ROLES: Record<string, Role> = {
   insert: { ja: "インサート", moves: ["push", "drift_l"], wantsFace: false, prompt: "quick insert detail shot (object / texture) that echoes the lyric" },
   typo: { ja: "全画面タイポグラフィ", moves: ["static", "slow_push"], wantsFace: false, lyricHero: true, prompt: "plain flat colour field, no subject (typography plate)" },
   mograph: { ja: "モーショングラフィックス", moves: ["static", "slow_push"], wantsFace: false, lyricHero: true, prompt: "flat geometric motion-graphics plate, no subject" },
+  tachie: { ja: "立ち絵（パーツアニメ）", moves: ["static"], wantsFace: false, prompt: "flat stage backdrop for a cut-out character" },
   concept: { ja: "コンセプト映像", moves: ["parallax", "kb_out"], wantsFace: false, prompt: "abstract concept visual, symbolic imagery, strong graphic composition" },
 };
 type Mix = Partial<Record<string, number>>;

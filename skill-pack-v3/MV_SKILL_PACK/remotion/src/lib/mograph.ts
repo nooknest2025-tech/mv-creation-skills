@@ -15,6 +15,7 @@ export const SHOW_MODES: Record<string, ShowMode> = {
   lyric_motion: { id: "lyric_motion", ja: "リリックモーション", kind: "text", words: /リリック\s*モーション|リリックPV|文字PV|歌詞(を|の)?動/, desc: "画の上に、動く歌詞を重ねる" },
   typography: { id: "typography", ja: "タイポグラフィ", kind: "text", role: "typo", words: /タイポ(グラフィ)?|キネティック\s*タイポ|文字(が|を)?主役|全画面.?文字/, desc: "文字そのものが主役の全画面演出" },
   mograph: { id: "mograph", ja: "モーショングラフィックス", kind: "text", role: "mograph", words: /モーション\s*グラフィック(ス)?|モーグラ|モーショングラフィ|図形(の)?アニメ|図形中心/, desc: "図形・線・粒の動きで見せる" },
+  tachie: { id: "tachie", ja: "立ち絵モーション", kind: "picture", role: "tachie", words: /立ち絵|パーツ\s*アニメ|切り絵アニメ|キャラ(クター)?を?(踊らせ|躍らせ|カクカク)/, desc: "立ち絵をパーツに分けて口パク・拍でカクカク踊らせる（ゲスト・縦書き吹き出し）。キャラ素材が必要" },
 };
 export const MODE_IDS = Object.keys(SHOW_MODES);
 
@@ -24,7 +25,7 @@ export function comboFromText(t: string): string[] | null {
   // strip text-mode words first so 「リリックモーション」 does not also read as モーション/リリック in other modes
   const hits: [number, string][] = [];
   let rest = s;
-  for (const id of ["lyric_motion", "typography", "mograph", "story", "lipsync", "dance", "live"]) {
+  for (const id of ["tachie", "lyric_motion", "typography", "mograph", "story", "lipsync", "dance", "live"]) {
     const m = rest.match(SHOW_MODES[id].words); if (!m || m.index === undefined) continue;
     hits.push([s.indexOf(m[0]), id]); rest = rest.replace(m[0], "　".repeat(m[0].length));
   }
@@ -32,6 +33,7 @@ export function comboFromText(t: string): string[] | null {
   const ids = hits.sort((a, b) => a[0] - b[0]).map((h) => h[1]);
   const hasText = ids.some((i) => SHOW_MODES[i].kind === "text");
   const joined = /[+＋×x&と・]|ミックス|組み合わせ|混ぜ/.test(s);
+  if (ids.includes("tachie")) return ids; // 「立ち絵で」 alone is a complete choice (the stage draws its own lyrics); combinable with every other mode
   if (!hasText && (hybridFromText(s) || !(joined && ids.length >= 2))) return null; // existing named templates keep priority // plain 「ダンス」 is handled by presets / hybrids
   return ids;
 }
@@ -76,10 +78,11 @@ export function composeCombo(modes0: string[]): Combo {
   HYBRIDS[id] = hybrid; // registered so applyHybrid / reports can use it like any template
   return { id, modes, hybrid, textMode, notes };
 }
-const ROLE_JA: Record<string, string> = { story: "物語", lipsync: "歌唱", dance: "ダンス", live: "ライブ", typo: "全画面タイポ", mograph: "モーショングラフィックス", lyric: "リリック" };
+const ROLE_JA: Record<string, string> = { story: "物語", lipsync: "歌唱", dance: "ダンス", live: "ライブ", typo: "全画面タイポ", mograph: "モーショングラフィックス", lyric: "リリック", tachie: "立ち絵" };
 
 /** auto proposal when the user picked nothing: picture modes from media, text modes from mood. */
-export function proposeCombo(mood: Mood, faceRatio: number, nMedia: number): string[] {
+export function proposeCombo(mood: Mood, faceRatio: number, nMedia: number, hasChar = false): string[] {
+  if (hasChar) return mood === "rock" ? ["tachie", "typography"] : ["tachie", "lyric_motion"]; // character material supplied -> 立ち絵モーションMV
   const pic = nMedia === 0 ? [] : faceRatio > 0.3 ? ["story", "lipsync"] : ["story"];
   const text = mood === "rock" ? ["typography", "lyric_motion"] : mood === "electronic" ? ["mograph", "lyric_motion"] : mood === "pop" ? ["lyric_motion", "mograph"] : ["lyric_motion"];
   if (!pic.length) return mood === "ballad" ? ["typography"] : ["typography", "mograph"];

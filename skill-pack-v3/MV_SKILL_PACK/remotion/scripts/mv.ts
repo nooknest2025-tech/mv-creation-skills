@@ -106,10 +106,17 @@ export async function run(argv: string[]) {
   log(`  🖼  画像: ${det.images.length} 枚　🎞  動画: ${det.videos.length} 本${!det.images.length && !det.videos.length ? (needsStills(cfg.taste, 0) ? ` → ⚠️ テイスト「${TASTE_JA[cfg.taste!]}」なのに画像がありません。このあと静止画の生成プランを作ります（それまでは仮に抽象映像で作ります）` : " → 🤖 素材なし: 曲に反応する抽象映像を自動生成します") : ""}`);
   if (det.lyricsKind !== "json") log("  📈 BPM・セクション・音の強さ: 🤖 自動解析します");
 
+  const tachie = !!cfg.combo?.includes("tachie");
+  if (tachie) { // fail fast (before analysis) with a plain explanation of what to provide
+    const { findCharacterMaterial } = await import("./tachie_project");
+    const mats = findCharacterMaterial(inputDir, dir);
+    if (!mats.length) { const { TACHIE_MATERIAL_HELP } = await import("../src/lib/semi"); throw new UserError("立ち絵モーションMVのキャラ素材が見つかりません", TACHIE_MATERIAL_HELP); }
+    log(`  🧍 立ち絵のキャラ素材: ${mats.slice(0, 3).map((m) => `${m.name}（${({ rig: "パーツ取り込み済み", psd: "PSD", pngs: "パーツPNG", image: "立ち絵1枚 → 自動でパーツ分け" } as const)[m.kind]}）`).join("・")}`);
+  }
   const { song, notes } = await buildSong(det, dir, o);
   if (o["no-lyrics"]) song.lines = [];
   notes.forEach((n) => log(`  ℹ️ ${n}`));
-  if (!det.images.length && !det.videos.length && needsStills(cfg.taste, 0)) {
+  if (!tachie && !det.images.length && !det.videos.length && needsStills(cfg.taste, 0)) {
     const { writeStillsPlan, stillsSummary, stillsInbox } = await import("./stills");
     const { plan } = writeStillsPlan(dir, {});
     log(`\n${stillsSummary(plan)}\n   📄 手順と画像リスト: ${path.join(dir, "stills_plan.md")}\n   ① stills_prompts.csv のプロンプトで画像を作る → ② ${stillsInbox(dir)} に保存 → ③ npm run gen -- stills import → ④ npm run mv\n`);
@@ -177,6 +184,20 @@ export async function run(argv: string[]) {
     lyricStyles: first.lines.map((l) => ({ motion: l.style, params: l.params })),
     width: first.width, height: first.height, fps: first.fps,
   });
+  if (tachie) {
+    const { createTachieProject } = await import("./tachie_project");
+    const { moodOf, SHOW_MODES } = await import("../src/lib/mograph");
+    const bySrc = new Map(media.map((m: any, i: number) => [m.src, [...det.images, ...det.videos][i]]));
+    const r = createTachieProject({ dir, inputDir, mood: moodOf(first.genre, song.bpm), song, shots: first.shots as any, images: det.images, videos: det.videos ?? [], mediaSrc: (s) => bySrc.get(s), lyricStyles: first.lines.map((l) => ({ motion: l.style, params: l.params })), title, width: first.width, height: first.height, fps: first.fps });
+    writeJson(path.join(dir, "out", "editor-input.json"), { ...r.manifest, audio: det.audio });
+    log(`\n🧍 立ち絵モーションMV: ${(cfg.combo ?? []).map((m) => SHOW_MODES[m]?.ja ?? m).join("＋")}`);
+    log(`   キャラ ${r.rigs.map((x) => x.name).join("・")} / ステージ ${r.stageFile}`);
+    log(`   シーン ${r.manifest.scenes.length} 個（立ち絵 ${r.manifest.scenes.filter((s) => s.asset === r.manifest.images.length - 1).length}・画像/動画 ${r.manifest.scenes.filter((s) => s.asset !== r.manifest.images.length - 1).length}）`);
+    log("   仕上げと書き出しは編集画面で: キャラの位置・大きさ、ゲスト、テロップ、歌詞のステージ文字スタイル、カメラ・エフェクトを直して「MP4を書き出す」。直した所は必ず優先されます。");
+    log(`   あとから開く: npm run editor -- --project ${path.basename(dir)}`);
+    await offerEditor(dir, o);
+    return;
+  }
   if (first.genre) { const g = GENRES[first.genre]; log(`🎼 ジャンル: ${g.ja}（${first.genreWhy}）→ 書体 ${[g.fonts.base, g.fonts.chorus].map((i) => FONT_REG.find((f) => f.id === i)?.family ?? i).join(" / ")}　違えば「ジャンルはロックで」など`); }
   log(`\n🎬 演出: ${PRESETS[first.preset!].ja}（${first.presetWhy}）　画面: ${aspects.map((a) => ASPECTS[a]?.ja ?? a).join(" / ")}`);
   log(`🎞  構成: ${first.structureWhy}　変えるなら「ストーリー＋リップシンクで」「サビだけ歌うシーン」など`);
