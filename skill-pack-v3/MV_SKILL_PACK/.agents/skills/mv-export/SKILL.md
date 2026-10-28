@@ -27,9 +27,9 @@ Studioを併設した場合は [編集と書き出しの手順](../mv-workflow/r
 ## Windows
 ffmpeg が無くても Remotion 同梱の `npx remotion ffmpeg` を自動で使う（遅めなら `winget install Gyan.FFmpeg`）。
 
+## 書き出し前に
+エディターで直した内容（`edited` の付いた行・シーン）がそのまま MP4 に入る。書き出しは保存した editor-state から行う。短い範囲で一度書き出して、直した行が反映されているか確認する。
+
 ## パック内での実行
 
 このファイルは配布用コピー。編集原本は管理用ワークスペースの `.agents/skills/`。制作時は、この配布パックのルートにある `AGENTS.md` を読み、コマンドは `remotion/` で実行する。本文の `input/`、`projects/`、`docs/`、`gen/` はパックのルートを基準に解決する。
-
-## 書き出し前に
-エディターで直した内容（`edited` の付いた行・シーン）がそのまま MP4 に入る。書き出しは保存した editor-state から行う。短い範囲で一度書き出して、直した行が反映されているか確認する。

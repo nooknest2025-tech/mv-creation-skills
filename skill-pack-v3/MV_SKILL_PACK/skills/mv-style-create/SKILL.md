@@ -71,9 +71,9 @@ Tell them:
 - After adding, run `npm run fonts:sheet` (specimen image), then use it: 「サビは<id>で」「『夢』は<id>で」.
 - Missing fonts listed in `fonts.yaml` (bundled: false) are downloaded with `npm run fonts:fetch`.
 
+## エディターで調整できるように
+新しいスタイルも、エディターの文字倍率・高さ・書体・色（`--lyric-fill` / `--lyric-accent` / `--lyric-stroke`）・モーション秒を受け取って効く作りにする。値を固定で埋め込まない。`npm test`（`tests/editor_overrides.test.tsx` を含む）を通す。
+
 ## パック内での実行
 
 このファイルは配布用コピー。編集原本は管理用ワークスペースの `.agents/skills/`。制作時は、この配布パックのルートにある `AGENTS.md` を読み、コマンドは `remotion/` で実行する。本文の `input/`、`projects/`、`docs/`、`gen/` はパックのルートを基準に解決する。
-
-## エディターで調整できるように
-新しいスタイルも、エディターの文字倍率・高さ・書体・色（`--lyric-fill` / `--lyric-accent` / `--lyric-stroke`）・モーション秒を受け取って効く作りにする。値を固定で埋め込まない。`npm test`（`tests/editor_overrides.test.tsx` を含む）を通す。
