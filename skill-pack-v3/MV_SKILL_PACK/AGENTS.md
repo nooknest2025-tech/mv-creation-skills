@@ -22,11 +22,12 @@
 - 他人のリポジトリのコードや文章をコピーしない。
 
 ## プロの演出（全自動でも手動でも必ず適用）— 詳細 `docs/PRO_DIRECTION_ja.md`
+- 作り方はウィザード（`npm run start`）の4つ: 1 おまかせ（全部自動）/ 2 半自動（既定）/ 3 ジャンル / 4 こだわり。
 - pro-motion: 文字は `pro_*` スタイル（マスク出入り・expo-out・バネ・グリッド配置・階層）、図形とトランジションは `mograph`、見せ方は `combo`（複数選択）、キャラは `npm run parts`（パーツアニメ）。半自動は `src/lib/semi.ts` の質問をそのまま使う。できないこと（実写トラッキング・遮蔽・振り向き）は正直に伝える。
 - **合っていること最優先**: 文字の動き・書体・色・強さは曲（ジャンル/BPM/盛り上がり/言葉の速さ/歌詞の意味）と画（明るさ・顔の位置・ごちゃつき・画風）に合わせて点数付けで選ぶ。変化は「合う候補」の中だけ。
 - 書き出し前に**プロチェック（critic）**が自動で走り、`projects/<曲>/director_note.md` に「演出メモ」を出す。**必ずユーザーに要点を日本語で伝える**（盛り上がりの設計・自動で直した所・提案）。
 - **手動・細かく指定モード**: ユーザーが指定/編集した所（`lyrics.lines` / `sections`、`timing.perShot` などのロック）は**そのまま忠実に反映し、黙って変えない**。critic は直さずに「提案」を出すだけ。提案は短く具体的に（例:「この後に同じ動きが3回続きます。Bメロは引きの画にするとサビが活きます」）。採用するかはユーザーが決める。
-- **こだわりモード**（ウィザード 3 / 「こだわりで」）: 構成・リリックの変化・サビの動きなど**決めることごとに、プロのおすすめ 2〜3 案を理由つきで**出して選んでもらう（`src/lib/options.ts`）。
+- **こだわりモード**（ウィザード 4 / 「こだわりで」）: 構成・リリックの変化・サビの動きなど**決めることごとに、プロのおすすめ 2〜3 案を理由つきで**出して選んでもらう（`src/lib/options.ts`）。
 - よく使う言葉: 「別パターンで」(seed+1)、「リリックは統一感重視 / 変化多め」、「ストーリー＋リップシンクで」「サビだけ歌うシーン」「ライブと回想で」「ワンカット＋インサートで」「構成おまかせ」、「プロチェックなし」。
 
 ## エディターで後から直せること（パック共通ルール）
@@ -71,7 +72,11 @@
 | 1発で作る | `npm run mv`（`--yes` で確認なし、`--range 40-58` で一部だけ、`--aspects 16:9,9:16`、`--davinci`） |
 | プレビュー静止画だけ | `npm run preview` |
 | 透過の歌詞だけ（DaVinci 用） | `npm run overlay` |
-| 32 スタイル見本 | `npm run styles`（一覧）/ `npm run showcase`（動画） |
+| 全スタイル見本（81種） | `npm run styles`（一覧）/ `npm run showcase`（動画） |
+| 編集画面（後から直す・保存値で MP4） | `npm run editor -- --project <曲名>`（見本 `npm run editor:demo`。`http://127.0.0.1:5195/editor.html`） |
+| パーツアニメのキャラ取り込み | `npm run parts -- import キャラ.psd` / `npm run parts -- split 画像.png` |
+| Studio で確認 | `npm run studio` |
+| テスト | `npm test` |
 | 日本語で修正 | `npm run edit -- "サビはネオンで"` |
 | 承認（ロック） | `npm run approve -- 2` |
 | 動画素材の自動カット検出 | `npm run scenes` |
@@ -82,7 +87,7 @@
 | プリセット比較動画 | `npm run presets-demo -- --project <曲名>` |
 
 ## 新しい動き・書体を頼まれたら
-- 既存32スタイルで足りない動き → スキル `mv-style-create` の手順どおりに作る: `npm run style:new` → 実装 → `npm run style:check` → 静止画を目で確認 → `npm test`
+- 既存スタイル（81種）で足りない動き → スキル `mv-style-create` の手順どおりに作る: `npm run style:new` → 実装 → `npm run style:check` → 静止画を目で確認 → `npm test`
 - 書体の追加 → `npm run fonts:add`。**ファイルで渡された書体はライセンスを必ずユーザーに確認**（不明なら同梱しない）。一覧と見本: `npm run fonts` / `docs/FONTS_ja.md`
 
 ## 動画生成 MCP（Pollo / Grok / Runway など、ユーザーが入れているもの）
@@ -91,8 +96,6 @@
 3. ユーザーの MCP ツールを呼ぶ（reference_image があれば画像→動画、無ければテキスト→動画）。
 4. 結果を `npm run gen -- import <ファイル or URL> --shot <shot> --from <名前>` で取り込み → `npm run gallery` を案内。
 詳しくは `docs/VIDEO_MCP_ja.md`。
-| Studio で確認 | `npm run studio` |
-| テスト | `npm test` |
 
 ## スキル
 詳しい手順は `.agents/skills/*/SKILL.md`（Codex が自動で読む）。同じものが `skills/` にもあります。
