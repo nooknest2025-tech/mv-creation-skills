@@ -124,21 +124,25 @@ describe("wizard (piped answers, dry run)", () => {
   };
   const withSong = (rig: boolean) => { const d = fakeInput(rig); const s = path.join(R, "..", "input_sample"); for (const f of fs.readdirSync(s)) if (/\.(mp3|srt)$/.test(f)) fs.copyFileSync(path.join(s, f), path.join(d, f)); return d; };
   const say = (a: string[]) => a[a.indexOf("--say") + 1] ?? "";
-  it("おまかせ + character material -> 立ち絵＋リリックモーション", () => {
-    const { args, out } = wiz("1\n\n\n", withSong(true));
-    expect(out).toContain("キャラ素材: mychara");
+  // start flow v2: Q1 何がありますか？ → Q2 映像は？ → Q3 おまかせ/半自動/こだわり → 画面の形 → 確認
+  it("all Enter + character material -> Q1 キャラ素材, Q2 立ち絵 -> 立ち絵＋リリックモーション", () => {
+    const { args, out } = wiz("\n\n\n\n\n", withSong(true));
+    expect(out).toContain("キャラ: mychara");
     expect(applyInstruction({}, say(args)).cfg.combo).toEqual(["tachie", "lyric_motion"]);
   });
-  it("おまかせ without material keeps the old flow (no --say)", () => {
-    expect(wiz("1\n\n\n", withSong(false)).args).not.toContain("--say");
+  it("all Enter without material -> 文字PV (--text-only, no picture modes)", () => {
+    const { args } = wiz("\n\n\n\n\n", withSong(false));
+    expect(args).toContain("--text-only");
+    expect(applyInstruction({}, say(args)).cfg.combo).toEqual(["typography", "mograph"]);
   });
-  it("おまかせ Q1b: 立ち絵＋モーショングラフィックス＋物語 by number", () => {
-    const n = (id: string) => MODE_IDS.indexOf(id) + 1;
-    const { args } = wiz(`1\n${n("tachie")},${n("mograph")},${n("story")}\n\n`, withSong(true));
-    expect(applyInstruction({}, say(args)).cfg.combo).toEqual(["tachie", "mograph", "story"]);
+  it("こだわり K1: 立ち絵＋モーショングラフィックス by number, K2 ボカロ", () => {
+    const { args } = wiz("\n\n3\n1,4\n2\n\n\n\n\n\n\n\n\n\n", withSong(true));
+    expect(applyInstruction({}, say(args)).cfg.combo).toEqual(["tachie", "mograph"]);
+    expect(args).toContain("vocaloid");
   });
-  it("ジャンル: asks for 立ち絵 when material exists", () => {
-    const { args } = wiz("3\n5\ny\n\n", withSong(true));
-    expect(args).toContain("vocaloid"); expect(applyInstruction({}, say(args)).cfg.combo).toContain("tachie");
+  it("半自動: genre question folded in, keeps 立ち絵", () => {
+    const { args, out } = wiz("\n\n2\n\n2\n\n\n\n\n\n", withSong(true));
+    expect(out).toContain("ジャンル（演出の型）");
+    expect(args).toContain("--preset"); expect(applyInstruction({}, say(args)).cfg.combo).toContain("tachie");
   });
 }, 300000);

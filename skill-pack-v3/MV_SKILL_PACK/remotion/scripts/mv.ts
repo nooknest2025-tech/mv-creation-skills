@@ -91,6 +91,9 @@ export async function run(argv: string[]) {
   if (o.song) det.audio = path.resolve(String(o.song));
   if (o.lyrics) { det.lyrics = path.resolve(String(o.lyrics)); const e = path.extname(det.lyrics).slice(1).toLowerCase(); det.lyricsKind = (e === "json" ? "json" : e) as any; }
   if (o["no-lyrics"]) { det.lyrics = undefined; det.lyricsKind = undefined; }
+  // start flow v2: 文字PV ignores pictures in the folder, 画像だけ ignores videos
+  if (o["text-only"]) { det.images = []; det.videos = []; }
+  if (o["images-only"]) det.videos = [];
   if (!det.audio) throw new UserError(`曲ファイルが見つかりません（${inputDir}）`, "input フォルダに mp3 / wav / m4a を1つ入れてください。試すだけなら `npm run mv -- --sample`。");
   const title = String(o.title ?? path.basename(det.audio).replace(/\.[^.]+$/, ""));
   const dir = projectDir(title);
@@ -184,6 +187,7 @@ export async function run(argv: string[]) {
     lyricStyles: first.lines.map((l) => ({ motion: l.style, params: l.params })),
     width: first.width, height: first.height, fps: first.fps,
   });
+  else if (!tachie) writeTextEditorProject(dir, { title, audio: det.audio, song, first });
   if (tachie) {
     const { createTachieProject } = await import("./tachie_project");
     const { moodOf, SHOW_MODES } = await import("../src/lib/mograph");
@@ -288,10 +292,28 @@ export async function run(argv: string[]) {
   await offerEditor(dir, o);
 }
 
+/** 文字PV (no images / videos): the editor needs a picture, so write a plain palette-coloured SVG background
+ * and one scene per section. Every path gets an editor project (pack rule: everything can be fixed in the editor).
+ * The Remotion mograph shape layer itself is not reproduced in the editor; lyrics, timing and styles are. */
+export function writeTextEditorProject(dir: string, o: { title: string; audio: string; song: any; first: any }) {
+  const pal = GENRES[o.first.genre ?? ""]?.palette ?? { fill: "#ffffff", stroke: "#14131a", accent: "#7ad7ff" };
+  const out = path.join(dir, "out"); fs.mkdirSync(out, { recursive: true });
+  const bg = path.join(out, "textpv_bg.svg"), W = o.first.width ?? 1920, H = o.first.height ?? 1080;
+  fs.writeFileSync(bg, `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><defs><linearGradient id="g" x2="1" y2="1"><stop stop-color="${pal.stroke}"/><stop offset="1" stop-color="${pal.accent}" stop-opacity=".55"/></linearGradient></defs><rect width="100%" height="100%" fill="${pal.stroke}"/><rect width="100%" height="100%" fill="url(#g)" opacity=".6"/><circle cx="${W * 0.78}" cy="${H * 0.3}" r="${H * 0.28}" fill="none" stroke="${pal.accent}" stroke-width="6" opacity=".35"/><path d="M0 ${H * 0.8}L${W} ${H * 0.62}" stroke="${pal.fill}" stroke-width="3" opacity=".25"/></svg>`);
+  const secs = o.song.sections?.length ? o.song.sections : [{ type: "other", label: "全体", start: 0, end: o.song.duration }];
+  writeJson(path.join(out, "editor-input.json"), {
+    title: o.title, audio: o.audio, lyrics: path.join(dir, "song.json"), images: [bg], videos: [], textOnly: true,
+    scenes: secs.map((s: any, i: number) => ({ id: `S${String(i + 1).padStart(3, "0")}`, start: s.start, end: s.end, asset: 0, transition: i ? Math.min(0.7, s.end - s.start) : 0, label: s.label ?? s.type })),
+    sections: secs.map((x: any) => ({ type: x.type, label: x.label, start: x.start, end: x.end })),
+    lyricStyles: o.first.lines.map((l: any) => ({ motion: l.style, params: l.params })),
+    width: o.first.width, height: o.first.height, fps: o.first.fps,
+  });
+}
+
 /** after any menu (おまかせ/半自動/ジャンル/こだわり/mv): offer the shared editor on this project. */
 export async function offerEditor(dir: string, o: Record<string, any>) {
   const name = path.basename(dir), can = fs.existsSync(path.join(dir, "out", "editor-input.json")) || fs.existsSync(path.join(dir, "out", "editor", "editor-state.json"));
-  if (!can) { log("ℹ️ 動画素材を含むため、画面での手直し（編集画面）は静止画の曲のみ対応です。日本語の指示（npm run edit）で直せます。"); return; }
+  if (!can) { log("ℹ️ このプロジェクトには編集画面用のデータがまだありません。もう一度 npm run mv（または start）で作ると編集画面で開けます。日本語の指示（npm run edit）でも直せます。"); return; }
   log(`✏️ 画面で手直しするなら: npm run editor -- --project ${name}\n   （歌詞・シーン・カメラ・エフェクト・タイミング・顔の位置を1つの画面で。日本語の指示 npm run edit -- "サビの歌詞を赤に" も同じ記録に書き込まれるので、手直しが消えることはありません）`);
   const tty = process.stdin.isTTY && process.stdout.isTTY && !process.env.CI;
   if (o["no-editor"] || o.editor === false || (!tty && !o.editor)) return;
