@@ -16,8 +16,10 @@ if(ff&&process.platform==='win32'){
 }
 ff=ff??bundledFF;
 const browserExecutable=browserPath();
+/** v6.3: floating stickers (v5.8 floaters) and guests (v6.0) are bundled too, not only rig parts */
+const stickerFiles=st=>[...(st.floaters?.items??[]).flatMap(it=>Object.values(it.frames??{}).map(f=>(st.floaters.base??'')+f)),...Object.values(st.guests?.items??{}).flatMap(it=>Object.values(it.frames??{}).map(f=>(st.guests.base??'')+f))];
 const publicDir=path.join(runtime,'.render-public');fs.mkdirSync(publicDir,{recursive:true});
-for(const item of [...snapshot.data.assets.map(a=>typeof a==='string'?a:a.src),snapshot.data.audioFile,'editor.css','font-options.css']){const src=path.resolve(runtime,item),dest=path.resolve(publicDir,item);if(!src.startsWith(runtime+path.sep)||!dest.startsWith(publicDir+path.sep))throw Error('Media path must stay inside project output');fs.mkdirSync(path.dirname(dest),{recursive:true});fs.copyFileSync(src,dest)}
+for(const item of [...snapshot.data.assets.flatMap(a=>typeof a==='string'?[a]:a.kind==='tachie'?[a.src,...a.stage.chars.flatMap(c=>c.rig.parts.flatMap(p=>[p.src,...Object.values(p.states??{})]).map(f=>c.base+f)),...stickerFiles(a.stage)]:[a.src]),snapshot.data.audioFile,'editor.css','font-options.css']){const src=path.resolve(runtime,item),dest=path.resolve(publicDir,item);if(!src.startsWith(runtime+path.sep)||!dest.startsWith(publicDir+path.sep))throw Error('Media path must stay inside project output');fs.mkdirSync(path.dirname(dest),{recursive:true});fs.copyFileSync(src,dest)}
 fs.cpSync(path.join(runtime,'editor-fonts'),path.join(publicDir,'editor-fonts'),{recursive:true});
 const serveUrl=await bundle({entryPoint:path.join(editor,'export-entry.tsx'),publicDir});
 const gl=process.env.MVPACK_GL||(process.platform==='win32'?'angle':null);const chromiumOptions=gl?{gl}:{};

@@ -19,10 +19,10 @@ export function sceneEdges(i: number, n: number): ("start" | "end")[] {
 }
 /** scenes are back-to-back: scene i's right edge IS the boundary in front of scene i+1. */
 export const sceneBoundaryIndex = (i: number, edge: "start" | "end") => (edge === "start" ? i : i + 1);
-/** pin preview+timeline? saved choice wins ("1"/"0"); otherwise only on tall screens (>= 900px). */
+/** pin the timeline too (the preview is always sticky)? v6.4: OFF unless the user turned it on ("1"); the screen height no longer turns it on by itself. */
 export const PIN_MIN_HEIGHT = 900;
 export function pinDefault(saved: string | null, viewportH: number): boolean {
-  return saved === "1" ? true : saved === "0" ? false : viewportH >= PIN_MIN_HEIGHT;
+  void viewportH; return saved === "1";
 }
 /** drag a lyric's start or end edge (stays inside 0..duration-1 and keeps >= MIN_LYRIC). */
 export function moveLyricEdge(l: { start: number; end: number }, edge: "start" | "end", t: number, duration: number): number {

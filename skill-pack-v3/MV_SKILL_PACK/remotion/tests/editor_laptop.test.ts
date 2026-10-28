@@ -10,7 +10,7 @@ const R = path.resolve(__dirname, "..");
 
 describe("ノートPC：タイムライン固定の初期値", () => {
   it("short screens default OFF, tall ON, saved choice wins", () => {
-    expect(pinDefault(null, 768)).toBe(false); expect(pinDefault(null, 720)).toBe(false); expect(pinDefault(null, 1080)).toBe(true);
+    expect(pinDefault(null, 768)).toBe(false); expect(pinDefault(null, 720)).toBe(false); expect(pinDefault(null, 1080)).toBe(false);
     expect(pinDefault("1", 720)).toBe(true); expect(pinDefault("0", 1080)).toBe(false);
   });
   it("layout CSS always pins the preview; only the timeline is optional", () => {

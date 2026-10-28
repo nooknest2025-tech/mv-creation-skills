@@ -27,6 +27,33 @@ def export_info():
     title=(read()['data'].get('title') or 'MV')
     return {'folder':folder,'default':str(ROOT),'suggestedName':safe_name('',title,next_version(folder,title))}
 def read():return json.loads(STATE.read_text(encoding='utf-8'))
+LYRIC_EDIT_KEYS=['motion','params','font','fill','stroke','accent','scale','y','position','angle','effect','effectOffset','motionDuration','entrance','departure','transitionDuration','stageStyle']
+SCENE_EDIT_KEYS=['stage','camera','cameraMove','cameraStrength','cameraSync','zoom','x','y']
+STAGE_STYLES=['auto','tate','bigBehind','band','pop','ghost','center']
+def mark_edited(d):
+    """v6.5 (mirror of src/lib/lyricEdits.tsx): built-in look = default, editor edits always win. `edited` = keys that differ from original-source.json."""
+    try:orig=json.loads((ROOT/'original-source.json').read_text(encoding='utf-8'))
+    except Exception:return d
+    L={l.get('id'):l for l in orig.get('lyrics',[])};S={x.get('id'):x for x in orig.get('scenes',[])}
+    def diff(x,base,keys):
+        if not base:return []
+        out=[]
+        for k in keys:
+            if k not in x and k not in base:continue
+            if k=='stageStyle' and x.get(k,'auto')==base.get(k,'auto'):continue
+            if json.dumps(x.get(k),sort_keys=True)!=json.dumps(base.get(k),sort_keys=True):out.append(k)
+        return out
+    for l in d.get('lyrics',[]):
+        e=diff(l,L.get(l.get('id')) or L.get(((l.get('sourceParts') or [{}])[0]).get('line')),LYRIC_EDIT_KEYS)
+        if e:l['edited']=e
+        else:l.pop('edited',None)
+    if isinstance(d.get('stage'),dict) and d['stage'] and not orig.get('stage'):d['editedStage']=True
+    else:d.pop('editedStage',None)
+    for x in d.get('scenes',[]):
+        e=diff(x,S.get(x.get('id')),SCENE_EDIT_KEYS)
+        if e:x['edited']=e
+        else:x.pop('edited',None)
+    return d
 def validate(d):
     orig=json.loads((ROOT/'original-source.json').read_text(encoding='utf-8'))
     if any(d.get(k)!=orig.get(k) for k in ['width','height','fps']):raise ValueError('画面サイズとfpsは元の設定を保持してください')
@@ -89,8 +116,11 @@ def validate(d):
         for key in ['entrance','departure']:
             if l.get(key,'none') not in ['none','lr','tb','fade']:raise ValueError('文字の入り方・消え方を確認してください')
         if not finite(l.get('transitionDuration',.7)) or not .1<=l.get('transitionDuration',.7)<=2:raise ValueError('文字の切替時間は0.1〜2秒です')
+        if l.get('stageStyle','auto') not in STAGE_STYLES:raise ValueError('ステージの文字スタイルを確認してください')
         for key in ['fill','accent','stroke']:
             if key in l and not re.fullmatch(r'#[0-9a-fA-F]{6}',l[key]):raise ValueError('色を確認してください')
+    for patch in [d.get('stage')]+[s.get('stage') for s in d['scenes']]:  # v6.6 editor stage patches (characters / guests / telops)
+        if patch is not None and (not isinstance(patch,dict) or len(json.dumps(patch))>60000):raise ValueError('ステージ（キャラ・ゲスト・テロップ）の設定を確認してください')
     if coverage!=expected:raise ValueError('歌詞の欠落・重複・並び順を確認してください')
 
 def render(snapshot,out):
@@ -173,7 +203,7 @@ class Handler(SimpleHTTPRequestHandler):
                     if result.returncode:raise RuntimeError('登録一覧の更新に失敗しました: '+result.stderr[-500:])
                     return self.respond({'ok':True})
                 if self.path=='/api/save':
-                    validate(body['data']); rev=current['revision']+1
+                    validate(body['data']);mark_edited(body['data']); rev=current['revision']+1
                     history=ROOT/'edit-history';history.mkdir(exist_ok=True)
                     shutil.copyfile(STATE,history/f'rev-{current["revision"]}-{time.time_ns()}.json')
                     new={'revision':rev,'data':body['data']};temp=STATE.with_suffix('.tmp');temp.write_text(json.dumps(new,ensure_ascii=False,indent=2),encoding='utf-8');temp.replace(STATE)
@@ -200,7 +230,7 @@ class Handler(SimpleHTTPRequestHandler):
                         folder=check_folder(body.get('folder') or export_info()['folder'])
                         out=unique_path(folder,safe_name(body.get('name'),title,next_version(folder,title)))
                     if body.get('path') or body.get('folder'):(ROOT/SETTINGS_NAME).write_text(json.dumps({**settings(),'folder':str(folder)},ensure_ascii=False,indent=2),encoding='utf-8')
-                    snapshot=ROOT/(name+'.json');snapshot.write_text(json.dumps(current,ensure_ascii=False,indent=2),encoding='utf-8')
+                    mark_edited(current['data']);snapshot=ROOT/(name+'.json');snapshot.write_text(json.dumps(current,ensure_ascii=False,indent=2),encoding='utf-8')
                     JOB={'status':'running','revision':current['revision'],'progress':0,'snapshot':snapshot.name,'hash':hashlib.sha256(snapshot.read_bytes()).hexdigest()}
                     threading.Thread(target=render,args=(snapshot,out),daemon=True).start();return self.respond(JOB)
                 self.respond({'error':'見つかりません'},404)
