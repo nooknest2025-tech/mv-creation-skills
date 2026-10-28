@@ -45,6 +45,9 @@ description: 歌詞の文字演出（32スタイル、自動選択、語エフ�
   - Auto-detected when both preset and genre are auto. Override with 「ジャンルはロックで」 or 「ジャンルなし」.
 - New motion: follow the `mv-style-create` skill.
 
+## エディターでの変更が優先（共通ルール）
+自動で選んだスタイル・書体・色は既定値。エディターで行ごとに変えた書体・色・大きさ・配置・角度・効果・入り方/消え方・モーション見本は必ず反映する。行番号で見た目を固定しない（`src/lib/lyricEdits.tsx`）。
+
 ## この環境でのパックの場所
 
 作業ディレクトリまたは上位ディレクトリから、`AGENTS.md` と `remotion/package.json` を持つ制作パックのルートを確認する。管理用ワークスペースに `skill-pack-v3/MV_SKILL_PACK/` がある場合はそこを使う。PC固有の絶対パスを前提にしない。コマンドはパック内の `remotion/` で実行する。

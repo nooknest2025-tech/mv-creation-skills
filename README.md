@@ -1,15 +1,74 @@
-# MV制作スキル
+# MV制作パック（Codex など AI エージェント用・日本語）
 
-このGitリポジトリではMV制作スキルの手順と配布用コピーを管理する。
+曲を入れるだけで、歌詞が動くMV（MP4）を作れる道具一式です。AI（Codex など）に日本語で話しかけて「サビはグリッチで」「縦長にして」のように直すこともできます。
+既定は全部無料（PCの中で処理）。有料の生成AIは、使うときだけ金額を見せて確認してから使います。
+
+本体は `skill-pack-v3/MV_SKILL_PACK/` にあります。全機能の説明は [skill-pack-v3/MV_SKILL_PACK/README_ja.md](skill-pack-v3/MV_SKILL_PACK/README_ja.md)、はじめての人向けは [QUICKSTART_ja.md](skill-pack-v3/MV_SKILL_PACK/QUICKSTART_ja.md) です。
+
+## できること
+
+- **4つの作り方を選べる**（`start` で最初に聞かれます）
+  1. **おまかせ（全部自動）** … 曲・歌詞・画像から自動で作ります
+  2. **半自動** … 見せ方（複数OK: ダンス＋リリックモーション など）・画像テイスト・シーンの細かさ（約カット数）・動画化（費用の目安）・リリックの雰囲気・キャラの動きを、おすすめ既定値つきで6問だけ。最後に計画を確認してから作ります
+  3. **ジャンルを選ぶ**（ストーリー / ダンス / リップシンク / ライブ / ボカロ / ファーストテイク風）
+  4. **こだわり**（細かく指定）
+- **編集画面（エディター）で後から全部直せる**: 歌詞の結合・分割・秒数、シーンの切替・画像位置、モーション（全カタログ）・書体・色をブラウザで直し、保存した内容で MP4 を書き出せます。どの作り方（画像MV・動画素材・リリックPV・ジャンル/プリセット・立ち絵パーツアニメ）でも、自動で作った見た目は「既定値」で、エディターでの変更が必ず優先されます
+- **歌詞アニメーション 66種**: 基本32＋ムード別32（バラード・弾き語り・シティポップ/lo-fi・和風・ヒップホップ・アイドル・ロック・ダーク/ボカロ・チル）＋語エフェクト
+- **曲と画に「合う」自動演出**: ジャンル/BPM/盛り上がり/言葉の速さと画像解析（顔・ごちゃつき・明るさ）で選び、選んだ理由を日本語で表示
+- **ハイブリッド構成12種**: 「ストーリー＋リップシンクで」「サビだけ歌うシーン」「ライブと回想で」など
+- **パーツアニメ**: `npm run parts -- import キャラ.psd`（PNG フォルダ／1枚絵の自動分解も可）→ 支点・親子を自動推定 → 待機・うなずき・歌う・ノリ・手を振る・首かしげ
+- **立ち絵モーションMV**: 全身キャラの立ち絵をパーツに分けて、拍に合わせて踊らせるMV（ボカロ・ゆっくり系のパーツアニメ）。口パク・歌詞レイアウト・ゲスト演出つき。エディターでも開けます（スキル `mv-tachie-motion`）
+- **キャラが動く**: 目パチ・歌詞に合わせた口パク・呼吸・髪揺れ・拍でノる
+- **プロのモーション・プロチェック**: 書き出し前に「同じ動きの連続・読めない文字・拍ずれ」などを点検し、自動の所は直し、ユーザー指定の所は変えずに提案だけ
+- **新しい動きを AI に頼める**: 「花びらみたいに舞い落ちる字」など（スキル `mv-style-create`、`npm run style:new`）
+- **書体111種**（無料・再配布OK）を曲・セクション・行・言葉ごとに指定
+- 画像だけでも派手に（奥行き・光漏れ・粒子・拍に合わせた揺れ）、動画素材は良い場面を自動で探してビートで切る
+- 音に反応する映像（スペクトラム・粒子・背景）、仕上げ（グレード・グロー・フィルム粒子・黒帯）も Remotion 内で
+- 動画生成は どの MCP でも（Pollo・Grok・Runway…）取り込める
+- 16:9（4K も可）/ 9:16 / 1:1 / 4:5、サビだけの縦ハイライト、DaVinci Resolve 用の書き出し
+- 元の音声は一切いじらない（自動で md5 チェック）
+
+まだできないこと・未確認のこと（Windows/macOS 実機は未確認など）は README_ja.md の最後に正直に書いています。
+
+## はじめ方
+
+### 1. 必要なもの
+- **Node.js**（LTS 版・18 以上）: https://nodejs.org
+- **ffmpeg**（無くても Remotion 同梱のものを自動で使います。Windows なら `winget install Gyan.FFmpeg` で速くなります）
+- 足りないものは `doctor.bat`（Windows）/ `./doctor.sh`（Mac・Linux）が日本語で教えてくれます
+
+### 2. インストール
+```bash
+cd skill-pack-v3/MV_SKILL_PACK/remotion
+npm install
+```
+（Windows なら `skill-pack-v3/MV_SKILL_PACK/setup.bat` をダブルクリックでも同じことができます）
+
+### 3. MVを作る
+`skill-pack-v3/MV_SKILL_PACK/input/` に曲を入れて（歌詞・画像・動画はあれば）、
+```bash
+cd skill-pack-v3/MV_SKILL_PACK/remotion
+npm run start
+```
+（Windows は `start.bat`、Mac・Linux は `./start.sh` でも可）。「おまかせ / 半自動 / ジャンル / こだわり」から選びます。できたMP4は `projects/<曲名>/out/` に入ります。
+
+### 4. 編集画面で直す
+```bash
+cd skill-pack-v3/MV_SKILL_PACK/remotion
+npm run editor -- --demo --project editor-demo   # 見本で試す
+npm run editor -- --project <曲名>               # 作ったMVを開く
+```
+表示された `http://127.0.0.1:5195/editor.html` をブラウザで開きます。詳しくは [docs/EDITOR_ja.md](skill-pack-v3/MV_SKILL_PACK/docs/EDITOR_ja.md)。
+
+## AIへ
+
+制作は `skill-pack-v3/MV_SKILL_PACK/AGENTS.md` と `skill-pack-v3/MV_SKILL_PACK/README_ja.md` を読んで全機能を把握すること。「その機能は無い」と答える前に、必ずこの2つとパックの `skills/` を確認する。
+
+## 管理者向け（スキルの同期）
 
 - `.agents/skills/`：編集原本。
-- `skill-pack-v3/MV_SKILL_PACK/.agents/skills/`：制作パックへ組み込む配布用コピー。
-- `skill-pack-v3/MV_SKILL_PACK/skills/`：同内容の配布用コピー。
+- `skill-pack-v3/MV_SKILL_PACK/.agents/skills/`・`skill-pack-v3/MV_SKILL_PACK/skills/`：配布用コピー（直接編集しない）。
 - `tools/sync_mv_skills.py`：補足資料を含む同期・リンク・差分の検査。
-
-この更新はスキル配布用。Remotion/FFmpegの実行環境そのもの、曲専用の編集プロジェクト、音源・画像・生成動画は同梱しない。スキルを入れただけでStudio編集機能が自動導入されるものではない。制作パックの実行環境と併用し、必要ならスキルの手順で編集構成を追加する。
-
-制作の入口は `mv-workflow`。シーン別確認ページを残しながら、希望者向けにRemotion Studioを併設する。元動画の保持、映像の尺/速度調整、元音源の保護、手動編集の永続化と実機検証を扱う。
 
 ```text
 python tools/sync_mv_skills.py --write
@@ -18,15 +77,3 @@ python -m unittest discover -s tools -p test_sync_mv_skills.py
 ```
 
 原本のみを編集し、配布用コピーを直接変更しない。詳しい更新・検証範囲は `tools/MV_SKILL_REVIEW.md` を参照。
-
-## 共通編集UI（制作パック同梱）
-
-`skill-pack-v3/MV_SKILL_PACK/remotion/editor/` に、どのプロジェクトでも使えるブラウザ編集UIを同梱した（歌詞の結合・分割・秒数、シーン、全モーション・書体・色、保存、保存値での MP4 書き出し）。
-
-```text
-cd skill-pack-v3/MV_SKILL_PACK/remotion
-npm install
-npm run editor -- --demo --project editor-demo
-```
-
-使い方・必要なもの・確認済み範囲は `skill-pack-v3/MV_SKILL_PACK/docs/EDITOR_ja.md`。Windows/macOS での動作は未確認。
