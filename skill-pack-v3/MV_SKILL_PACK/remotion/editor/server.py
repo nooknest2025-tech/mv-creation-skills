@@ -50,7 +50,7 @@ def check_comp(c,n_assets,scene_len):
     rng=lambda x,a,b:num(x) and a<=x<=b
     def bad(m):raise ValueError(m)
     if not isinstance(c,dict) or not isinstance(c.get('panels'),list) or not 1<=len(c['panels'])<=6:bad('合成のパネルは1〜6枚です')
-    if any(k not in ['layout','panels','fx','shake','punch','tilt','enter','border','card','title'] for k in c):bad('合成の設定を確認してください')
+    if any(k not in ['layout','panels','backdrop','fx','shake','punch','tilt','enter','border','card','title'] for k in c):bad('合成の設定を確認してください')
     if 'layout' in c:
         l=c['layout']
         if not isinstance(l,dict) or l.get('type') not in COMP_LAYOUTS:bad('合成の型を確認してください')
@@ -61,7 +61,7 @@ def check_comp(c,n_assets,scene_len):
         if 'count' in l and not (isinstance(l['count'],int) and not isinstance(l['count'],bool) and 1<=l['count']<=4):bad('コマの数は1〜4です')
         if 'grow' in l and not isinstance(l['grow'],bool):bad('コマが増える設定を確認してください')
         if 'step' in l and not rng(l['step'],.25,8):bad('コマが増える間隔は0.25〜8拍です')
-    pk=['asset','from','rate','freeze','box','clip','cx','cy','z','z1','rot','rot1','dx','dx1','flipX','flipY','appear','until','slide']
+    pk=['asset','from','rate','freeze','box','clip','cx','cy','z','z1','rot','rot1','dx','dx1','dy','dy1','depth','flipX','flipY','appear','until','slide']
     for p in c['panels']:
         if not isinstance(p,dict) or any(k not in pk for k in p):bad('パネルの設定を確認してください')
         if not (isinstance(p.get('asset'),int) and not isinstance(p.get('asset'),bool) and 0<=p['asset']<n_assets):bad('パネルの素材を確認してください')
@@ -74,9 +74,12 @@ def check_comp(c,n_assets,scene_len):
         if any(k in p and not rng(p[k],.5,5) for k in ['z','z1']):bad('パネルの拡大は0.5〜5倍です')
         if any(k in p and not rng(p[k],-180,180) for k in ['rot','rot1']):bad('パネルの傾きは-180〜180度です')
         if any(k in p and not rng(p[k],-50,50) for k in ['dx','dx1']):bad('パネルの横移動は-50〜50%です')
+        if any(k in p and not rng(p[k],-50,50) for k in ['dy','dy1']):bad('パネルの縦移動は-50〜50%です')
+        if 'depth' in p and not rng(p['depth'],0,3):bad('奥行き（パララックス）は0〜3です')
         if 'appear' in p and not rng(p['appear'],0,scene_len):bad('パネルの出る秒はシーンの中です')
         if 'until' in p and not (rng(p['until'],0,scene_len+1e-6) and p['until']>p.get('appear',0)):bad('パネルの消える秒は出る秒より後です')
         if 'slide' in p and p['slide'] not in COMP_SLIDES:bad('パネルの入り方を確認してください')
+    if 'backdrop' in c:check_backdrop(c['backdrop'],n_assets)
     if 'fx' in c and not (isinstance(c['fx'],list) and len(c['fx'])<=16 and all(isinstance(x,dict) and all(k in ['t','d','type'] for k in x) and rng(x.get('t'),0,scene_len) and rng(x.get('d'),.01,2) and x.get('type') in COMP_FX for x in c['fx'])):bad('インパクト効果（秒・長さ・種類）を確認してください')
     if 'shake' in c and not rng(c['shake'],0,60):bad('揺れは0〜60です')
     if 'punch' in c and not rng(c['punch'],0,1):bad('ズームパンチは0〜1です')
@@ -89,14 +92,32 @@ def check_comp(c,n_assets,scene_len):
     if 'title' in c:
         k=c['title']
         if not isinstance(k,dict) or not isinstance(k.get('text'),str) or not k['text'] or len(k['text'])>40 or ('at' in k and not rng(k['at'],0,scene_len)) or ('style' in k and k['style'] not in COMP_TITLE) or any(x not in ['text','at','style'] for x in k):bad('タイトル文字を確認してください')
-def check_gcomp(g):
+BD_KEYS=['asset','from','cx','cy','z','z1','rot','rot1','dx','dx1','dy','dy1','depth','dim','blur']
+def check_backdrop(b,n_assets=None):
+    """mirror of src/lib/compose.ts checkBackdrop (scene/global backdrop: black / footage / illustration asset + camera)"""
+    num=lambda x:isinstance(x,(int,float)) and not isinstance(x,bool) and math.isfinite(x)
+    rng=lambda x,a,b:num(x) and a<=x<=b
+    def bad(m):raise ValueError(m)
+    if isinstance(b,str) and b in ['black','footage']:return
+    if not isinstance(b,dict) or any(k not in BD_KEYS for k in b):bad('背景は black / footage / イラスト素材です')
+    a=b.get('asset')
+    if not (isinstance(a,int) and not isinstance(a,bool) and a>=0 and (n_assets is None or a<n_assets)):bad('背景の素材を確認してください')
+    if 'from' in b and not rng(b['from'],0,3600):bad('背景の開始位置は0秒以上です')
+    if any(k in b and not rng(b[k],0,100) for k in ['cx','cy']):bad('背景の中心は0〜100%です')
+    if any(k in b and not rng(b[k],.5,5) for k in ['z','z1']):bad('背景の拡大は0.5〜5倍です')
+    if any(k in b and not rng(b[k],-180,180) for k in ['rot','rot1']):bad('背景の傾きは-180〜180度です')
+    if any(k in b and not rng(b[k],-50,50) for k in ['dx','dx1','dy','dy1']):bad('背景の移動は-50〜50%です')
+    if 'depth' in b and not rng(b['depth'],0,3):bad('奥行き（パララックス）は0〜3です')
+    if 'dim' in b and not rng(b['dim'],0,1):bad('背景の暗さは0〜1です')
+    if 'blur' in b and not rng(b['blur'],0,40):bad('背景のぼかしは0〜40pxです')
+def check_gcomp(g,n_assets=None):
     """mirror of src/lib/compose.ts checkGlobalComp (data.comp: colours, halftone, vignette, grade)"""
     if g is None:return
     num=lambda x:isinstance(x,(int,float)) and not isinstance(x,bool) and math.isfinite(x)
     hexc=lambda v:re.fullmatch(r'#[0-9a-fA-F]{6}',str(v))
     def bad(m):raise ValueError(m)
     if not isinstance(g,dict) or any(k not in ['colors','halftone','vignette','grade','particles','endFade','shade','camera','backdrop'] for k in g):bad('合成の全体設定を確認してください')
-    if 'backdrop' in g and g['backdrop'] not in ['black','footage']:bad('背景は black / footage です')
+    if 'backdrop' in g:check_backdrop(g['backdrop'],n_assets)
     if 'camera' in g:
         m=g['camera']
         if not isinstance(m,dict) or any(k not in ['shakeHz','punchSec','ease'] for k in m) or ('shakeHz' in m and not (num(m['shakeHz']) and 1<=m['shakeHz']<=30)) or ('punchSec' in m and not (num(m['punchSec']) and 0.05<=m['punchSec']<=1)) or ('ease' in m and m['ease'] not in ['smooth','linear']):bad('カメラ設定を確認してください（揺れ1〜30Hz・パンチ0.05〜1秒・smooth/linear）')
@@ -148,7 +169,7 @@ def validate(d):
     if d.get('mograph')!=orig.get('mograph') or d.get('mographShots')!=orig.get('mographShots'):raise ValueError('元の図形レイヤーの設計は保持してください（変更は mographEdit / 場面の mograph に）')
     check_mo(d.get('mographEdit'))
     for s in d['scenes']:check_mo(s.get('mograph'))
-    check_gcomp(d.get('comp'))
+    check_gcomp(d.get('comp'),len(orig['assets']))
     for i,s in enumerate(d['scenes']):check_comp(s.get('comp'),len(orig['assets']),(d['scenes'][i+1]['start'] if i<len(d['scenes'])-1 else d['duration'])-s['start'])
     sids=[s.get('id') for s in d['scenes']]
     if any(not isinstance(x,str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,64}',x) for x in sids) or len(set(sids))!=len(sids):raise ValueError('場面IDを確認してください（切る・つなげるで重複しないように）')

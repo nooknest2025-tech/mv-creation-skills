@@ -16,15 +16,21 @@ export type CompFx = { t: number; d: number; type: keyof typeof COMP_FX };
 export type CompPanel = {
   asset: number; from?: number; rate?: number; freeze?: boolean;
   box?: [number, number, number, number]; clip?: [number, number][];
-  cx?: number; cy?: number; z?: number; z1?: number; rot?: number; rot1?: number; dx?: number; dx1?: number;
+  cx?: number; cy?: number; z?: number; z1?: number; rot?: number; rot1?: number; dx?: number; dx1?: number; dy?: number; dy1?: number;
+  /** parallax layer: how strongly the scene camera (shake, punch-in, punch tilt) moves this panel. 1 = like the frame, 0 = fixed, 2 = foreground. */
+  depth?: number;
   flipX?: boolean; flipY?: boolean; appear?: number; until?: number; slide?: keyof typeof COMP_SLIDES;
 };
 export type CompLayout = { type: keyof typeof COMP_LAYOUTS; dir?: keyof typeof COMP_DIRS; ratio?: number; angle?: number; count?: number; grow?: boolean; step?: number };
 export type CompCard = { name: string; sub?: string; color?: string; side?: "left" | "right" };
 export type CompTitle = { text: string; at?: number; style?: keyof typeof COMP_TITLE };
-export type SceneComp = { layout?: CompLayout; panels: CompPanel[]; fx?: CompFx[]; shake?: number; punch?: number; tilt?: number; enter?: keyof typeof COMP_ENTER; border?: keyof typeof COMP_BORDERS; card?: CompCard; title?: CompTitle };
+/** illustration backdrop: a still (or clip) behind the panels with its own camera move (zoom/pan/tilt) and parallax depth.
+ *  `dim` darkens it (0 = as is), `blur` in px (0 = sharp). Used instead of the blurred footage for empty slots / wipes / gaps. */
+export type CompBackdropArt = { asset: number; from?: number; cx?: number; cy?: number; z?: number; z1?: number; rot?: number; rot1?: number; dx?: number; dx1?: number; dy?: number; dy1?: number; depth?: number; dim?: number; blur?: number };
+export type CompBackdrop = "black" | "footage" | CompBackdropArt;
+export type SceneComp = { layout?: CompLayout; panels: CompPanel[]; backdrop?: CompBackdrop; fx?: CompFx[]; shake?: number; punch?: number; tilt?: number; enter?: keyof typeof COMP_ENTER; border?: keyof typeof COMP_BORDERS; card?: CompCard; title?: CompTitle };
 export type CompGrade = { look: keyof typeof COMP_LOOKS; keep?: string[]; base?: number; lut?: string };
-export type GlobalComp = { colors?: { red?: string; teal?: string }; halftone?: number; vignette?: number; grade?: CompGrade; particles?: boolean; endFade?: boolean; shade?: boolean; camera?: CompCamera; backdrop?: "black" | "footage" };
+export type GlobalComp = { colors?: { red?: string; teal?: string }; halftone?: number; vignette?: number; grade?: CompGrade; particles?: boolean; endFade?: boolean; shade?: boolean; camera?: CompCamera; backdrop?: CompBackdrop };
 /** camera feel (data.comp.camera): shake noise speed (Hz), punch-in decay (s), zoom/tilt ramp easing. */
 export type CompCamera = { shakeHz?: number; punchSec?: number; ease?: "smooth" | "linear" };
 export const cameraOf = (data: any) => ({ shakeHz: 7, punchSec: 0.22, ease: "smooth" as "smooth" | "linear", ...(globalComp(data).camera ?? {}) });
@@ -82,6 +88,7 @@ export function resolvePanels(c: SceneComp, W: number, H: number, beat: number):
       box: own?.box ?? slot?.box ?? FULL, clip: own?.clip ?? (own?.box ? undefined : slot?.clip),
       cx: p.cx ?? 50, cy: p.cy ?? 50, z: p.z ?? 1, z1: p.z1 ?? p.z ?? 1,
       rot: mirrored ? -rot : rot, rot1: mirrored ? -rot1 : rot1, dx: (fx ? -1 : 1) * (p.dx ?? 0), dx1: (fx ? -1 : 1) * (p.dx1 ?? p.dx ?? 0),
+      dy: (fy ? -1 : 1) * (p.dy ?? 0), dy1: (fy ? -1 : 1) * (p.dy1 ?? p.dy ?? 0), depth: p.depth ?? 1,
       flipX: !!p.flipX !== fx, flipY: !!p.flipY !== fy,
       appear: own?.appear ?? slot?.appear ?? 0, until: own?.until, slide: own?.slide ?? slot?.slide ?? "none",
     });
@@ -90,8 +97,8 @@ export function resolvePanels(c: SceneComp, W: number, H: number, beat: number):
 }
 /** smallest zoom at which a panel's picture still covers its whole box: zoom origin (cx, cy) and slide dx (percent of the box)
  * push an edge in, rotation exposes the corners. Panels are drawn at max(z, coverScale) so a crop never shows an empty black strip. */
-export function coverScale(cx: number, cy: number, dx: number, rotDeg: number, boxAspect: number) {
-  const ox = (50 + Math.abs(dx)) / Math.max(1, Math.min(cx, 100 - cx)), oy = 50 / Math.max(1, Math.min(cy, 100 - cy));
+export function coverScale(cx: number, cy: number, dx: number, rotDeg: number, boxAspect: number, dy = 0) {
+  const ox = (50 + Math.abs(dx)) / Math.max(1, Math.min(cx, 100 - cx)), oy = (50 + Math.abs(dy)) / Math.max(1, Math.min(cy, 100 - cy));
   const r = Math.abs(rotDeg) * Math.PI / 180, a = Math.max(boxAspect, 1 / Math.max(1e-3, boxAspect));
   return Math.max(ox, oy) * (Math.cos(r) + Math.sin(r) * a);
 }
@@ -105,12 +112,30 @@ export const fxActive = (c: SceneComp, st: number) => (c.fx ?? []).filter((x) =>
 const HEX = /^#[0-9a-fA-F]{6}$/;
 const num = (x: any) => typeof x === "number" && Number.isFinite(x);
 const inR = (x: any, a: number, b: number) => num(x) && x >= a && x <= b;
+/** the effective backdrop of a scene: scene.comp.backdrop wins over data.comp.backdrop (default black). */
+export const backdropOf = (data: any, c: SceneComp | undefined): CompBackdrop => c?.backdrop ?? globalComp(data).backdrop ?? "black";
+const BD_KEYS = ["asset", "from", "cx", "cy", "z", "z1", "rot", "rot1", "dx", "dx1", "dy", "dy1", "depth", "dim", "blur"];
+/** validation of a backdrop value (scene or global). nAssets undefined = asset index only checked as a non-negative integer. */
+export function checkBackdrop(b: any, nAssets?: number) {
+  const bad = (m: string) => { throw new Error(m); };
+  if (b === "black" || b === "footage") return;
+  if (!b || typeof b !== "object" || Array.isArray(b) || Object.keys(b).some((k) => !BD_KEYS.includes(k))) bad("背景は black / footage / イラスト素材です");
+  if (!(Number.isInteger(b.asset) && b.asset >= 0 && (nAssets === undefined || b.asset < nAssets))) bad("背景の素材を確認してください");
+  if (b.from !== undefined && !inR(b.from, 0, 3600)) bad("背景の開始位置は0秒以上です");
+  for (const k of ["cx", "cy"]) if (b[k] !== undefined && !inR(b[k], 0, 100)) bad("背景の中心は0〜100%です");
+  for (const k of ["z", "z1"]) if (b[k] !== undefined && !inR(b[k], 0.5, 5)) bad("背景の拡大は0.5〜5倍です");
+  for (const k of ["rot", "rot1"]) if (b[k] !== undefined && !inR(b[k], -180, 180)) bad("背景の傾きは-180〜180度です");
+  for (const k of ["dx", "dx1", "dy", "dy1"]) if (b[k] !== undefined && !inR(b[k], -50, 50)) bad("背景の移動は-50〜50%です");
+  if (b.depth !== undefined && !inR(b.depth, 0, 3)) bad("奥行き（パララックス）は0〜3です");
+  if (b.dim !== undefined && !inR(b.dim, 0, 1)) bad("背景の暗さは0〜1です");
+  if (b.blur !== undefined && !inR(b.blur, 0, 40)) bad("背景のぼかしは0〜40pxです");
+}
 /** validation (mirror: server.py check_comp / check_gcomp). Throws a Japanese message. */
 export function checkComp(c: any, nAssets: number, sceneLen: number) {
   if (c === undefined) return;
   const bad = (m: string) => { throw new Error(m); };
   if (!c || typeof c !== "object" || !Array.isArray(c.panels) || c.panels.length < 1 || c.panels.length > 6) bad("合成のパネルは1〜6枚です");
-  const keys = ["layout", "panels", "fx", "shake", "punch", "tilt", "enter", "border", "card", "title"];
+  const keys = ["layout", "panels", "backdrop", "fx", "shake", "punch", "tilt", "enter", "border", "card", "title"];
   if (Object.keys(c).some((k) => !keys.includes(k))) bad("合成の設定を確認してください");
   if (c.layout !== undefined) {
     const l = c.layout; if (!l || typeof l !== "object" || !(l.type in COMP_LAYOUTS)) bad("合成の型を確認してください");
@@ -122,7 +147,7 @@ export function checkComp(c: any, nAssets: number, sceneLen: number) {
     if (l.grow !== undefined && typeof l.grow !== "boolean") bad("コマが増える設定を確認してください");
     if (l.step !== undefined && !inR(l.step, 0.25, 8)) bad("コマが増える間隔は0.25〜8拍です");
   }
-  const pk = ["asset", "from", "rate", "freeze", "box", "clip", "cx", "cy", "z", "z1", "rot", "rot1", "dx", "dx1", "flipX", "flipY", "appear", "until", "slide"];
+  const pk = ["asset", "from", "rate", "freeze", "box", "clip", "cx", "cy", "z", "z1", "rot", "rot1", "dx", "dx1", "dy", "dy1", "depth", "flipX", "flipY", "appear", "until", "slide"];
   for (const p of c.panels) {
     if (!p || typeof p !== "object" || Object.keys(p).some((k) => !pk.includes(k))) bad("パネルの設定を確認してください");
     if (!(Number.isInteger(p.asset) && p.asset >= 0 && p.asset < nAssets)) bad("パネルの素材を確認してください");
@@ -135,10 +160,13 @@ export function checkComp(c: any, nAssets: number, sceneLen: number) {
     for (const k of ["z", "z1"]) if (p[k] !== undefined && !inR(p[k], 0.5, 5)) bad("パネルの拡大は0.5〜5倍です");
     for (const k of ["rot", "rot1"]) if (p[k] !== undefined && !inR(p[k], -180, 180)) bad("パネルの傾きは-180〜180度です");
     for (const k of ["dx", "dx1"]) if (p[k] !== undefined && !inR(p[k], -50, 50)) bad("パネルの横移動は-50〜50%です");
+    for (const k of ["dy", "dy1"]) if (p[k] !== undefined && !inR(p[k], -50, 50)) bad("パネルの縦移動は-50〜50%です");
+    if (p.depth !== undefined && !inR(p.depth, 0, 3)) bad("奥行き（パララックス）は0〜3です");
     if (p.appear !== undefined && !inR(p.appear, 0, sceneLen)) bad("パネルの出る秒はシーンの中です");
     if (p.until !== undefined && !(inR(p.until, 0, sceneLen + 1e-6) && p.until > (p.appear ?? 0))) bad("パネルの消える秒は出る秒より後です");
     if (p.slide !== undefined && !(p.slide in COMP_SLIDES)) bad("パネルの入り方を確認してください");
   }
+  if (c.backdrop !== undefined) checkBackdrop(c.backdrop, nAssets);
   if (c.fx !== undefined && !(Array.isArray(c.fx) && c.fx.length <= 16 && c.fx.every((x: any) => x && Object.keys(x).every((k) => ["t", "d", "type"].includes(k)) && inR(x.t, 0, sceneLen) && inR(x.d, 0.01, 2) && x.type in COMP_FX))) bad("インパクト効果（秒・長さ・種類）を確認してください");
   if (c.shake !== undefined && !inR(c.shake, 0, 60)) bad("揺れは0〜60です");
   if (c.punch !== undefined && !inR(c.punch, 0, 1)) bad("ズームパンチは0〜1です");
@@ -148,11 +176,11 @@ export function checkComp(c: any, nAssets: number, sceneLen: number) {
   if (c.card !== undefined) { const k = c.card; if (!k || typeof k.name !== "string" || !k.name || k.name.length > 40 || (k.sub !== undefined && (typeof k.sub !== "string" || k.sub.length > 60)) || (k.color !== undefined && !HEX.test(k.color)) || (k.side !== undefined && !["left", "right"].includes(k.side)) || Object.keys(k).some((x) => !["name", "sub", "color", "side"].includes(x))) bad("名前カードを確認してください"); }
   if (c.title !== undefined) { const k = c.title; if (!k || typeof k.text !== "string" || !k.text || k.text.length > 40 || (k.at !== undefined && !inR(k.at, 0, sceneLen)) || (k.style !== undefined && !(k.style in COMP_TITLE)) || Object.keys(k).some((x) => !["text", "at", "style"].includes(x))) bad("タイトル文字を確認してください"); }
 }
-export function checkGlobalComp(g: any) {
+export function checkGlobalComp(g: any, nAssets?: number) {
   if (g === undefined) return;
   const bad = (m: string) => { throw new Error(m); };
   if (!g || typeof g !== "object" || Object.keys(g).some((k) => !["colors", "halftone", "vignette", "grade", "particles", "endFade", "shade", "camera", "backdrop"].includes(k))) bad("合成の全体設定を確認してください");
-  if (g.backdrop !== undefined && !["black", "footage"].includes(g.backdrop)) bad("背景は black / footage です");
+  if (g.backdrop !== undefined) checkBackdrop(g.backdrop, nAssets);
   if (g.camera !== undefined) { const m = g.camera; if (!m || typeof m !== "object" || Object.keys(m).some((k) => !["shakeHz", "punchSec", "ease"].includes(k)) || (m.shakeHz !== undefined && !inR(m.shakeHz, 1, 30)) || (m.punchSec !== undefined && !inR(m.punchSec, 0.05, 1)) || (m.ease !== undefined && !["smooth", "linear"].includes(m.ease))) bad("カメラ設定を確認してください（揺れ1〜30Hz・パンチ0.05〜1秒・smooth/linear）"); }
   if (g.colors !== undefined && (!g.colors || typeof g.colors !== "object" || Object.entries(g.colors).some(([k, v]) => !["red", "teal"].includes(k) || !HEX.test(String(v))))) bad("合成の色は #RRGGBB で指定してください");
   for (const k of ["halftone", "vignette"]) if (g[k] !== undefined && !inR(g[k], 0, 1)) bad("網点・周辺の暗さは0〜1です");

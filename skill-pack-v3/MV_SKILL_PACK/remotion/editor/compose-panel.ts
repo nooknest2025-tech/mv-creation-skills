@@ -17,6 +17,19 @@ export function composePanel(host: HTMLElement, ctx: Ctx) {
     const chk = (text: string, obj: any, key: string, redraw = false) => { const e = el("input", { type: "checkbox", checked: !!obj[key] }); e.onchange = () => { if (e.checked) obj[key] = true; else delete obj[key]; redraw ? done() : live(); }; return label(text, e); };
     const txt = (text: string, obj: any, key: string, max: number) => { const e = el("input", { type: "text", maxLength: max, value: obj[key] ?? "" }); e.oninput = () => { obj[key] = e.value; live(); }; return label(text, e); };
     const color = (text: string, obj: any, key: string, dflt: string) => { const e = el("input", { type: "color", value: obj[key] ?? dflt }); e.oninput = () => { obj[key] = e.value; live(); }; return label(text, e); };
+    /** backdrop editor for scene.comp.backdrop (inherit = global) or data.comp.backdrop: none / blurred footage / illustration + its camera. */
+    const bdBox = (obj: any, key: string, inherit: boolean, commit: () => void) => {
+      const box = el("div", { className: "lookControls" }), v = obj[key], mode = v === undefined ? (inherit ? "inherit" : "black") : typeof v === "object" ? "art" : v;
+      const opts: Record<string, string> = { ...(inherit ? { inherit: "全体の設定に従う" } : {}), black: "黒", footage: "ぼかした映像", art: "イラスト（カメラワーク付き）" };
+      const m = el("select"); for (const [a, b] of Object.entries(opts)) m.append(el("option", { value: a, textContent: b })); m.value = mode;
+      m.onchange = () => { if (m.value === "inherit" || (!inherit && m.value === "black")) delete obj[key]; else if (m.value === "art") obj[key] = { asset: data.assets.findIndex((a: any) => a?.kind === "image") >= 0 ? data.assets.findIndex((a: any) => a?.kind === "image") : 0, z: 1.1, z1: 1.25, depth: 0.5 }; else obj[key] = m.value; commit(); done(); };
+      box.append(label("背景", m));
+      if (mode === "art") { const b = obj[key]; const live2 = (e: HTMLElement) => { e.addEventListener("input", commit); e.addEventListener("change", commit); return e; };
+        box.append(live2(assetSel(b)), live2(num("拡大 始め", b, "z", 0.5, 5, 0.05, 1.1)), live2(num("拡大 終わり", b, "z1", 0.5, 5, 0.05)), live2(num("中心 横%", b, "cx", 0, 100, 1, 50)), live2(num("中心 縦%", b, "cy", 0, 100, 1, 50)),
+          live2(num("横移動 始め%", b, "dx", -50, 50, 1, 0)), live2(num("横移動 終わり%", b, "dx1", -50, 50, 1)), live2(num("縦移動 始め%", b, "dy", -50, 50, 1, 0)), live2(num("縦移動 終わり%", b, "dy1", -50, 50, 1)),
+          live2(num("傾き 始め", b, "rot", -180, 180, 1, 0)), live2(num("傾き 終わり", b, "rot1", -180, 180, 1)), live2(num("奥行き（0=固定・1=画面と同じ・2=手前）", b, "depth", 0, 3, 0.05, 0.5)), live2(num("暗さ（0〜1）", b, "dim", 0, 1, 0.01, 0)), live2(num("ぼかし px", b, "blur", 0, 40, 1, 0))); }
+      return box;
+    };
     const assetSel = (p: any) => { const e = el("select"); data.assets.forEach((a: any, n: number) => e.append(el("option", { value: String(n), textContent: a?.label ?? (typeof a === "string" ? a : a?.src) ?? `素材${n + 1}` }))); e.value = String(p.asset); e.onchange = () => { p.asset = Number(e.value); live(); }; return label("素材", e); };
 
     sec.append(el("h3", { textContent: `合成（このシーン）${s.comp ? " ✎" : ""}` }));
@@ -31,12 +44,13 @@ export function composePanel(host: HTMLElement, ctx: Ctx) {
       if (["split", "mirror"].includes(c.layout.type)) lay.append(sel("向き", c.layout, "dir", COMP_DIRS as any, "v"), num("比率（0.1〜0.9）", c.layout, "ratio", 0.1, 0.9, 0.01, 0.5), num("角度（度）", c.layout, "angle", -45, 45, 1, 0));
       if (c.layout.type === "panels") lay.append(num("コマ数（1〜4）", c.layout, "count", 1, 4, 1, 2), num("比率", c.layout, "ratio", 0.1, 0.9, 0.01, 0.5), chk("拍ごとにコマが増える", c.layout, "grow"), num("増える間隔（拍）", c.layout, "step", 0.25, 8, 0.25, 1));
       if (c.layout.type === "pip") lay.append(chk("小窓は最初から（増えない）", { get grow() { return c.layout.grow === false; }, set grow(v: boolean) { if (v) c.layout.grow = false; else delete c.layout.grow; } } as any, "grow"));
-      sec.append(el("h4", { textContent: "画面の分け方" }), lay);
+      sec.append(el("h4", { textContent: "画面の分け方" }), lay, el("h4", { textContent: "背景（空いたコマ・スラッシュの隙間）" }), bdBox(c, "backdrop", true, () => {}));
       c.panels.forEach((p: any, n: number) => {
         const box = el("div", { className: "lookControls" });
         box.append(assetSel(p), num("開始位置（秒）", p, "from", 0, 3600, 0.05, 0), num("速さ（倍）", p, "rate", 0.1, 4, 0.05, 1), chk("止める（フリーズ）", p, "freeze"),
           num("中心 横%", p, "cx", 0, 100, 1, 50), num("中心 縦%", p, "cy", 0, 100, 1, 50), num("拡大 始め", p, "z", 0.5, 5, 0.05, 1), num("拡大 終わり", p, "z1", 0.5, 5, 0.05),
           num("傾き 始め", p, "rot", -180, 180, 1, 0), num("傾き 終わり", p, "rot1", -180, 180, 1), num("横移動 始め%", p, "dx", -50, 50, 1, 0), num("横移動 終わり%", p, "dx1", -50, 50, 1),
+          num("縦移動 始め%（ティルト）", p, "dy", -50, 50, 1, 0), num("縦移動 終わり%", p, "dy1", -50, 50, 1), num("奥行き（パララックス 0〜3）", p, "depth", 0, 3, 0.05, 1),
           chk("左右反転", p, "flipX"), chk("上下反転", p, "flipY"), num("出る秒（シーン内）", p, "appear", 0, len, 0.01), num("消える秒", p, "until", 0, len, 0.01), sel("入り方", p, "slide", COMP_SLIDES as any, "none"));
         const rm = el("button", { textContent: "このパネルを消す", disabled: c.panels.length < 2 }); rm.onclick = () => { c.panels.splice(n, 1); done(); };
         sec.append(el("h4", { textContent: `パネル${n + 1}${p.box || p.clip ? "（独自の枠）" : ""}` }), box, rm);
@@ -65,9 +79,10 @@ export function composePanel(host: HTMLElement, ctx: Ctx) {
     const gcol = (t: string, k: "red" | "teal") => { const e = el("input", { type: "color", value: gc[k] ?? compColors(data)[k] }); e.oninput = () => { gc[k] = e.value; put(); live(); }; return label(t, e); };
     const lookSel = el("select"); for (const [a, b] of Object.entries(COMP_LOOKS)) lookSel.append(el("option", { value: a, textContent: b })); lookSel.value = grade.look; lookSel.onchange = () => { grade.look = lookSel.value; put(); done(); };
     gb.append(label("色調（ルック）", lookSel));
+    const gbd = bdBox(g, "backdrop", false, () => put());
     if (grade.look === "cube") gb.append(txt("LUTファイル（プロジェクト内 .cube）", grade, "lut", 120));
     if (grade.look === "ink") gb.append(num("他の色の残り（0〜1）", grade, "base", 0, 1, 0.01, 0.1));
-    gb.append(gcol("赤ネガ・アクセント色", "red"), gcol("青緑ネガ・アクセント色", "teal"), num("網点（0〜1）", g, "halftone", 0, 1, 0.01, 0), num("周辺の暗さ（0〜1）", g, "vignette", 0, 1, 0.01, 0), chk("光の粒を出す", g, "particles"), chk("最後に暗くする", g, "endFade"), chk("歌詞の下を暗くする", g, "shade"));
+    gb.append(gcol("赤ネガ・アクセント色", "red"), gcol("青緑ネガ・アクセント色", "teal"), num("網点（0〜1）", g, "halftone", 0, 1, 0.01, 0), num("周辺の暗さ（0〜1）", g, "vignette", 0, 1, 0.01, 0), chk("光の粒を出す", g, "particles"), chk("最後に暗くする", g, "endFade"), chk("歌詞の下を暗くする", g, "shade"), gbd);
     if (!Object.keys(gc).length) delete g.colors; if (grade.look === "none" && Object.keys(grade).length === 1) delete g.grade;
     sec.append(el("h3", { textContent: "合成（動画全体）" + (data.comp ? " ✎" : "") }), gb, el("p", { textContent: "色調は素材を書き換えません。プレビューは近似、MP4書き出しで正確なLUTを当てます。全体設定は合成シーンがある動画でだけ使われます（光の粒・最後の暗転・歌詞の下の影は、全体設定があると既定でオフ）。" }));
   };
