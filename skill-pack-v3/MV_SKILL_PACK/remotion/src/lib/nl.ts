@@ -84,8 +84,9 @@ export function applyInstruction(cfg0: MVConfig, text: string): { cfg: MVConfig;
     { const m = t.match(/画像は?(アニメ|実写|イラスト|図形|手持ち)/); if (m) { cfg.taste = ({ アニメ: "anime", 実写: "photo", イラスト: "illust", 図形: "graphic", 手持ち: "own" } as const)[m[1] as "アニメ"]; changes.push(`画像テイスト → ${m[1]}`); continue; } }
     { const m = t.match(/動画化は?(静止画のみ|しない|なし|サビ(だけ|など)?|一部|全部)/); if (m) { const G = (cfg.gen ??= {}); G.scope = /静止画|しない|なし/.test(m[1]) ? "none" : /全部/.test(m[1]) ? "all" : "chorus"; changes.push(`動画化 → ${G.scope === "none" ? "静止画のみ（0円）" : G.scope === "all" ? "全部（npm run gen -- plan で費用を確認してから）" : "サビなど一部（npm run gen -- plan で費用を確認してから）"}`); continue; } }
     // ---- show modes, combinable: 「ダンス＋リリックモーションで」「物語＋タイポグラフィ」「リップシンク＋モーショングラフィックス」 ----
-    { const cm = comboFromText(t); if (cm) { cfg.combo = cm; cfg.structure = "auto"; const c = composeCombo(cm); changes.push(`見せ方 → ${cm.map((m) => SHOW_MODES[m].ja).join("＋")}（セクションごとの配分: ${c.notes.join("｜")}）`); continue; } }
+    // negation first: 「モーショングラフィックスなし」 must not be read as the show mode 「モーショングラフィックス」
     if (/(プロ演出|モーショングラフィックス|図形演出)(を)?(オフ|なし|使わない|やめ)/.test(t)) { (cfg.mograph ??= {}).off = true; changes.push("図形・トランジション演出 → オフ（文字のプロ動きは残す）"); continue; }
+    { const cm = comboFromText(t); if (cm) { cfg.combo = cm; cfg.structure = "auto"; const c = composeCombo(cm); changes.push(`見せ方 → ${cm.map((m) => SHOW_MODES[m].ja).join("＋")}（セクションごとの配分: ${c.notes.join("｜")}）`); continue; } }
     if (/(従来|昔|前)の(見た目|動き)に戻|プロ(モード)?(オフ|なし)/.test(t)) { cfg.pro = false; changes.push("プロ演出 → オフ（従来の見た目）"); continue; }
     if (/シーン|カット|場面/.test(t) && /(標準|普通|おまかせ)/.test(t) && !/(ゆったり|テンポ)/.test(t)) { delete cfg.density; changes.push("シーンの細かさ → 標準（曲調に合わせて自動）"); continue; }
     if (/シーン|カット|場面/.test(t) && /(ゆったり|少なめ|長め|ゆっくり)/.test(t)) { cfg.density = "slow"; changes.push("シーンの細かさ → ゆったり（カット長め）"); continue; }

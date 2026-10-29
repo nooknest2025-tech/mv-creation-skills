@@ -59,6 +59,12 @@ export async function importMade(dir: string, input = INPUT_DIR, o: { move?: boo
   return { images: imgs.length, videos, inbox, empty: !files.length };
 }
 
+/** rebuild args: always rebuild the project the clips were imported into (not a new project named after the song file). */
+export function madeRebuildArgs(input: string, dir: string, yes: boolean) {
+  const cfgTitle = readJson<any>(path.join(dir, "manifest.json"), null)?.title;
+  return ["--input", input, "--title", String(cfgTitle ?? path.basename(dir)), ...(yes ? ["--yes"] : [])];
+}
+
 async function main() {
   const { o } = parseArgs(process.argv.slice(2));
   const input = path.resolve(String(o.input ?? INPUT_DIR));
@@ -72,6 +78,6 @@ async function main() {
   if (o["no-build"]) return;
   log("\n▶ 作り直します（一部だけ動画・残り静止画でもOK。編集画面でそのまま直せます）\n");
   const { run } = await import("./mv");
-  await run(["--input", input, ...(o.project ? [] : []), ...(o.yes ? ["--yes"] : [])]);
+  await run(madeRebuildArgs(input, dir, !!o.yes));
 }
 if (process.argv[1]?.match(/made\.ts$/)) main().catch(fail);

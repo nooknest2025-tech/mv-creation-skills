@@ -34,10 +34,12 @@ export function pngFolderLayers(src: string, out: string) {
   if (sizes.size > 1) throw new Error(`PNG のサイズがそろっていません（${[...sizes].join(", ")}）。全パーツを同じキャンバスサイズで書き出してください`);
   fs.writeFileSync(path.join(out, "layers.json"), JSON.stringify({ size: first.size, layers: files.map((f) => ({ name: f.replace(/\.png$/i, ""), file: f, bbox: bb[path.join(out, f)].bbox })) }, null, 1));
 }
+export const isDemoRig = (d: string) => /^demo[_-]/i.test(path.basename(d)) || fs.existsSync(path.join(d, ".demo"));
 export function findRig(dir: string, inputDir: string, cfg: MVConfig): string | null {
   if (cfg.parts?.off) return null;
   if (cfg.parts?.rig) { for (const b of [dir, inputDir]) { const p = path.resolve(b, cfg.parts.rig); if (fs.existsSync(p)) return p; } return null; }
-  for (const b of [path.join(dir, "parts"), path.join(inputDir, "parts")]) if (fs.existsSync(b)) for (const d of fs.readdirSync(b).sort()) { const p = path.join(b, d, "rig.json"); if (fs.existsSync(p)) return p; }
+  // sample rigs (demo_* or a .demo marker) are only used when named explicitly via cfg.parts.rig, so they never leak into a user's MV
+  for (const b of [path.join(dir, "parts"), path.join(inputDir, "parts")]) if (fs.existsSync(b)) for (const d of fs.readdirSync(b).sort()) { if (isDemoRig(path.join(b, d))) continue; const p = path.join(b, d, "rig.json"); if (fs.existsSync(p)) return p; }
   return null;
 }
 /** copy rig images into public/ and rewrite srcs for the renderer. */
