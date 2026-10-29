@@ -61,7 +61,7 @@ cd skill-pack-v3/MV_SKILL_PACK/remotion
 npm run editor -- --demo --project editor-demo   # 見本で試す
 npm run editor -- --project <曲名>               # 作ったMVを開く
 ```
-表示された `http://127.0.0.1:5195/editor.html` をブラウザで開きます。詳しくは [docs/EDITOR_ja.md](skill-pack-v3/MV_SKILL_PACK/docs/EDITOR_ja.md)。
+表示された `http://127.0.0.1:5195/editor.html` をブラウザで開きます。詳しくは [docs/EDITOR_ja.md](skill-pack-v3/MV_SKILL_PACK/docs/EDITOR_ja.md)。アニメバトルMVの作り方は [レシピ](skill-pack-v3/MV_SKILL_PACK/docs/recipes/anime_battle_mv_ja.md)。
 
 ## AIへ
 

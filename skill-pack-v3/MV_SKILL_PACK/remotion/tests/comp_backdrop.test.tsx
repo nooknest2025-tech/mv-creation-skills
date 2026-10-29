@@ -101,13 +101,13 @@ print(json.dumps(out))`;
 describe("name card title fits the band", () => {
   it("long names shrink to fit (first glyph never off the band); short names keep 120px", () => {
     const W = 1920, band = W * 0.62 - W * 0.05 - Math.tan((14 * Math.PI) / 180) * 210;
-    for (const n of ["ヘンドレガーディアン", "ヘンドレ侍", "HENDRE GUARDIAN THE SECOND"]) {
+    for (const n of ["サンプルガーディアン", "サンプル侍", "SAMPLE GUARDIAN THE SECOND"]) {
       const fs = cardFontSize(n, W), em = Array.from(n).reduce((a, ch) => a + (/[\u0000-\u024F]/.test(ch) ? 0.62 : 1), 0);
       expect(fs * em + 20).toBeLessThanOrEqual(band);
     }
-    expect(cardFontSize("ヘンドレ侍", W)).toBe(120); expect(cardFontSize("ヘンドレガーディアン", W)).toBeLessThan(120);
-    const d = base(); d.scenes[0].comp.card = { name: "ヘンドレガーディアン", side: "right" };
-    expect(html(d, 0.5)).toContain(`font-size:${cardFontSize("ヘンドレガーディアン", 1920)}px`);
+    expect(cardFontSize("サンプル侍", W)).toBe(120); expect(cardFontSize("サンプルガーディアン", W)).toBeLessThan(120);
+    const d = base(); d.scenes[0].comp.card = { name: "サンプルガーディアン", side: "right" };
+    expect(html(d, 0.5)).toContain(`font-size:${cardFontSize("サンプルガーディアン", 1920)}px`);
   });
 });
 
