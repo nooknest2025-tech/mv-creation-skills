@@ -32,7 +32,8 @@ describe("doctor", () => {
     expect(r.text).toMatch(/無料ルート/);
   });
   it("real CLI with simulated missing tools (MVPACK_DOCTOR_MISSING)", () => {
-    const r = spawnSync("npx", ["tsx", "scripts/doctor.ts", "--json"], { cwd: path.join(__dirname, ".."), encoding: "utf8", env: { ...process.env, MVPACK_DOCTOR_MISSING: "ffmpeg,opencv,node" }, timeout: 60000 });
+    const r = spawnSync(process.execPath, [path.join(__dirname, "../node_modules/tsx/dist/cli.mjs"), "scripts/doctor.ts", "--json"], { cwd: path.join(__dirname, ".."), encoding: "utf8", env: { ...process.env, MVPACK_DOCTOR_MISSING: "ffmpeg,opencv,node" }, timeout: 60000 });
+    expect(r.error).toBeUndefined();
     const j = JSON.parse(r.stdout);
     expect(j.missing.map((m: any) => m.id)).toEqual(expect.arrayContaining(["ffmpeg", "opencv", "node"]));
     expect(r.status).toBe(1); // node missing = blocking

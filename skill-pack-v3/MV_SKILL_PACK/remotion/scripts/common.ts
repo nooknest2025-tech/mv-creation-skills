@@ -9,6 +9,9 @@ export const REMOTION_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.
 export const PACK_DIR = path.resolve(REMOTION_DIR, "..");
 // setup.sh puts optional Python parts into a pack-local venv when the system Python refuses pip (PEP 668: Homebrew / recent Linux).
 { const v = path.join(PACK_DIR, ".python-deps", "venv", process.platform === "win32" ? "Scripts/python.exe" : "bin/python"); if (!process.env.MVPACK_PYTHON && fs.existsSync(v)) process.env.MVPACK_PYTHON = v; }
+// Share pip --target packages with doctor and every spawned Python utility.
+{ const deps = path.join(PACK_DIR, ".python-deps"); if (fs.existsSync(deps)) process.env.PYTHONPATH = [deps, process.env.PYTHONPATH].filter(Boolean).join(path.delimiter); }
+{ const cache = path.join(PACK_DIR, ".model-cache"); if (fs.existsSync(cache)) process.env.HF_HOME ??= cache; }
 export const INPUT_DIR = path.join(PACK_DIR, "input");
 export const PROJECTS_DIR = path.join(PACK_DIR, "projects");
 export const PUBLIC_PROJECT = path.join(REMOTION_DIR, "public", "project");

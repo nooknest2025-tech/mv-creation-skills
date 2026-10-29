@@ -56,7 +56,7 @@ export async function buildSong(det: ReturnType<typeof detectInput>, dir: string
       const vocals = det.stems.find((s) => /vocal|ボーカル/i.test(path.basename(s)) && !/inst|off/i.test(path.basename(s)));
       const args = [path.join(REMOTION_DIR, "scripts", "transcribe.py"), audio, "--out", outJson, "--model", String(o.whisper ?? "small"), ...(det.lyricsKind === "txt" ? ["--text", det.lyrics!] : []), ...(vocals ? ["--vocals", vocals] : [])];
       const r = spawnSync(py, args, { stdio: "inherit", shell: false });
-      if (r.status !== 0) throw new UserError("歌詞の自動処理に失敗しました", "pip install faster-whisper を実行してから再試行。急ぐなら歌詞なし（--no-lyrics）でも作れます。");
+      if (r.status !== 0) throw new UserError("歌詞の自動処理に失敗しました", "直前のPythonエラーで、依存不足・音声読み込み・モデル取得のどこで失敗したか確認してください。npm run doctor と同じPythonを使用し、導入済みなら再インストールせず原因を調べます。同期済みSRT/LRC/JSONがあれば代わりに使えます。");
     } else notes.push("歌詞の自動処理結果を再利用（やり直すなら --reanalyze）");
     song = parseLyricJson(JSON.parse(fs.readFileSync(outJson, "utf8")), path.basename(audio).replace(/\.[^.]+$/, ""));
   }

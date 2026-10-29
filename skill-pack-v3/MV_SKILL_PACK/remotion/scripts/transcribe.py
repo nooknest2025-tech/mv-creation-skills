@@ -7,7 +7,15 @@ options: --model small|medium|large-v3 (default small) --lang ja --vocals vocals
 Output = the lyric-sync JSON shape (schemaVersion 1.0 subset), so the rest of the pipeline treats it like hand-made data.
 """
 from __future__ import annotations
-import argparse, difflib, json, re, sys, unicodedata
+import argparse, difflib, json, re, sys, unicodedata, os
+from pathlib import Path
+
+PACK = Path(__file__).resolve().parents[2]
+# setup.bat can install optional packages with pip --target instead of a venv.
+if (PACK / '.python-deps').is_dir():
+    sys.path.insert(0, str(PACK / '.python-deps'))
+if (PACK / '.model-cache').is_dir():
+    os.environ.setdefault('HF_HOME', str(PACK / '.model-cache'))
 
 
 def norm(ch: str) -> str:
@@ -21,20 +29,41 @@ SKIP = re.compile(r"[\s、。,.!?！？「」『』（）()…・ー〜~\-]")
 
 
 def load_audio(path: str):
-    """decode with ffmpeg ourselves (avoids PyAV version mismatches); falls back to Remotion's bundled ffmpeg."""
-    import shutil, subprocess
+    """Decode PCM WAV, supported by both full and Remotion's minimal FFmpeg.
+
+    Avoid faster-whisper's PyAV decoder: optional PyAV versions differ in the
+    accepted av.open arguments. Run a real executable without a shell on Windows.
+    """
+    import shutil, subprocess, io, wave
     import numpy as np
-    exe = shutil.which("ffmpeg")
-    cmd = [exe] if exe else ["npx", "remotion", "ffmpeg"]
-    raw = subprocess.run(cmd + ["-v", "error", "-i", path, "-ac", "1", "-ar", "16000", "-f", "f32le", "-"], capture_output=True, check=True, shell=(sys.platform == "win32" and not exe)).stdout
-    return np.frombuffer(raw, np.float32).copy()
+    ext = '.exe' if sys.platform == 'win32' else ''
+    exe = os.environ.get('MVPACK_FFMPEG') or shutil.which('ffmpeg')
+    if not exe:
+        candidates = sorted((PACK / 'tools' / 'ffmpeg').glob('*/bin/ffmpeg' + ext))
+        candidates += sorted((PACK / 'remotion' / 'node_modules' / '@remotion').glob('compositor-*/ffmpeg' + ext))
+        exe = next((str(p) for p in candidates if p.is_file()), None)
+    if not exe:
+        raise RuntimeError('音声読み込み: ffmpeg が見つかりません。npm run doctor で同梱版またはシステム版を確認してください。')
+    try:
+        result = subprocess.run([exe, '-v', 'error', '-i', str(path), '-vn', '-ac', '1', '-ar', '16000',
+                                 '-c:a', 'pcm_s16le', '-f', 'wav', '-'], capture_output=True, check=True)
+    except (OSError, subprocess.CalledProcessError) as exc:
+        detail = getattr(exc, 'stderr', b'') or b''
+        raise RuntimeError(f'音声読み込みに失敗しました（{exe}）: {detail.decode("utf-8", errors="replace")[-1200:] or exc}') from exc
+    with wave.open(io.BytesIO(result.stdout), 'rb') as wav:
+        if (wav.getnchannels(), wav.getsampwidth(), wav.getframerate()) != (1, 2, 16000):
+            raise RuntimeError('音声読み込み: PCM WAVの形式が想定と異なります。')
+        samples = wav.readframes(wav.getnframes())
+    return np.frombuffer(samples, dtype='<i2').astype(np.float32) / 32768.0
 
 
 def transcribe(audio: str, model: str, lang: str, prompt: str | None = None):
     try:
         from faster_whisper import WhisperModel
-    except ImportError:
-        sys.exit("❌ faster-whisper が入っていません。\n💡 対処: pip install faster-whisper （無料・ローカル実行。初回はモデルをダウンロードします）")
+    except ImportError as exc:
+        if exc.name != 'faster_whisper':
+            sys.exit(f"❌ faster-whisper の依存読み込みに失敗しました: {exc}\n💡 対処: npm run doctor と同じPython・.python-depsの組み合わせを確認してください。")
+        sys.exit("❌ このPythonから faster-whisper を読み込めません。\n💡 対処: MVPACK_PYTHON・パック内 .python-deps を確認し、本当に未導入なら承認後に pip install faster-whisper（無料）。初回はモデル取得が必要です。")
     m = WhisperModel(model, device="auto", compute_type="int8")
     segs, info = m.transcribe(load_audio(audio), language=lang, word_timestamps=True, vad_filter=False, beam_size=5,
                               initial_prompt=prompt, condition_on_previous_text=False)  # VAD drops sung vocals; lyric prompt keeps the same script (kanji/kana)
