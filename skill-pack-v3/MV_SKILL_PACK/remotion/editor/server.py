@@ -41,7 +41,99 @@ def check_mo(e):
     if 'colors' in e and (not isinstance(e['colors'],dict) or any(k not in ['bg','fg','accent','sub'] or not re.fullmatch(r'#[0-9a-fA-F]{6}',str(v)) for k,v in e['colors'].items())):raise ValueError('図形の色は #RRGGBB で指定してください')
     for k,lo,hi in [('intensity',0,2),('speed',.25,3),('density',0,3)]:
         if k in e and not (num(e[k]) and lo<=e[k]<=hi):raise ValueError(f'図形の{k}は{lo}〜{hi}です')
-SCENE_EDIT_KEYS=['stage','camera','cameraMove','cameraStrength','cameraSync','zoom','x','y','mograph']
+COMP_LAYOUTS=['full','split','panels','pip','mirror','kaleido','custom'];COMP_FX=['white','redneg','tealneg','chroma'];COMP_ENTER=['none','slash','zoom']
+COMP_BORDERS=['none','focus','speed','bolt','h','grid','grow'];COMP_SLIDES=['none','left','right','up','merge'];COMP_LOOKS=['none','ink','mono','cube'];COMP_TITLE=['slam','logo']
+def check_comp(c,n_assets,scene_len):
+    """mirror of src/lib/compose.ts checkComp (scene.comp: panels/layout/effects)"""
+    if c is None:return
+    num=lambda x:isinstance(x,(int,float)) and not isinstance(x,bool) and math.isfinite(x)
+    rng=lambda x,a,b:num(x) and a<=x<=b
+    def bad(m):raise ValueError(m)
+    if not isinstance(c,dict) or not isinstance(c.get('panels'),list) or not 1<=len(c['panels'])<=6:bad('合成のパネルは1〜6枚です')
+    if any(k not in ['layout','panels','backdrop','fx','shake','punch','tilt','enter','border','card','title'] for k in c):bad('合成の設定を確認してください')
+    if 'layout' in c:
+        l=c['layout']
+        if not isinstance(l,dict) or l.get('type') not in COMP_LAYOUTS:bad('合成の型を確認してください')
+        if any(k not in ['type','dir','ratio','angle','count','grow','step'] for k in l):bad('合成の型の設定を確認してください')
+        if 'dir' in l and l['dir'] not in ['v','h']:bad('分割の向きを確認してください')
+        if 'ratio' in l and not rng(l['ratio'],.1,.9):bad('分割の比率は0.1〜0.9です')
+        if 'angle' in l and not rng(l['angle'],-45,45):bad('分割の角度は-45〜45度です')
+        if 'count' in l and not (isinstance(l['count'],int) and not isinstance(l['count'],bool) and 1<=l['count']<=4):bad('コマの数は1〜4です')
+        if 'grow' in l and not isinstance(l['grow'],bool):bad('コマが増える設定を確認してください')
+        if 'step' in l and not rng(l['step'],.25,8):bad('コマが増える間隔は0.25〜8拍です')
+    pk=['asset','from','rate','freeze','box','clip','cx','cy','z','z1','rot','rot1','dx','dx1','dy','dy1','depth','lift','flipX','flipY','appear','until','slide']
+    for p in c['panels']:
+        if not isinstance(p,dict) or any(k not in pk for k in p):bad('パネルの設定を確認してください')
+        if not (isinstance(p.get('asset'),int) and not isinstance(p.get('asset'),bool) and 0<=p['asset']<n_assets):bad('パネルの素材を確認してください')
+        if 'from' in p and not rng(p['from'],0,3600):bad('パネルの開始位置は0秒以上です')
+        if 'rate' in p and not rng(p['rate'],.1,4):bad('パネルの速さは0.1〜4倍です')
+        if any(k in p and not isinstance(p[k],bool) for k in ['freeze','flipX','flipY']):bad('パネルのオン・オフを確認してください')
+        if 'box' in p and not (isinstance(p['box'],list) and len(p['box'])==4 and all(rng(v,0,100) for v in p['box'])):bad('パネルの枠は0〜100%です')
+        if 'clip' in p and not (isinstance(p['clip'],list) and 3<=len(p['clip'])<=12 and all(isinstance(q,list) and len(q)==2 and all(rng(v,-50,150) for v in q) for q in p['clip'])):bad('パネルの切り抜きを確認してください')
+        if any(k in p and not rng(p[k],0,100) for k in ['cx','cy']):bad('切り抜きの中心は0〜100%です')
+        if any(k in p and not rng(p[k],.5,5) for k in ['z','z1']):bad('パネルの拡大は0.5〜5倍です')
+        if any(k in p and not rng(p[k],-180,180) for k in ['rot','rot1']):bad('パネルの傾きは-180〜180度です')
+        if any(k in p and not rng(p[k],-50,50) for k in ['dx','dx1']):bad('パネルの横移動は-50〜50%です')
+        if any(k in p and not rng(p[k],-50,50) for k in ['dy','dy1']):bad('パネルの縦移動は-50〜50%です')
+        if 'depth' in p and not rng(p['depth'],0,3):bad('奥行き（パララックス）は0〜3です')
+        if 'lift' in p and not rng(p['lift'],0,2):bad('明るさの持ち上げは0〜2です')
+        if 'appear' in p and not rng(p['appear'],0,scene_len):bad('パネルの出る秒はシーンの中です')
+        if 'until' in p and not (rng(p['until'],0,scene_len+1e-6) and p['until']>p.get('appear',0)):bad('パネルの消える秒は出る秒より後です')
+        if 'slide' in p and p['slide'] not in COMP_SLIDES:bad('パネルの入り方を確認してください')
+    if 'backdrop' in c:check_backdrop(c['backdrop'],n_assets)
+    if 'fx' in c and not (isinstance(c['fx'],list) and len(c['fx'])<=16 and all(isinstance(x,dict) and all(k in ['t','d','type'] for k in x) and rng(x.get('t'),0,scene_len) and rng(x.get('d'),.01,2) and x.get('type') in COMP_FX for x in c['fx'])):bad('インパクト効果（秒・長さ・種類）を確認してください')
+    if 'shake' in c and not rng(c['shake'],0,60):bad('揺れは0〜60です')
+    if 'punch' in c and not rng(c['punch'],0,1):bad('ズームパンチは0〜1です')
+    if 'tilt' in c and not rng(c['tilt'],-45,45):bad('傾きは-45〜45度です')
+    if 'enter' in c and c['enter'] not in COMP_ENTER:bad('入り方を確認してください')
+    if 'border' in c and c['border'] not in COMP_BORDERS:bad('線の種類を確認してください')
+    if 'card' in c:
+        k=c['card']
+        if not isinstance(k,dict) or not isinstance(k.get('name'),str) or not k['name'] or len(k['name'])>40 or ('sub' in k and (not isinstance(k['sub'],str) or len(k['sub'])>60)) or ('color' in k and not re.fullmatch(r'#[0-9a-fA-F]{6}',str(k['color']))) or ('side' in k and k['side'] not in ['left','right']) or any(x not in ['name','sub','color','side'] for x in k):bad('名前カードを確認してください')
+    if 'title' in c:
+        k=c['title']
+        if not isinstance(k,dict) or not isinstance(k.get('text'),str) or not k['text'] or len(k['text'])>40 or ('at' in k and not rng(k['at'],0,scene_len)) or ('style' in k and k['style'] not in COMP_TITLE) or any(x not in ['text','at','style'] for x in k):bad('タイトル文字を確認してください')
+BD_KEYS=['asset','from','cx','cy','z','z1','rot','rot1','dx','dx1','dy','dy1','depth','dim','blur','lift']
+def check_backdrop(b,n_assets=None):
+    """mirror of src/lib/compose.ts checkBackdrop (scene/global backdrop: black / footage / illustration asset + camera)"""
+    num=lambda x:isinstance(x,(int,float)) and not isinstance(x,bool) and math.isfinite(x)
+    rng=lambda x,a,b:num(x) and a<=x<=b
+    def bad(m):raise ValueError(m)
+    if isinstance(b,str) and b in ['black','footage']:return
+    if not isinstance(b,dict) or any(k not in BD_KEYS for k in b):bad('背景は black / footage / イラスト素材です')
+    a=b.get('asset')
+    if not (isinstance(a,int) and not isinstance(a,bool) and a>=0 and (n_assets is None or a<n_assets)):bad('背景の素材を確認してください')
+    if 'from' in b and not rng(b['from'],0,3600):bad('背景の開始位置は0秒以上です')
+    if any(k in b and not rng(b[k],0,100) for k in ['cx','cy']):bad('背景の中心は0〜100%です')
+    if any(k in b and not rng(b[k],.5,5) for k in ['z','z1']):bad('背景の拡大は0.5〜5倍です')
+    if any(k in b and not rng(b[k],-180,180) for k in ['rot','rot1']):bad('背景の傾きは-180〜180度です')
+    if any(k in b and not rng(b[k],-50,50) for k in ['dx','dx1','dy','dy1']):bad('背景の移動は-50〜50%です')
+    if 'depth' in b and not rng(b['depth'],0,3):bad('奥行き（パララックス）は0〜3です')
+    if 'dim' in b and not rng(b['dim'],0,1):bad('背景の暗さは0〜1です')
+    if 'blur' in b and not rng(b['blur'],0,40):bad('背景のぼかしは0〜40pxです')
+    if 'lift' in b and not rng(b['lift'],0,2):bad('明るさの持ち上げは0〜2です')
+def check_gcomp(g,n_assets=None):
+    """mirror of src/lib/compose.ts checkGlobalComp (data.comp: colours, halftone, vignette, grade)"""
+    if g is None:return
+    num=lambda x:isinstance(x,(int,float)) and not isinstance(x,bool) and math.isfinite(x)
+    hexc=lambda v:re.fullmatch(r'#[0-9a-fA-F]{6}',str(v))
+    def bad(m):raise ValueError(m)
+    if not isinstance(g,dict) or any(k not in ['colors','halftone','vignette','grade','particles','endFade','shade','camera','backdrop'] for k in g):bad('合成の全体設定を確認してください')
+    if 'backdrop' in g:check_backdrop(g['backdrop'],n_assets)
+    if 'camera' in g:
+        m=g['camera']
+        if not isinstance(m,dict) or any(k not in ['shakeHz','punchSec','ease'] for k in m) or ('shakeHz' in m and not (num(m['shakeHz']) and 1<=m['shakeHz']<=30)) or ('punchSec' in m and not (num(m['punchSec']) and 0.05<=m['punchSec']<=1)) or ('ease' in m and m['ease'] not in ['smooth','linear']):bad('カメラ設定を確認してください（揺れ1〜30Hz・パンチ0.05〜1秒・smooth/linear）')
+    if 'colors' in g and (not isinstance(g['colors'],dict) or any(k not in ['red','teal'] or not hexc(v) for k,v in g['colors'].items())):bad('合成の色は #RRGGBB で指定してください')
+    if any(k in g and not (num(g[k]) and 0<=g[k]<=1) for k in ['halftone','vignette']):bad('網点・周辺の暗さは0〜1です')
+    if any(k in g and not isinstance(g[k],bool) for k in ['particles','endFade','shade']):bad('合成の全体設定を確認してください')
+    if 'grade' in g:
+        k=g['grade']
+        if not isinstance(k,dict) or k.get('look') not in COMP_LOOKS or any(x not in ['look','keep','base','lut'] for x in k):bad('色調（ルック）を確認してください')
+        if 'keep' in k and not (isinstance(k['keep'],list) and len(k['keep'])<=4 and all(hexc(v) for v in k['keep'])):bad('残す色は #RRGGBB で4色までです')
+        if 'base' in k and not (num(k['base']) and 0<=k['base']<=1):bad('残す彩度は0〜1です')
+        if 'lut' in k and not (isinstance(k['lut'],str) and re.fullmatch(r'[A-Za-z0-9_\-/.]+\.cube',k['lut']) and '..' not in k['lut'] and not k['lut'].startswith('/')):bad('LUTファイルはプロジェクト内の .cube を指定してください')
+        if k['look']=='cube' and not k.get('lut'):bad('LUTファイルを指定してください')
+SCENE_EDIT_KEYS=['stage','camera','cameraMove','cameraStrength','cameraSync','zoom','x','y','mograph','comp']
 STAGE_STYLES=['auto','tate','bigBehind','band','pop','ghost','center']
 def mark_edited(d):
     """v6.5 (mirror of src/lib/lyricEdits.tsx): built-in look = default, editor edits always win. `edited` = keys that differ from original-source.json."""
@@ -64,6 +156,8 @@ def mark_edited(d):
     else:d.pop('editedStage',None)
     if isinstance(d.get('mographEdit'),dict) and d['mographEdit'] and d['mographEdit']!=orig.get('mographEdit'):d['editedMograph']=True
     else:d.pop('editedMograph',None)
+    if isinstance(d.get('comp'),dict) and d['comp']!=orig.get('comp'):d['editedComp']=True
+    else:d.pop('editedComp',None)
     for x in d.get('scenes',[]):
         e=diff(x,S.get(x.get('id')),SCENE_EDIT_KEYS)
         if e:x['edited']=e
@@ -77,6 +171,8 @@ def validate(d):
     if d.get('mograph')!=orig.get('mograph') or d.get('mographShots')!=orig.get('mographShots'):raise ValueError('元の図形レイヤーの設計は保持してください（変更は mographEdit / 場面の mograph に）')
     check_mo(d.get('mographEdit'))
     for s in d['scenes']:check_mo(s.get('mograph'))
+    check_gcomp(d.get('comp'),len(orig['assets']))
+    for i,s in enumerate(d['scenes']):check_comp(s.get('comp'),len(orig['assets']),(d['scenes'][i+1]['start'] if i<len(d['scenes'])-1 else d['duration'])-s['start'])
     sids=[s.get('id') for s in d['scenes']]
     if any(not isinstance(x,str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,64}',x) for x in sids) or len(set(sids))!=len(sids):raise ValueError('場面IDを確認してください（切る・つなげるで重複しないように）')
     def finite(x):return isinstance(x,(float,int)) and math.isfinite(x)
@@ -130,7 +226,7 @@ def validate(d):
         if l.get('font','noto_serif') not in [f['id'] for f in fonts]:raise ValueError('利用できる書体を選択してください')
         if not finite(l.get('angle',0)) or not -180<=l.get('angle',0)<=180:raise ValueError('角度は-180〜180度です')
         if l.get('position','manual') not in ['manual','tl','tc','tr','ml','mc','mr','bl','bc','br']:raise ValueError('配置を確認してください')
-        if l.get('effect','none') not in ['none','double','shadow','glow','rgb'] or not finite(l.get('effectOffset',6)) or not 1<=l.get('effectOffset',6)<=24:raise ValueError('文字効果を確認してください')
+        if l.get('effect','none') not in ['none','double','shadow','glow','rgb','outline'] or not finite(l.get('effectOffset',6)) or not 1<=l.get('effectOffset',6)<=24:raise ValueError('文字効果を確認してください')
         for key in ['entrance','departure']:
             if l.get(key,'none') not in ['none','lr','tb','fade']:raise ValueError('文字の入り方・消え方を確認してください')
         if not finite(l.get('transitionDuration',.7)) or not .1<=l.get('transitionDuration',.7)<=2:raise ValueError('文字の切替時間は0.1〜2秒です')

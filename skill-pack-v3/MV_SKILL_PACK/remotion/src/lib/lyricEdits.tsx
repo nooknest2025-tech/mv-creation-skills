@@ -5,7 +5,7 @@ import React from "react";
  * The result is stored on the line as `edited: string[]` (and on scenes as `edited`), recomputed by the editor front-end and by server.py on save/export.
  */
 export const LYRIC_EDIT_KEYS = ["motion", "params", "font", "fill", "stroke", "accent", "scale", "y", "position", "angle", "effect", "effectOffset", "motionDuration", "entrance", "departure", "transitionDuration", "stageStyle"] as const;
-export const SCENE_EDIT_KEYS = ["stage", "camera", "cameraMove", "cameraStrength", "cameraSync", "zoom", "x", "y", "mograph"] as const;
+export const SCENE_EDIT_KEYS = ["stage", "camera", "cameraMove", "cameraStrength", "cameraSync", "zoom", "x", "y", "mograph", "comp"] as const;
 /** stage-native lyric styles a custom stage offers per line (editor: 「ステージの文字スタイル」). */
 export const STAGE_STYLES: Record<string, string> = { auto: "おまかせ（元の見た目）", tate: "縦書き吹き出し", bigBehind: "後ろに大きく", band: "下の帯", pop: "ポップ（強調語を大きく）", ghost: "斜めの半透明", center: "中央の縦書き" };
 const same = (a: any, b: any) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
@@ -21,6 +21,7 @@ export function markEdited(data: any, orig: any) {
   for (const l of data.lyrics ?? []) { const e = editedKeys(l, baseOf(l, L), LYRIC_EDIT_KEYS); if (e.length) l.edited = e; else delete l.edited; }
   if (data.stage && typeof data.stage === "object" && Object.keys(data.stage).length && !orig.stage) data.editedStage = true; else delete data.editedStage;
   if (data.mographEdit && typeof data.mographEdit === "object" && Object.keys(data.mographEdit).length && !same(data.mographEdit, orig.mographEdit)) data.editedMograph = true; else delete data.editedMograph;
+  if (data.comp && typeof data.comp === "object" && !same(data.comp, orig.comp)) data.editedComp = true; else delete data.editedComp;
   for (const s of data.scenes ?? []) { const e = editedKeys(s, S.get(s.id), SCENE_EDIT_KEYS); if (e.length) s.edited = e; else delete s.edited; }
   return data;
 }
@@ -37,5 +38,7 @@ export function combined(el: React.ReactNode, l: any, t: number, cx: number, cy:
   if (kind === "fade") return <div style={{ position: "absolute", inset: 0, opacity: 1 - amount }}>{el}</div>;
   return <>{[-1, 1].map((sign) => <div key={sign} style={{ position: "absolute", inset: 0, transform: `translate(${kind === "lr" ? sign * W * 0.42 * amount : 0}px,${kind === "tb" ? sign * H * 0.42 * amount : 0}px)`, opacity: 1 - amount * 0.8 }}><div style={{ position: "absolute", inset: 0, clipPath: kind === "lr" ? (sign < 0 ? `inset(0 ${W - cx}px 0 0)` : `inset(0 0 0 ${cx}px)`) : (sign < 0 ? `inset(0 0 ${H - cy}px 0)` : `inset(${cy}px 0 0 0)`) }}>{el}</div></div>)}</>;
 }
-export const effectFilter = (effect: string, offset = 6) => effect === "shadow" ? `drop-shadow(${offset}px ${offset}px 3px #101310)` : effect === "glow" ? `drop-shadow(0 0 ${offset + 2}px #f4dfb0) drop-shadow(0 0 ${offset * 2 + 3}px #e6aa96)` : undefined;
+/** outline: a hard ring in the stroke colour (8 zero-blur drop-shadows, ~offset/2 px) + a soft dark drop shadow, so white text reads over white frames. */
+export const outlineFilter = (offset = 6, stroke = "#000000") => { const r = Math.max(1.5, offset / 2), d = r * 0.7071; return [[r, 0], [-r, 0], [0, r], [0, -r], [d, d], [-d, d], [d, -d], [-d, -d]].map(([x, y]) => `drop-shadow(${x.toFixed(2)}px ${y.toFixed(2)}px 0 ${stroke})`).join(" ") + ` drop-shadow(${(offset * 0.4).toFixed(1)}px ${(offset * 0.8).toFixed(1)}px ${offset * 1.5}px rgba(0,0,0,0.8))`; };
+export const effectFilter = (effect: string, offset = 6, stroke?: string) => effect === "outline" ? outlineFilter(offset, stroke) : effect === "shadow" ? `drop-shadow(${offset}px ${offset}px 3px #101310)` : effect === "glow" ? `drop-shadow(0 0 ${offset + 2}px #f4dfb0) drop-shadow(0 0 ${offset * 2 + 3}px #e6aa96)` : undefined;
 export const POSITION_XY: Record<string, [number, number]> = { tl: [0.2, 0.18], tc: [0.5, 0.18], tr: [0.8, 0.18], ml: [0.2, 0.5], mc: [0.5, 0.5], mr: [0.8, 0.5], bl: [0.2, 0.84], bc: [0.5, 0.84], br: [0.8, 0.84] };

@@ -126,10 +126,12 @@ export const Visuals: React.FC<{ p: RenderProps }> = ({ p }) => {
     <Glow f={p.finish} U={Math.min(W, H)}><AbsoluteFill style={{ transform: `translate(${r.uniform(-1, 1) * sh}px, ${r.uniform(-1, 1) * sh}px) scale(${1 + 0.012 * (p.shake ?? 0) * bp})`, filter: grade?.filter && grade.filter !== "none" ? grade.filter : undefined }}>
       {!hasMedia || !shot ? (p.visuals?.bg && p.visuals.bg !== "none" ? <Reactive p={p} sec={shot?.sectionType ?? "other"} hasMedia={false} layer="bg" /> : <Abstract t={t} p={p} sectionType={shot?.sectionType ?? "other"} />) :
         p.shots.map((s) => {
-          if (!(t >= s.start - 0.001 && t < s.end)) return null;
+          // frame-exact activity: the same rounded boundaries decide visibility and the Sequence window (no 1-frame black gap between shots)
+          const from = Math.round((s.start - p.startAt) * fps), to = Math.round((s.end - p.startAt) * fps);
+          const isLast = s === p.shots[p.shots.length - 1];
+          if (!(frame >= from && (frame < to || (isLast && frame >= to)))) return null;
           const prog = clamp((t - s.start) / Math.max(0.01, s.end - s.start));
-          const from = Math.round((s.start - p.startAt) * fps);
-          return <Sequence key={s.id} from={from} durationInFrames={Math.max(1, Math.round((s.end - s.start) * fps))} layout="none">
+          return <Sequence key={s.id} from={from} durationInFrames={Math.max(1, to - from + (isLast ? fps : 0))} layout="none">
             {s.move === "parallax" && s.kind === "image" ? <>
               {/* pseudo 2.5D: blurred far layer moves slower, sharp mid layer faster, vignette mask fakes depth */}
               <AbsoluteFill><Media shot={{ ...s, move: "drift_l", puppet: undefined }} W={W} H={H} fps={fps} p={prog} extraScale={1.25} blur={Math.min(W, H) * 0.012} rp={p} t={t} /></AbsoluteFill>

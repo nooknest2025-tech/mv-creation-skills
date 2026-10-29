@@ -172,6 +172,12 @@ export function buildProps(song0: Song, cfg: MVConfig, media: MediaItem[], o: { 
       return { start: s.start, end: s.end, type: s.type, energy: ranks[i] ?? 0.5, preset: want === "auto" ? autoPartsPreset(s.type, ranks[i] ?? 0.5) : want }; }) };
   }
   if (props.parts) { const right = (props.parts.x ?? 0.5) < 0.5; for (const L of lines) if (L.params.anchor === undefined && /^pro_/.test(L.style)) L.params.anchor = (right ? [2, 5, 8] : [0, 3, 6])[L.li % 3]; } // keep lyrics off the character
+  // pro_* styles place text on a 3x3 grid and ignored textY/textYShift/position. When the user set a position, or the face-aware
+  // placement picked a band for the shot, put pro lines on that band (horizontally centred) so the setting actually applies.
+  for (const L of lines) if (L.params.anchor === undefined && /^pro_/.test(L.style)) {
+    const sh = shots.find((s) => L.start >= s.start && L.start < s.end);
+    if (userY || sh?.textY !== undefined) { L.params.anchor = "bottom"; if (L.params.textY === undefined) L.params.textY = sh?.textY ?? defY; }
+  }
   if (mog) (props as any).mographNotes = mog.sections.map((s) => s.why);
   (props as any).lipsyncNotes = lipsyncNotes;
   if (cfg.critic !== false) {

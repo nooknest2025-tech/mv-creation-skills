@@ -13,13 +13,22 @@ const MINCHO = "'Noto Serif JP', 'Noto Sans JP', serif";
 const FG = "var(--lyric-fill, #f4f2ec)", AC = "var(--lyric-accent, #d7192a)", BG = "var(--lyric-stroke, #0b0b0c)";
 const U = (c: Ctx) => Math.min(c.W, c.H);
 
+const KATA = /[ァ-ヺー・]/, LATIN = /[A-Za-z0-9!?'’]/, NOSTART = /[、。，．・ー！？!?）)」』】〉ゃゅょっャュョッァィゥェォ]/;
+/** line-break rule: never before closing punctuation / small kana, never inside a katakana word (ミスター・サンプルマン) or a latin word. */
+export function canBreak(chars: string[], i: number) {
+  const a = chars[i - 1] ?? "", b = chars[i] ?? "";
+  if (NOSTART.test(b) || /[（(「『【]/.test(a)) return false;
+  if (KATA.test(a) && KATA.test(b)) return false;
+  if (LATIN.test(a) && LATIN.test(b)) return false;
+  return true;
+}
 export interface PItem { i: number; ch: string; x: number; y: number; px: number; adv: number; tier: Tier; t0: number }
 /** hierarchy-aware layout at a grid anchor (or bottom-centre when anchor = "bottom"). */
 export function proLayout(c: Ctx, size: number, o: { mix?: boolean; heavy?: boolean; anchor?: number | "bottom"; maxw?: number; particle?: number; key?: number } = {}) {
   const chars = c.L.chars.map((x) => x.ch);
   const tiers = hierarchy(chars, { mix: o.mix, particle: o.particle, key: o.key });
   const base = size * U(c) * 1.2 * c.k * Number(c.L.params.size ?? 1);
-  const anchor = o.anchor ?? (c.P.anchor !== undefined ? Number(c.P.anchor) : flowAnchor(c.L.li, hash(c.L.section)));
+  const anchor = o.anchor ?? (c.P.anchor === "bottom" ? "bottom" : c.P.anchor !== undefined ? Number(c.P.anchor) : flowAnchor(c.L.li, hash(c.L.section)));
   const [ax, ay] = anchor === "bottom" ? [0.5, c.textY] : gridAnchor(anchor);
   const align = anchor === "bottom" ? 0 : ax < 0.4 ? -1 : ax > 0.6 ? 1 : 0;
   const maxw = (o.maxw ?? (align ? 0.62 : 0.86)) * c.W;
@@ -27,9 +36,9 @@ export function proLayout(c: Ctx, size: number, o: { mix?: boolean; heavy?: bool
   for (let it = 0; it < 8; it++) {
     advs = chars.map((ch, i) => { const px = base * k * tiers[i].scale; return advOf(ch, px) * (1 + (o.heavy ? trackingFor(tiers[i].weight) : 0.02)) + (/\s/.test(ch) ? px * 0.1 : 0); });
     rows = []; widths = []; let cur: number[] = [], w = 0;
-    chars.forEach((ch, i) => { if (cur.length && w + advs[i] > maxw && !/[、。ゃゅょっー]/.test(ch)) { rows.push(cur); widths.push(w); cur = []; w = 0; } cur.push(i); w += advs[i]; });
+    chars.forEach((ch, i) => { if (cur.length && w + advs[i] > maxw && canBreak(chars, i)) { rows.push(cur); widths.push(w); cur = []; w = 0; } cur.push(i); w += advs[i]; });
     rows.push(cur); widths.push(w);
-    if (rows.length <= 2) break; k *= 0.88;
+    if (rows.length <= 2 && Math.max(...widths) <= maxw * 1.001) break; k *= 0.88;
   }
   const lh = base * k * Math.max(...tiers.map((t) => t.scale)) * 1.12;
   const starts = unitStarts(c.L.chars, c.L.chars[0].t0, 30);

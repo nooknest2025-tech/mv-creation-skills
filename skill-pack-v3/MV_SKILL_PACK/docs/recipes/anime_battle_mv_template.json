@@ -1,0 +1,1412 @@
+{
+ "name": "アニメバトルMV（30秒・サビ2回）",
+ "sourceBpm": 139,
+ "fps": 24,
+ "lengthBeats": 71.335,
+ "note": "beat = シーン開始の拍（0始まり）。slot = 素材の役割名。npm run recipe:battle で既存プロジェクトに当てはめます。",
+ "slots": [
+  "hook_clash",
+  "eyes_closeup",
+  "a_mask_extreme",
+  "b_barrier_hand",
+  "a_stance",
+  "b_entrance",
+  "a_slash",
+  "b_hex_barrier",
+  "clash_sparks",
+  "top_angle",
+  "ots_angle",
+  "dash_explosion",
+  "a_spin_red",
+  "low_angle",
+  "climax",
+  "a_red_fog",
+  "b_wide",
+  "a_eyes_lowstance",
+  "ill_backdrop",
+  "ill_crest_a",
+  "ill_crest_b",
+  "ill_slash",
+  "ill_mask_closeup",
+  "ill_b_hand",
+  "ill_talismans",
+  "ill_moon_impact",
+  "ill_backs"
+ ],
+ "comp": {
+  "colors": {
+   "red": "#E0182D",
+   "teal": "#2FF5D0"
+  },
+  "halftone": 0.12,
+  "vignette": 0.3,
+  "grade": {
+   "look": "ink",
+   "base": 0.1
+  },
+  "camera": {
+   "shakeHz": 7,
+   "punchSec": 0.22,
+   "ease": "smooth"
+  },
+  "backdrop": {
+   "slot": "ill_backdrop",
+   "z": 1.15,
+   "z1": 1.3,
+   "dx": -4,
+   "dx1": 4,
+   "dy": 2,
+   "dy1": -2,
+   "depth": 0.4,
+   "dim": 0,
+   "lift": 0.4
+  }
+ },
+ "scenes": [
+  {
+   "beat": 0.0,
+   "label": "カット1",
+   "comp": {
+    "layout": {
+     "type": "full"
+    },
+    "panels": [
+     {
+      "slot": "hook_clash",
+      "cx": 45,
+      "cy": 45,
+      "z": 1.05,
+      "rot": -5,
+      "z1": 1.35,
+      "rot1": -2
+     }
+    ],
+    "fx": [
+     {
+      "t": 0,
+      "d": 0.05,
+      "type": "chroma"
+     },
+     {
+      "t": 0,
+      "d": 0.03,
+      "type": "white"
+     },
+     {
+      "t": 0.33,
+      "d": 0.07,
+      "type": "chroma"
+     }
+    ],
+    "shake": 14,
+    "punch": 0.06,
+    "title": {
+     "text": "TITLE",
+     "style": "slam"
+    }
+   }
+  },
+  {
+   "beat": 0.996,
+   "label": "カット2",
+   "comp": {
+    "layout": {
+     "type": "full"
+    },
+    "panels": [
+     {
+      "slot": "eyes_closeup",
+      "from": 1,
+      "cy": 45,
+      "z": 1.1,
+      "rot": 4,
+      "z1": 1.18,
+      "lift": 0.25
+     }
+    ],
+    "fx": [
+     {
+      "t": 0,
+      "d": 0.05,
+      "type": "chroma"
+     },
+     {
+      "t": 0,
+      "d": 0.067,
+      "type": "redneg"
+     },
+     {
+      "t": 0.07,
+      "d": 0.06,
+      "type": "chroma"
+     }
+    ]
+   }
+  },
+  {
+   "beat": 1.992,
+   "label": "カット3",
+   "comp": {
+    "layout": {
+     "type": "split",
+     "dir": "v",
+     "ratio": 0.5,
+     "angle": 23.1063
+    },
+    "panels": [
+     {
+      "slot": "a_mask_extreme",
+      "from": 0.5,
+      "cy": 40,
+      "dx": -6,
+      "z1": 1.1,
+      "dx1": 4,
+      "lift": 0.3
+     },
+     {
+      "slot": "b_barrier_hand",
+      "from": 0.3,
+      "cx": 45,
+      "cy": 40,
+      "z": 1.6,
+      "rot": -8,
+      "dx": 6,
+      "z1": 1.68,
+      "dx1": -4,
+      "flipX": true
+     }
+    ],
+    "enter": "slash"
+   }
+  },
+  {
+   "beat": 4.008,
+   "label": "カット4",
+   "comp": {
+    "layout": {
+     "type": "full"
+    },
+    "panels": [
+     {
+      "slot": "hook_clash",
+      "from": 0.5,
+      "cx": 46,
+      "cy": 45,
+      "z": 1.55,
+      "rot": 7,
+      "z1": 1.85,
+      "rot1": -3,
+      "flipX": true
+     }
+    ],
+    "fx": [
+     {
+      "t": 0,
+      "d": 0.05,
+      "type": "chroma"
+     },
+     {
+      "t": 0.6,
+      "d": 0.05,
+      "type": "chroma"
+     }
+    ]
+   }
+  },
+  {
+   "beat": 6.788,
+   "label": "カット4.5",
+   "comp": {
+    "layout": {
+     "type": "full"
+    },
+    "panels": [
+     {
+      "slot": "hook_clash",
+      "from": 5.45,
+      "rot": -3,
+      "z1": 1.25
+     }
+    ],
+    "fx": [
+     {
+      "t": 0,
+      "d": 0.05,
+      "type": "chroma"
+     },
+     {
+      "t": 0,
+      "d": 0.067,
+      "type": "white"
+     }
+    ],
+    "shake": 18,
+    "punch": 0.06
+   }
+  },
+  {
+   "beat": 7.993,
+   "label": "カット5",
+   "comp": {
+    "layout": {
+     "type": "full"
+    },
+    "panels": [
+     {
+      "slot": "a_stance",
+      "from": 1,
+      "freeze": true,
+      "cx": 55,
+      "cy": 35,
+      "z": 1.35,
+      "rot": -4,
+      "z1": 1.5
+     },
+     {
+      "slot": "ill_crest_a",
+      "cx": 60,
+      "z": 1.2,
+      "z1": 1.5,
+      "rot": -6,
+      "rot1": 0,
+      "dx": 6,
+      "dx1": -4,
+      "until": 0.43,
+      "depth": 1.4
+     }
+    ],
+    "fx": [
+     {
+      "t": 0,
+      "d": 0.05,
+      "type": "chroma"
+     },
+     {
+      "t": 0,
+      "d": 0.067,
+      "type": "white"
+     }
+    ],
+    "card": {
+     "name": "キャラA",
+     "sub": "CHARACTER A",
+     "color": "#E0182D",
+     "side": "left"
+    },
+    "punch": 0.06
+   }
+  },
+  {
+   "beat": 10.008,
+   "label": "カット6",
+   "comp": {
+    "layout": {
+     "type": "full"
+    },
+    "panels": [
+     {
+      "slot": "b_entrance",
+      "from": 3,
+      "freeze": true,
+      "cy": 30,
+      "z": 1.5,
+      "rot": 3,
+      "z1": 1.58,
+      "flipX": true
+     },
+     {
+      "slot": "ill_crest_b",
+      "cx": 40,
+      "z": 1.5,
+      "z1": 1.2,
+      "rot": 6,
+      "rot1": 0,
+      "dy": 3,
+      "dy1": -3,
+      "until": 0.5,
+      "depth": 1.6
+     }
+    ],
+    "fx": [
+     {
+      "t": 0,
+      "d": 0.05,
+      "type": "chroma"
+     },
+     {
+      "t": 0.77,
+      "d": 0.06,
+      "type": "tealneg"
+     }
+    ],
+    "enter": "slash",
+    "card": {
+     "name": "キャラB",
+     "sub": "CHARACTER B",
+     "color": "#2FF5D0",
+     "side": "right"
+    }
+   }
+  },
+  {
+   "beat": 12.487,
+   "label": "カット7",
+   "comp": {
+    "layout": {
+     "type": "panels",
+     "count": 2,
+     "ratio": 0.5
+    },
+    "panels": [
+     {
+      "slot": "eyes_closeup",
+      "from": 1.2,
+      "cy": 42,
+      "z": 1.3,
+      "rot": -4,
+      "z1": 1.38,
+      "lift": 0.25
+     },
+     {
+      "slot": "eyes_closeup",
+      "from": 3.3,
+      "cy": 45,
+      "z": 1.2,
+      "rot": 4,
+      "z1": 1.28,
+      "lift": 0.25
+     }
+    ],
+    "fx": [
+     {
+      "t": 0,
+      "d": 0.05,
+      "type": "chroma"
+     },
+     {
+      "t": 0.43,
+      "d": 0.05,
+      "type": "white"
+     },
+     {
+      "t": 0.86,
+      "d": 0.05,
+      "type": "chroma"
+     },
+     {
+      "t": 1.29,
+      "d": 0.05,
+      "type": "white"
+     }
+    ],
+    "border": "bolt"
+   }
+  },
+  {
+   "beat": 16.101,
+   "label": "カット8",
+   "comp": {
+    "layout": {
+     "type": "custom"
+    },
+    "panels": [
+     {
+      "slot": "ill_slash",
+      "z": 1.15,
+      "z1": 1.3,
+      "rot": -10,
+      "rot1": -6,
+      "dx": 10,
+      "dx1": -10,
+      "until": 0.6
+     },
+     {
+      "slot": "a_slash",
+      "from": 0.5,
+      "cx": 30,
+      "cy": 40,
+      "z": 1.5,
+      "rot": -6,
+      "z1": 1.58,
+      "clip": [
+       [
+        0,
+        0
+       ],
+       [
+        40,
+        0
+       ],
+       [
+        30,
+        100
+       ],
+       [
+        0,
+        100
+       ]
+      ]
+     },
+     {
+      "slot": "b_hex_barrier",
+      "from": 0.2,
+      "cx": 35,
+      "z": 1.3,
+      "z1": 1.5,
+      "appear": 0.43,
+      "slide": "up",
+      "clip": [
+       [
+        41,
+        0
+       ],
+       [
+        72,
+        0
+       ],
+       [
+        64,
+        100
+       ],
+       [
+        31,
+        100
+       ]
+      ]
+     },
+     {
+      "slot": "clash_sparks",
+      "cx": 45,
+      "cy": 45,
+      "z": 1.8,
+      "rot": 8,
+      "z1": 2.1,
+      "appear": 0.86,
+      "slide": "left",
+      "clip": [
+       [
+        73,
+        0
+       ],
+       [
+        100,
+        0
+       ],
+       [
+        100,
+        100
+       ],
+       [
+        65,
+        100
+       ]
+      ]
+     }
+    ],
+    "fx": [
+     {
+      "t": 0,
+      "d": 0.05,
+      "type": "chroma"
+     },
+     {
+      "t": 0.86,
+      "d": 0.05,
+      "type": "white"
+     }
+    ],
+    "border": "speed"
+   }
+  },
+  {
+   "beat": 19.738,
+   "label": "カット9",
+   "comp": {
+    "layout": {
+     "type": "full"
+    },
+    "panels": [
+     {
+      "slot": "a_slash",
+      "from": 2,
+      "z": 1.15,
+      "rot": -10,
+      "dx": 8,
+      "z1": 1.23,
+      "dx1": -8
+     }
+    ],
+    "fx": [
+     {
+      "t": 0,
+      "d": 0.05,
+      "type": "chroma"
+     },
+     {
+      "t": 0.4,
+      "d": 0.05,
+      "type": "chroma"
+     }
+    ],
+    "enter": "slash"
+   }
+  },
+  {
+   "beat": 21.73,
+   "label": "カット10",
+   "comp": {
+    "layout": {
+     "type": "full"
+    },
+    "panels": [
+     {
+      "slot": "top_angle",
+      "from": 4,
+      "cy": 55,
+      "z": 1.2,
+      "rot": -15,
+      "z1": 1.6
+     }
+    ],
+    "fx": [
+     {
+      "t": 0,
+      "d": 0.05,
+      "type": "chroma"
+     },
+     {
+      "t": 0,
+      "d": 0.067,
+      "type": "white"
+     },
+     {
+      "t": 0.07,
+      "d": 0.067,
+      "type": "tealneg"
+     }
+    ],
+    "shake": 16,
+    "punch": 0.06
+   }
+  },
+  {
+   "beat": 22.727,
+   "label": "カット11",
+   "comp": {
+    "layout": {
+     "type": "pip"
+    },
+    "panels": [
+     {
+      "slot": "ots_angle",
+      "from": 0.4,
+      "cy": 45,
+      "z": 1.05,
+      "rot": -3,
+      "z1": 1.3
+     },
+     {
+      "slot": "a_mask_extreme",
+      "from": 1,
+      "cx": 55,
+      "cy": 45,
+      "z": 2.2,
+      "lift": 0.3
+     },
+     {
+      "slot": "dash_explosion",
+      "from": 0.5,
+      "cy": 55,
+      "z": 1.3
+     },
+     {
+      "slot": "ill_mask_closeup",
+      "cy": 40,
+      "z": 1.05,
+      "z1": 1.6,
+      "dy": 4,
+      "dy1": -4,
+      "appear": 0.86,
+      "until": 1.46
+     }
+    ],
+    "fx": [
+     {
+      "t": 0.86,
+      "d": 0.05,
+      "type": "white"
+     },
+     {
+      "t": 1.38,
+      "d": 0.06,
+      "type": "redneg"
+     }
+    ]
+   }
+  },
+  {
+   "beat": 27.476,
+   "label": "カット12",
+   "comp": {
+    "layout": {
+     "type": "full"
+    },
+    "panels": [
+     {
+      "slot": "a_spin_red",
+      "from": 0.5,
+      "cy": 45,
+      "z": 1.2,
+      "rot": 12,
+      "z1": 1.45,
+      "rot1": -4,
+      "lift": 0.6
+     }
+    ],
+    "enter": "slash"
+   }
+  },
+  {
+   "beat": 29.491,
+   "label": "カット13",
+   "comp": {
+    "layout": {
+     "type": "split",
+     "dir": "v",
+     "ratio": 0.5,
+     "angle": 23.1063
+    },
+    "panels": [
+     {
+      "slot": "top_angle",
+      "from": 2.6,
+      "z1": 1.2,
+      "rot1": 25
+     },
+     {
+      "slot": "b_barrier_hand",
+      "from": 1.5,
+      "cx": 45,
+      "cy": 40,
+      "z": 1.5,
+      "rot": -6,
+      "z1": 1.58,
+      "flipX": true
+     },
+     {
+      "slot": "ill_b_hand",
+      "clip": [
+       [
+        62,
+        0
+       ],
+       [
+        100,
+        0
+       ],
+       [
+        100,
+        100
+       ],
+       [
+        38,
+        100
+       ]
+      ],
+      "cy": 45,
+      "z": 1.3,
+      "z1": 1.8,
+      "rot": 0,
+      "rot1": 8,
+      "dx": 6,
+      "dx1": -2,
+      "dy": 4,
+      "dy1": -4,
+      "until": 0.6,
+      "depth": 1.6
+     }
+    ],
+    "fx": [
+     {
+      "t": 0,
+      "d": 0.05,
+      "type": "chroma"
+     },
+     {
+      "t": 0,
+      "d": 0.05,
+      "type": "tealneg"
+     }
+    ]
+   }
+  },
+  {
+   "beat": 31.483,
+   "label": "カット14",
+   "comp": {
+    "layout": {
+     "type": "panels",
+     "count": 2,
+     "ratio": 0.6
+    },
+    "panels": [
+     {
+      "slot": "low_angle",
+      "from": 1.5,
+      "cy": 35,
+      "rot": -8,
+      "z1": 1.08
+     },
+     {
+      "slot": "b_hex_barrier",
+      "cx": 40,
+      "z": 1.5,
+      "z1": 1.8,
+      "flipX": true
+     },
+     {
+      "slot": "ill_talismans",
+      "box": [
+       60,
+       0,
+       40,
+       100
+      ],
+      "z": 1.4,
+      "z1": 1.8,
+      "rot": 0,
+      "rot1": 15,
+      "dy": -4,
+      "dy1": 4,
+      "until": 0.55,
+      "slide": "left"
+     }
+    ],
+    "shake": 14
+   }
+  },
+  {
+   "beat": 33.476,
+   "label": "カット15.1",
+   "comp": {
+    "layout": {
+     "type": "full"
+    },
+    "panels": [
+     {
+      "slot": "ill_talismans",
+      "cx": 55,
+      "z": 1.6,
+      "z1": 2.0,
+      "rot": -8,
+      "rot1": 4,
+      "dx": -3,
+      "dx1": 3
+     }
+    ],
+    "fx": [
+     {
+      "t": 0,
+      "d": 0.05,
+      "type": "chroma"
+     },
+     {
+      "t": 0,
+      "d": 0.05,
+      "type": "chroma"
+     }
+    ],
+    "punch": 0.06
+   }
+  },
+  {
+   "beat": 34.472,
+   "label": "カット15.2",
+   "comp": {
+    "layout": {
+     "type": "full"
+    },
+    "panels": [
+     {
+      "slot": "eyes_closeup",
+      "from": 3.9,
+      "cy": 45,
+      "z": 1.3,
+      "rot": 10,
+      "z1": 1.38,
+      "lift": 0.25
+     }
+    ],
+    "fx": [
+     {
+      "t": 0,
+      "d": 0.05,
+      "type": "chroma"
+     },
+     {
+      "t": 0,
+      "d": 0.05,
+      "type": "chroma"
+     }
+    ]
+   }
+  },
+  {
+   "beat": 35.468,
+   "label": "カット15.3",
+   "comp": {
+    "layout": {
+     "type": "full"
+    },
+    "panels": [
+     {
+      "slot": "low_angle",
+      "from": 3.4,
+      "z": 1.3,
+      "rot": -10,
+      "z1": 1.38
+     }
+    ],
+    "fx": [
+     {
+      "t": 0,
+      "d": 0.05,
+      "type": "chroma"
+     },
+     {
+      "t": 0,
+      "d": 0.05,
+      "type": "redneg"
+     },
+     {
+      "t": 0.2,
+      "d": 0.09,
+      "type": "white"
+     }
+    ],
+    "shake": 10,
+    "punch": 0.06
+   }
+  },
+  {
+   "beat": 36.14,
+   "label": "カット16",
+   "comp": {
+    "layout": {
+     "type": "full"
+    },
+    "panels": [
+     {
+      "slot": "dash_explosion",
+      "from": 2.6,
+      "z1": 1.3
+     },
+     {
+      "slot": "ill_moon_impact",
+      "cy": 45,
+      "z": 1.0,
+      "z1": 1.25,
+      "dy": 3,
+      "dy1": -3,
+      "until": 0.43,
+      "depth": 1.5
+     }
+    ],
+    "fx": [
+     {
+      "t": 0,
+      "d": 0.05,
+      "type": "chroma"
+     },
+     {
+      "t": 0,
+      "d": 0.1,
+      "type": "white"
+     }
+    ],
+    "shake": 22,
+    "punch": 0.08
+   }
+  },
+  {
+   "beat": 38.132,
+   "label": "カット17",
+   "comp": {
+    "layout": {
+     "type": "full"
+    },
+    "panels": [
+     {
+      "slot": "a_spin_red",
+      "from": 3,
+      "cx": 55,
+      "cy": 48,
+      "z": 1.5,
+      "rot": -12,
+      "z1": 1.9,
+      "lift": 0.6
+     }
+    ],
+    "fx": [
+     {
+      "t": 0,
+      "d": 0.05,
+      "type": "chroma"
+     },
+     {
+      "t": 0,
+      "d": 0.067,
+      "type": "redneg"
+     }
+    ],
+    "border": "focus"
+   }
+  },
+  {
+   "beat": 40.31,
+   "label": "カット18",
+   "comp": {
+    "layout": {
+     "type": "kaleido"
+    },
+    "panels": [
+     {
+      "slot": "b_hex_barrier",
+      "from": 0.5,
+      "cx": 30,
+      "z": 1.4,
+      "rot1": 20
+     }
+    ],
+    "border": "grid"
+   }
+  },
+  {
+   "beat": 42.325,
+   "label": "カット19",
+   "comp": {
+    "layout": {
+     "type": "full"
+    },
+    "panels": [
+     {
+      "slot": "clash_sparks",
+      "cx": 45,
+      "cy": 45,
+      "z": 1.3,
+      "rot": 6,
+      "z1": 1.7
+     }
+    ],
+    "fx": [
+     {
+      "t": 0,
+      "d": 0.05,
+      "type": "chroma"
+     },
+     {
+      "t": 0,
+      "d": 0.1,
+      "type": "white"
+     },
+     {
+      "t": 0.1,
+      "d": 0.06,
+      "type": "redneg"
+     }
+    ],
+    "shake": 20,
+    "punch": 0.06
+   }
+  },
+  {
+   "beat": 43.831,
+   "label": "カット20",
+   "comp": {
+    "layout": {
+     "type": "full"
+    },
+    "panels": [
+     {
+      "slot": "climax",
+      "cy": 40,
+      "z": 1.25,
+      "rot": -7,
+      "dx": -5,
+      "z1": 1.45,
+      "rot1": 5,
+      "dx1": 5,
+      "flipX": true
+     }
+    ],
+    "enter": "slash",
+    "border": "speed"
+   }
+  },
+  {
+   "beat": 47.839,
+   "label": "カット21",
+   "comp": {
+    "layout": {
+     "type": "panels",
+     "count": 4,
+     "grow": true,
+     "step": 1.251
+    },
+    "panels": [
+     {
+      "slot": "a_slash",
+      "from": 1.75,
+      "cx": 30,
+      "cy": 45,
+      "z": 1.2,
+      "z1": 1.28
+     },
+     {
+      "slot": "b_barrier_hand",
+      "from": 0.8,
+      "cx": 45,
+      "cy": 40,
+      "z": 1.8,
+      "flipX": true
+     },
+     {
+      "slot": "a_red_fog",
+      "from": 2,
+      "cy": 30,
+      "z": 2,
+      "lift": 0.6
+     },
+     {
+      "slot": "ots_angle",
+      "from": 3.3,
+      "cx": 60,
+      "cy": 40,
+      "z": 1.5,
+      "rot": -6
+     }
+    ],
+    "border": "grow"
+   }
+  },
+  {
+   "beat": 52.82,
+   "label": "カット22",
+   "comp": {
+    "layout": {
+     "type": "split",
+     "dir": "v",
+     "ratio": 0.5,
+     "angle": 23.1063
+    },
+    "panels": [
+     {
+      "slot": "a_red_fog",
+      "from": 2.5,
+      "cy": 30,
+      "z": 1.6,
+      "dx": -4,
+      "z1": 1.9,
+      "dx1": 2,
+      "lift": 0.6
+     },
+     {
+      "slot": "b_wide",
+      "from": 2,
+      "cy": 30,
+      "z": 1.9,
+      "dx": 4,
+      "z1": 2.2,
+      "dx1": -2,
+      "flipX": true
+     }
+    ],
+    "fx": [
+     {
+      "t": 0,
+      "d": 0.05,
+      "type": "chroma"
+     },
+     {
+      "t": 0,
+      "d": 0.1,
+      "type": "white"
+     }
+    ],
+    "shake": 10,
+    "punch": 0.06
+   }
+  },
+  {
+   "beat": 54.812,
+   "label": "カット23",
+   "comp": {
+    "layout": {
+     "type": "full"
+    },
+    "panels": [
+     {
+      "slot": "a_eyes_lowstance",
+      "cx": 47,
+      "cy": 45,
+      "z": 1.6,
+      "rot": 8,
+      "z1": 1.52,
+      "rot1": 6,
+      "lift": 0.35
+     }
+    ],
+    "fx": [
+     {
+      "t": 0,
+      "d": 0.05,
+      "type": "chroma"
+     },
+     {
+      "t": 0,
+      "d": 0.067,
+      "type": "redneg"
+     }
+    ]
+   }
+  },
+  {
+   "beat": 56.619,
+   "label": "カット24",
+   "comp": {
+    "layout": {
+     "type": "full"
+    },
+    "panels": [
+     {
+      "slot": "climax",
+      "from": 3,
+      "cx": 48,
+      "z": 1.3,
+      "rot": 4,
+      "z1": 2,
+      "rot1": -4
+     }
+    ],
+    "fx": [
+     {
+      "t": 0,
+      "d": 0.05,
+      "type": "chroma"
+     },
+     {
+      "t": 0.6,
+      "d": 0.05,
+      "type": "chroma"
+     }
+    ],
+    "shake": 12,
+    "punch": 0.06,
+    "border": "focus"
+   }
+  },
+  {
+   "beat": 59.399,
+   "label": "カット25.1",
+   "comp": {
+    "layout": {
+     "type": "full"
+    },
+    "panels": [
+     {
+      "slot": "climax",
+      "from": 4.2,
+      "freeze": true,
+      "z": 1.6
+     }
+    ],
+    "fx": [
+     {
+      "t": 0,
+      "d": 0.05,
+      "type": "chroma"
+     },
+     {
+      "t": 0,
+      "d": 0.07,
+      "type": "white"
+     }
+    ]
+   }
+  },
+  {
+   "beat": 59.562,
+   "label": "カット25.2",
+   "comp": {
+    "layout": {
+     "type": "full"
+    },
+    "panels": [
+     {
+      "slot": "low_angle",
+      "from": 3.6,
+      "freeze": true,
+      "z": 1.5,
+      "rot": 8
+     }
+    ],
+    "fx": [
+     {
+      "t": 0,
+      "d": 0.05,
+      "type": "chroma"
+     },
+     {
+      "t": 0,
+      "d": 0.07,
+      "type": "redneg"
+     }
+    ]
+   }
+  },
+  {
+   "beat": 59.724,
+   "label": "カット25.3",
+   "comp": {
+    "layout": {
+     "type": "full"
+    },
+    "panels": [
+     {
+      "slot": "top_angle",
+      "from": 5.2,
+      "freeze": true,
+      "cx": 55,
+      "cy": 45,
+      "z": 1.6,
+      "rot": -8
+     }
+    ],
+    "fx": [
+     {
+      "t": 0,
+      "d": 0.05,
+      "type": "chroma"
+     },
+     {
+      "t": 0,
+      "d": 0.08,
+      "type": "tealneg"
+     }
+    ]
+   }
+  },
+  {
+   "beat": 59.909,
+   "label": "カット26",
+   "comp": {
+    "layout": {
+     "type": "full"
+    },
+    "panels": [
+     {
+      "slot": "climax",
+      "from": 4.3,
+      "rate": 0.66,
+      "cy": 35,
+      "z": 1.5,
+      "z1": 1.1
+     },
+     {
+      "slot": "ill_backs",
+      "box": [
+       36,
+       0,
+       28,
+       100
+      ],
+      "z": 1.1,
+      "z1": 1.2,
+      "dy": 6,
+      "dy1": -6,
+      "appear": 0.86,
+      "until": 1.46,
+      "slide": "up",
+      "depth": 1.4
+     }
+    ]
+   }
+  },
+  {
+   "beat": 65.909,
+   "label": "カット27",
+   "comp": {
+    "layout": {
+     "type": "split",
+     "dir": "v",
+     "ratio": 0.5,
+     "angle": 0
+    },
+    "panels": [
+     {
+      "slot": "a_red_fog",
+      "from": 2.4,
+      "cy": 30,
+      "z": 1.7,
+      "dx": -8,
+      "dx1": 0,
+      "until": 1.2,
+      "lift": 0.6
+     },
+     {
+      "slot": "b_wide",
+      "from": 3,
+      "cy": 30,
+      "z": 1.9,
+      "dx": 8,
+      "dx1": 0,
+      "flipX": true,
+      "until": 1.2
+     },
+     {
+      "slot": "climax",
+      "from": 5.95,
+      "freeze": true,
+      "cy": 40,
+      "z": 1.25,
+      "z1": 1.05,
+      "appear": 1,
+      "slide": "merge"
+     },
+     {
+      "slot": "ill_moon_impact",
+      "cy": 40,
+      "z": 1.15,
+      "z1": 1.0,
+      "dy": -3,
+      "dy1": 0,
+      "appear": 1.73
+     }
+    ],
+    "fx": [
+     {
+      "t": 0,
+      "d": 0.05,
+      "type": "chroma"
+     },
+     {
+      "t": 1,
+      "d": 0.1,
+      "type": "white"
+     },
+     {
+      "t": 1.73,
+      "d": 0.1,
+      "type": "white"
+     }
+    ],
+    "punch": 0.06,
+    "title": {
+     "text": "TITLE",
+     "at": 1.75,
+     "style": "logo"
+    }
+   }
+  }
+ ]
+}

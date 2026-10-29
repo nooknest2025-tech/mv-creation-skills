@@ -16,7 +16,15 @@ export function layoutH(L: ResolvedLine, W: number, H: number, o: { size?: numbe
   const size = o.size ?? 0.075, v = o.v ?? 0.8, maxw = o.maxw ?? 0.86, track = o.track ?? 0;
   let px = Math.round(size * Math.min(W, H) * 1.2 * (o.k ?? 1) * Number(L.params.size ?? 1));
   const chars = L.chars;
+  const noWrap = !!L.params?.noWrap; // editor 「改行しない」: one row, shrink to fit instead of breaking (e.g. a name like ミスター・サンプルマン)
   let adv: number[] = [], rows: number[][] = [], gaps: number[] = [];
+  if (noWrap) {
+    adv = chars.map((c) => advOf(c.ch, px, o.mono) + track * px);
+    gaps = chars.map((c, i) => (i && /\s/.test(L.text.slice(chars[i - 1].idx + 1, c.idx)) ? px * 0.35 : 0));
+    const w = adv.reduce((a, b) => a + b, 0) + gaps.slice(1).reduce((a, b) => a + b, 0);
+    if (w > maxw * W) { const k = (maxw * W) / w; px = Math.floor(px * k); adv = chars.map((c) => advOf(c.ch, px, o.mono) + track * px); gaps = gaps.map((g) => g * k); }
+    rows = [chars.map((_, i) => i)];
+  } else
   for (let it = 0; it < 8; it++) {
     adv = chars.map((c) => advOf(c.ch, px, o.mono) + track * px);
     gaps = chars.map((c, i) => (i && /\s/.test(L.text.slice(chars[i - 1].idx + 1, c.idx)) ? px * 0.35 : 0));
@@ -54,7 +62,8 @@ export function layoutV(L: ResolvedLine, W: number, H: number, o: { size?: numbe
   let step = px * 1.02;
   const n = L.chars.length;
   let per = Math.max(1, Math.floor(((bottom - top) * H) / step));
-  if (per < n && n <= per + 4) { px = Math.floor((px * per) / n); step = px * 1.02; per = n; }
+  if (L.params?.noWrap && per < n) { px = Math.floor((px * per) / n); step = px * 1.02; per = n; } // 「改行しない」: one column
+  else if (per < n && n <= per + 4) { px = Math.floor((px * per) / n); step = px * 1.02; per = n; }
   else if (n > per) per = Math.ceil(n / Math.ceil(n / per));
   const pos: [number, number][] = [], rot: number[] = [];
   L.chars.forEach((c, i) => {
