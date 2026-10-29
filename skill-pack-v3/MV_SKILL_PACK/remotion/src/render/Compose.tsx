@@ -35,7 +35,7 @@ function PanelView({ p, f, life, fps, W, H, media, idx, gradeFilter, linear, cam
   const [bx, by, bw, bh] = p.box, isBox = bw < 100 || bh < 100;
   const src = panelSourceTime(p, f / fps, undefined, fps);
   return <div style={{ position: "absolute", inset: 0, clipPath: p.clip ? poly(p.clip) : undefined, opacity: op, transform: cam ? camRel(cam, p.depth) : undefined }}>
-    <div style={{ position: "absolute", left: `${bx}%`, top: `${by}%`, width: `${bw}%`, height: `${bh}%`, overflow: "hidden", transform: slide, background: "#000", boxShadow: isBox ? "0 0 0 6px #fff, 0 0 0 14px #000, 0 10px 40px rgba(0,0,0,.8)" : undefined }}>
+    <div style={{ position: "absolute", left: `${bx}%`, top: `${by}%`, width: `${bw}%`, height: `${bh}%`, overflow: "hidden", transform: slide /* no black fill: while a clip seeks or loads, the picture under the box shows, never an empty black コマ */, boxShadow: isBox ? "0 0 0 6px #fff, 0 0 0 14px #000, 0 10px 40px rgba(0,0,0,.8)" : undefined }}>
       <div style={{ position: "absolute", inset: 0, transformOrigin: `${p.cx}% ${p.cy}%`, transform: `translate3d(${dx}%, ${dy}%, 0) translate(${50 - p.cx}%, ${50 - p.cy}%) rotate(${rot}deg) scale(${z * (p.flipX ? -1 : 1)}, ${z * (p.flipY ? -1 : 1)})`, filter: [p.lift > 0 ? `brightness(${1 + p.lift})` : "", gradeFilter ?? ""].join(" ").trim() || undefined, willChange: "transform", backfaceVisibility: "hidden" }}>
         {media(p.asset, src, { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }, idx)}
       </div>
