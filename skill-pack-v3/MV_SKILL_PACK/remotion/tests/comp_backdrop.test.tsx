@@ -27,7 +27,7 @@ describe("illustration backdrop", () => {
     expect(x1).toBeGreaterThan(x0); expect(y1).toBeLessThan(y0); expect(z1).toBeGreaterThan(z0);
   });
   it("global illustration backdrop applies to scenes without their own", () => {
-    const d = base(); d.comp.backdrop = { asset: 1, dim: 0.3 }; expect(html(d, 0.1)).toContain("brightness(0.7)");
+    const d = base(); d.comp.backdrop = { asset: 1, dim: 0.3 }; expect(html(d, 0.1)).toContain("brightness(0.700)");
   });
 });
 
@@ -108,5 +108,20 @@ describe("name card title fits the band", () => {
     expect(cardFontSize("ヘンドレ侍", W)).toBe(120); expect(cardFontSize("ヘンドレガーディアン", W)).toBeLessThan(120);
     const d = base(); d.scenes[0].comp.card = { name: "ヘンドレガーディアン", side: "right" };
     expect(html(d, 0.5)).toContain(`font-size:${cardFontSize("ヘンドレガーディアン", 1920)}px`);
+  });
+});
+
+describe("never black: slash wipe, lift, dim cap", () => {
+  it("a slash wipe shows the outgoing scene underneath (not black / not the backdrop)", () => {
+    const d = base(); d.comp.backdrop = { asset: 1 };
+    d.scenes[1].comp = { layout: { type: "full" }, panels: [{ asset: 1 }], enter: "slash" };
+    const h = renderToStaticMarkup(<CompScene data={d} i={1} t={1.0} W={1920} H={1080} media={media} />);
+    expect(h).toContain('data-a="0"'); // previous scene's panel under the wipe
+    const d2 = structuredClone(d); delete d2.scenes[1].comp.enter; // without the wipe: no outgoing picture
+    expect(renderToStaticMarkup(<CompScene data={d2} i={1} t={1.0} W={1920} H={1080} media={media} />)).not.toContain('data-a="0"');
+  });
+  it("lift brightens a dark panel; backdrop dim is capped so it never goes near-black", () => {
+    const d = base(); d.scenes[0].comp.panels[0].lift = 0.5; expect(html(d, 0.2)).toContain("brightness(1.5)");
+    const e = base(); e.comp.backdrop = { asset: 1, dim: 1 }; expect(html(e, 0.2)).toContain("brightness(0.400)");
   });
 });

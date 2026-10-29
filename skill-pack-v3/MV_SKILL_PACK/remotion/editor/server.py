@@ -61,7 +61,7 @@ def check_comp(c,n_assets,scene_len):
         if 'count' in l and not (isinstance(l['count'],int) and not isinstance(l['count'],bool) and 1<=l['count']<=4):bad('コマの数は1〜4です')
         if 'grow' in l and not isinstance(l['grow'],bool):bad('コマが増える設定を確認してください')
         if 'step' in l and not rng(l['step'],.25,8):bad('コマが増える間隔は0.25〜8拍です')
-    pk=['asset','from','rate','freeze','box','clip','cx','cy','z','z1','rot','rot1','dx','dx1','dy','dy1','depth','flipX','flipY','appear','until','slide']
+    pk=['asset','from','rate','freeze','box','clip','cx','cy','z','z1','rot','rot1','dx','dx1','dy','dy1','depth','lift','flipX','flipY','appear','until','slide']
     for p in c['panels']:
         if not isinstance(p,dict) or any(k not in pk for k in p):bad('パネルの設定を確認してください')
         if not (isinstance(p.get('asset'),int) and not isinstance(p.get('asset'),bool) and 0<=p['asset']<n_assets):bad('パネルの素材を確認してください')
@@ -76,6 +76,7 @@ def check_comp(c,n_assets,scene_len):
         if any(k in p and not rng(p[k],-50,50) for k in ['dx','dx1']):bad('パネルの横移動は-50〜50%です')
         if any(k in p and not rng(p[k],-50,50) for k in ['dy','dy1']):bad('パネルの縦移動は-50〜50%です')
         if 'depth' in p and not rng(p['depth'],0,3):bad('奥行き（パララックス）は0〜3です')
+        if 'lift' in p and not rng(p['lift'],0,2):bad('明るさの持ち上げは0〜2です')
         if 'appear' in p and not rng(p['appear'],0,scene_len):bad('パネルの出る秒はシーンの中です')
         if 'until' in p and not (rng(p['until'],0,scene_len+1e-6) and p['until']>p.get('appear',0)):bad('パネルの消える秒は出る秒より後です')
         if 'slide' in p and p['slide'] not in COMP_SLIDES:bad('パネルの入り方を確認してください')
@@ -92,7 +93,7 @@ def check_comp(c,n_assets,scene_len):
     if 'title' in c:
         k=c['title']
         if not isinstance(k,dict) or not isinstance(k.get('text'),str) or not k['text'] or len(k['text'])>40 or ('at' in k and not rng(k['at'],0,scene_len)) or ('style' in k and k['style'] not in COMP_TITLE) or any(x not in ['text','at','style'] for x in k):bad('タイトル文字を確認してください')
-BD_KEYS=['asset','from','cx','cy','z','z1','rot','rot1','dx','dx1','dy','dy1','depth','dim','blur']
+BD_KEYS=['asset','from','cx','cy','z','z1','rot','rot1','dx','dx1','dy','dy1','depth','dim','blur','lift']
 def check_backdrop(b,n_assets=None):
     """mirror of src/lib/compose.ts checkBackdrop (scene/global backdrop: black / footage / illustration asset + camera)"""
     num=lambda x:isinstance(x,(int,float)) and not isinstance(x,bool) and math.isfinite(x)
@@ -110,6 +111,7 @@ def check_backdrop(b,n_assets=None):
     if 'depth' in b and not rng(b['depth'],0,3):bad('奥行き（パララックス）は0〜3です')
     if 'dim' in b and not rng(b['dim'],0,1):bad('背景の暗さは0〜1です')
     if 'blur' in b and not rng(b['blur'],0,40):bad('背景のぼかしは0〜40pxです')
+    if 'lift' in b and not rng(b['lift'],0,2):bad('明るさの持ち上げは0〜2です')
 def check_gcomp(g,n_assets=None):
     """mirror of src/lib/compose.ts checkGlobalComp (data.comp: colours, halftone, vignette, grade)"""
     if g is None:return

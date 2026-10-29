@@ -36,7 +36,7 @@ function PanelView({ p, f, life, fps, W, H, media, idx, gradeFilter, linear, cam
   const src = panelSourceTime(p, f / fps, undefined, fps);
   return <div style={{ position: "absolute", inset: 0, clipPath: p.clip ? poly(p.clip) : undefined, opacity: op, transform: cam ? camRel(cam, p.depth) : undefined }}>
     <div style={{ position: "absolute", left: `${bx}%`, top: `${by}%`, width: `${bw}%`, height: `${bh}%`, overflow: "hidden", transform: slide, background: "#000", boxShadow: isBox ? "0 0 0 6px #fff, 0 0 0 14px #000, 0 10px 40px rgba(0,0,0,.8)" : undefined }}>
-      <div style={{ position: "absolute", inset: 0, transformOrigin: `${p.cx}% ${p.cy}%`, transform: `translate3d(${dx}%, ${dy}%, 0) translate(${50 - p.cx}%, ${50 - p.cy}%) rotate(${rot}deg) scale(${z * (p.flipX ? -1 : 1)}, ${z * (p.flipY ? -1 : 1)})`, filter: gradeFilter, willChange: "transform", backfaceVisibility: "hidden" }}>
+      <div style={{ position: "absolute", inset: 0, transformOrigin: `${p.cx}% ${p.cy}%`, transform: `translate3d(${dx}%, ${dy}%, 0) translate(${50 - p.cx}%, ${50 - p.cy}%) rotate(${rot}deg) scale(${z * (p.flipX ? -1 : 1)}, ${z * (p.flipY ? -1 : 1)})`, filter: [p.lift > 0 ? `brightness(${1 + p.lift})` : "", gradeFilter ?? ""].join(" ").trim() || undefined, willChange: "transform", backfaceVisibility: "hidden" }}>
         {media(p.asset, src, { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }, idx)}
       </div>
     </div>
@@ -50,7 +50,7 @@ function BackdropArt({ b, st, life, W, H, media, idx, gradeFilter, linear, cam }
   const at = (a?: number, b1?: number, d = 0) => (a ?? d) + ((b1 ?? a ?? d) - (a ?? d)) * k;
   const cx = b.cx ?? 50, cy = b.cy ?? 50, rot = at(b.rot, b.rot1), dx = at(b.dx, b.dx1), dy = at(b.dy, b.dy1), depth = b.depth ?? 0.5;
   const z = Math.max(at(b.z, b.z1, 1.1), coverScale(cx, cy, dx, rot, W / H, dy) * Math.max(1, 1 / Math.pow(cam.punch, depth)) + 0.02 + Math.hypot(cam.sx, cam.sy) * depth / Math.min(W, H));
-  const filter = [b.blur ? `blur(${b.blur}px)` : "", (b.dim ?? 0) > 0 ? `brightness(${1 - (b.dim ?? 0)})` : "", gradeFilter ?? ""].join(" ").trim() || undefined;
+  const filter = [b.blur ? `blur(${b.blur}px)` : "", (b.dim ?? 0) > 0 || (b.lift ?? 0) > 0 ? `brightness(${((1 - Math.min(0.6, b.dim ?? 0)) * (1 + (b.lift ?? 0))).toFixed(3)})` : "", gradeFilter ?? ""].join(" ").trim() || undefined;
   return <div style={{ position: "absolute", inset: 0, overflow: "hidden", transform: camAt(cam, depth) }}>
     <div style={{ position: "absolute", inset: 0, transformOrigin: `${cx}% ${cy}%`, transform: `translate3d(${dx}%, ${dy}%, 0) translate(${50 - cx}%, ${50 - cy}%) rotate(${rot}deg) scale(${z})`, filter, willChange: "transform" }}>
       {media(b.asset, (b.from ?? 0) + Math.max(0, st), { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }, idx)}
@@ -96,7 +96,7 @@ export function GradeDefs({ data }: { data: any }) {
   </filter></defs></svg>;
 }
 
-export function CompScene({ data, i, t, W, H, media, graded }: { data: any; i: number; t: number; W: number; H: number; media: Media; graded?: boolean }) {
+export function CompScene({ data, i, t, W, H, media, graded, under }: { data: any; i: number; t: number; W: number; H: number; media: Media; graded?: boolean; under?: boolean }) {
   const s = data.scenes[i], c: SceneComp = s.comp, fps = data.fps ?? 30, end = data.scenes[i + 1]?.start ?? data.duration;
   const g = globalComp(data), col = compColors(data), beat = 60 / (data.bpm ?? 120);
   const frame = Math.round(t * fps), from = Math.round(s.start * fps), len = Math.max(1, Math.ceil(end * fps - 1e-6) - from) /* the scene is shown while t < end, so its last frame is ceil(end·fps)-1 (end not on a frame boundary used to hide every panel on that frame) */, sf = frame - from, st = t - s.start;
@@ -109,6 +109,7 @@ export function CompScene({ data, i, t, W, H, media, graded }: { data: any; i: n
   const pk = lerp(st, [0, cam.punchSec], [1, 0], ease), punch = 1 + (c.punch ?? 0) * pk * (c.enter === "zoom" ? 3 : 1), tilt = (c.tilt ?? 0) * pk;
   const neg = active.includes("redneg") || active.includes("tealneg"), chroma = active.includes("chroma");
   const enterK = c.enter === "slash" ? lerp(sf, [0, 5], [0, 1], ease) : 1;
+  const wipeUnder = enterK < 1 && !under && i > 0 && !!data.scenes[i - 1]?.comp;
   const panels = resolvePanels(c, W, H, beat);
   const gradeFilter = !graded && gradeOf(data) ? "url(#comp-grade)" : undefined;
   const st0 = st, bk = ((t + 1e3 * beat) % beat) / beat;
@@ -121,8 +122,10 @@ export function CompScene({ data, i, t, W, H, media, graded }: { data: any; i: n
       <feColorMatrix in="SourceGraphic" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0" result="b" /><feOffset in="b" dx={16} dy={0} result="b2" />
       <feBlend in="r2" in2="g" mode="screen" result="rg" /><feBlend in="rg" in2="b2" mode="screen" /></filter></defs></svg>
     <GradeDefs data={data} />
-    {typeof bd === "object" ? <BackdropArt b={bd} st={Math.max(0, st)} life={life} W={W} H={H} media={media} idx={`${i}-bda`} gradeFilter={gradeFilter} linear={cam.ease === "linear"} cam={camNow} /> : null}
-    {bd === "footage" && panels[0] ? <div style={{ position: "absolute", inset: 0, transform: "scale(1.15)", filter: `blur(18px) brightness(0.55) contrast(1.1)${gradeFilter ? " " + gradeFilter : ""}` }}>
+    {/* slash wipe: the outgoing picture (previous scene, held on its last frame) stays under the wipe, so the wipe never shows black/backdrop */}
+    {wipeUnder ? <div style={{ position: "absolute", inset: 0 }}><CompScene data={data} i={i - 1} t={Math.max(data.scenes[i - 1].start, (Math.ceil(s.start * fps - 1e-6) - 1) / fps)} W={W} H={H} media={media} graded={graded} under /></div> : null}
+    {!wipeUnder && typeof bd === "object" ? <BackdropArt b={bd} st={Math.max(0, st)} life={life} W={W} H={H} media={media} idx={`${i}-bda`} gradeFilter={gradeFilter} linear={cam.ease === "linear"} cam={camNow} /> : null}
+    {!wipeUnder && bd === "footage" && panels[0] ? <div style={{ position: "absolute", inset: 0, transform: "scale(1.15)", filter: `blur(18px) brightness(0.55) contrast(1.1)${gradeFilter ? " " + gradeFilter : ""}` }}>
       {/* deliberate backdrop: empty slots (before a panel appears, gaps of a growing grid, a slash wipe) show this scene's own footage, never plain black */}
       {media(panels[0].asset, panelSourceTime(panels[0], Math.max(0, st), undefined, fps), { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }, `${i}-bd`)}
     </div> : null}

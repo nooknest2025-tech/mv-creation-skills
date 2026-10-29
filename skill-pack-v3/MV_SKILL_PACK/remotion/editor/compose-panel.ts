@@ -27,7 +27,7 @@ export function composePanel(host: HTMLElement, ctx: Ctx) {
       if (mode === "art") { const b = obj[key]; const live2 = (e: HTMLElement) => { e.addEventListener("input", commit); e.addEventListener("change", commit); return e; };
         box.append(live2(assetSel(b)), live2(num("拡大 始め", b, "z", 0.5, 5, 0.05, 1.1)), live2(num("拡大 終わり", b, "z1", 0.5, 5, 0.05)), live2(num("中心 横%", b, "cx", 0, 100, 1, 50)), live2(num("中心 縦%", b, "cy", 0, 100, 1, 50)),
           live2(num("横移動 始め%", b, "dx", -50, 50, 1, 0)), live2(num("横移動 終わり%", b, "dx1", -50, 50, 1)), live2(num("縦移動 始め%", b, "dy", -50, 50, 1, 0)), live2(num("縦移動 終わり%", b, "dy1", -50, 50, 1)),
-          live2(num("傾き 始め", b, "rot", -180, 180, 1, 0)), live2(num("傾き 終わり", b, "rot1", -180, 180, 1)), live2(num("奥行き（0=固定・1=画面と同じ・2=手前）", b, "depth", 0, 3, 0.05, 0.5)), live2(num("暗さ（0〜1）", b, "dim", 0, 1, 0.01, 0)), live2(num("ぼかし px", b, "blur", 0, 40, 1, 0))); }
+          live2(num("傾き 始め", b, "rot", -180, 180, 1, 0)), live2(num("傾き 終わり", b, "rot1", -180, 180, 1)), live2(num("奥行き（0=固定・1=画面と同じ・2=手前）", b, "depth", 0, 3, 0.05, 0.5)), live2(num("暗さ（0〜1）", b, "dim", 0, 1, 0.01, 0)), live2(num("ぼかし px", b, "blur", 0, 40, 1, 0)), live2(num("明るく（0〜2）", b, "lift", 0, 2, 0.05, 0))); }
       return box;
     };
     const assetSel = (p: any) => { const e = el("select"); data.assets.forEach((a: any, n: number) => e.append(el("option", { value: String(n), textContent: a?.label ?? (typeof a === "string" ? a : a?.src) ?? `素材${n + 1}` }))); e.value = String(p.asset); e.onchange = () => { p.asset = Number(e.value); live(); }; return label("素材", e); };
@@ -50,7 +50,7 @@ export function composePanel(host: HTMLElement, ctx: Ctx) {
         box.append(assetSel(p), num("開始位置（秒）", p, "from", 0, 3600, 0.05, 0), num("速さ（倍）", p, "rate", 0.1, 4, 0.05, 1), chk("止める（フリーズ）", p, "freeze"),
           num("中心 横%", p, "cx", 0, 100, 1, 50), num("中心 縦%", p, "cy", 0, 100, 1, 50), num("拡大 始め", p, "z", 0.5, 5, 0.05, 1), num("拡大 終わり", p, "z1", 0.5, 5, 0.05),
           num("傾き 始め", p, "rot", -180, 180, 1, 0), num("傾き 終わり", p, "rot1", -180, 180, 1), num("横移動 始め%", p, "dx", -50, 50, 1, 0), num("横移動 終わり%", p, "dx1", -50, 50, 1),
-          num("縦移動 始め%（ティルト）", p, "dy", -50, 50, 1, 0), num("縦移動 終わり%", p, "dy1", -50, 50, 1), num("奥行き（パララックス 0〜3）", p, "depth", 0, 3, 0.05, 1),
+          num("縦移動 始め%（ティルト）", p, "dy", -50, 50, 1, 0), num("縦移動 終わり%", p, "dy1", -50, 50, 1), num("奥行き（パララックス 0〜3）", p, "depth", 0, 3, 0.05, 1), num("明るく（暗い素材 0〜2）", p, "lift", 0, 2, 0.05, 0),
           chk("左右反転", p, "flipX"), chk("上下反転", p, "flipY"), num("出る秒（シーン内）", p, "appear", 0, len, 0.01), num("消える秒", p, "until", 0, len, 0.01), sel("入り方", p, "slide", COMP_SLIDES as any, "none"));
         const rm = el("button", { textContent: "このパネルを消す", disabled: c.panels.length < 2 }); rm.onclick = () => { c.panels.splice(n, 1); done(); };
         sec.append(el("h4", { textContent: `パネル${n + 1}${p.box || p.clip ? "（独自の枠）" : ""}` }), box, rm);
