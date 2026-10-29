@@ -31,6 +31,13 @@ describe("illustration backdrop", () => {
   });
 });
 
+describe("scene end not on a frame boundary", () => {
+  it("the last frame before the next scene still shows the panels (not just the backdrop)", () => {
+    const d = base(); d.fps = 24; d.scenes[1].start = 0.97; d.comp.backdrop = { asset: 1 }; // 0.97*24 = 23.28 -> frame 23 (t=0.958) still belongs to scene 0
+    expect(html(d, 23 / 24)).toContain('data-a="0"');
+  });
+});
+
 describe("panel tilt pan + parallax depth", () => {
   it("dy/dy1 resolve (flipY mirrors) and widen the cover zoom", () => {
     const [p] = resolvePanels({ panels: [{ asset: 0, dy: 4, dy1: -6, depth: 2 }] }, 1920, 1080, 0.43);

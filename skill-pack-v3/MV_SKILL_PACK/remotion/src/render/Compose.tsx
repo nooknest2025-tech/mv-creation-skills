@@ -92,7 +92,7 @@ export function GradeDefs({ data }: { data: any }) {
 export function CompScene({ data, i, t, W, H, media, graded }: { data: any; i: number; t: number; W: number; H: number; media: Media; graded?: boolean }) {
   const s = data.scenes[i], c: SceneComp = s.comp, fps = data.fps ?? 30, end = data.scenes[i + 1]?.start ?? data.duration;
   const g = globalComp(data), col = compColors(data), beat = 60 / (data.bpm ?? 120);
-  const frame = Math.round(t * fps), from = Math.round(s.start * fps), len = Math.max(1, Math.round(end * fps) - from), sf = frame - from, st = t - s.start;
+  const frame = Math.round(t * fps), from = Math.round(s.start * fps), len = Math.max(1, Math.ceil(end * fps - 1e-6) - from) /* the scene is shown while t < end, so its last frame is ceil(end·fps)-1 (end not on a frame boundary used to hide every panel on that frame) */, sf = frame - from, st = t - s.start;
   const active = fxActive(c, st);
   const cam = cameraOf(data);
   // shake: smooth noise (not a new random offset every frame), fading out; only scenes that set comp.shake (impact shots)
