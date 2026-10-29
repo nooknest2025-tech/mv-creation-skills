@@ -3,7 +3,7 @@
 // speed/focus lines, name cards and a title slam. Used by the editor preview AND the MP4 export (same <Scene>).
 import React from "react";
 import { random } from "remotion";
-import { compColors, fxActive, globalComp, gradeOf, panelSourceTime, resolvePanels, type ResolvedPanel, type SceneComp } from "../lib/compose";
+import { cameraOf, compColors, coverScale, fxActive, globalComp, gradeOf, panelSourceTime, resolvePanels, type ResolvedPanel, type SceneComp } from "../lib/compose";
 
 export type Media = (asset: number, srcTime: number, style: React.CSSProperties, key: string) => React.ReactNode;
 const ease = (x: number) => { // Easing.bezier(0.16, 1, 0.3, 1) (same curve as the v8 composition)
@@ -12,13 +12,17 @@ const ease = (x: number) => { // Easing.bezier(0.16, 1, 0.3, 1) (same curve as t
   return c(1, 1, (lo + hi) / 2);
 };
 const lerp = (x: number, [a, b]: [number, number], [c, d]: [number, number], e?: (v: number) => number) => { const k = Math.max(0, Math.min(1, (x - a) / (b - a || 1))); return c + (d - c) * (e ? e(k) : k); };
+/** smooth 1-D value noise in [-1, 1] (smoothstep between seeded lattice points): continuous in time, so shake never jumps frame to frame. */
+export const noise1 = (seed: string, x: number) => { const i = Math.floor(x), u = x - i, s = u * u * (3 - 2 * u), a = random(`${seed}-${i}`), b = random(`${seed}-${i + 1}`); return (a + (b - a) * s) * 2 - 1; };
+const smooth = (k: number) => 0.5 - 0.5 * Math.cos(Math.PI * k);
 const poly = (pts: [number, number][]) => `polygon(${pts.map(([x, y]) => `${x}% ${y}%`).join(", ")})`;
 const polyPx = (pts: [number, number][], W: number, H: number) => pts.map(([x, y]) => `${(x / 100) * W},${(y / 100) * H}`).join(" ");
 const fam = (f: string) => `'${f}', 'Noto Sans JP', sans-serif`;
 
-function PanelView({ p, f, life, fps, W, H, media, idx, gradeFilter }: { p: ResolvedPanel; f: number; life: number; fps: number; W: number; H: number; media: Media; idx: string; gradeFilter?: string }) {
-  const k = lerp(f, [0, life], [0, 1]);
-  const z = p.z + (p.z1 - p.z) * k, rot = p.rot + (p.rot1 - p.rot) * k, dx = p.dx + (p.dx1 - p.dx) * k;
+function PanelView({ p, f, life, fps, W, H, media, idx, gradeFilter, linear }: { p: ResolvedPanel; f: number; life: number; fps: number; W: number; H: number; media: Media; idx: string; gradeFilter?: string; linear?: boolean }) {
+  const k = lerp(f, [0, life], [0, 1], linear ? undefined : smooth); // eased zoom/tilt ramp: no velocity jump at the cut
+  const rot = p.rot + (p.rot1 - p.rot) * k, dx = p.dx + (p.dx1 - p.dx) * k;
+  const [, , bw0, bh0] = p.box, z = Math.max(p.z + (p.z1 - p.z) * k, coverScale(p.cx, p.cy, dx, rot, (bw0 * W) / Math.max(1, bh0 * H))); // never uncover the box
   const s = lerp(f, [0, 5], [1, 0], ease);
   const slide = p.slide === "left" ? `translateX(${s * 100}%)` : p.slide === "right" ? `translateX(${-s * 100}%)` : p.slide === "up" ? `translateY(${s * 100}%)` : p.slide === "merge" ? `scale(${1 + s * 0.4})` : "";
   const op = p.slide === "merge" ? 1 - s : 1;
@@ -26,7 +30,7 @@ function PanelView({ p, f, life, fps, W, H, media, idx, gradeFilter }: { p: Reso
   const src = panelSourceTime(p, f / fps, undefined, fps);
   return <div style={{ position: "absolute", inset: 0, clipPath: p.clip ? poly(p.clip) : undefined, opacity: op }}>
     <div style={{ position: "absolute", left: `${bx}%`, top: `${by}%`, width: `${bw}%`, height: `${bh}%`, overflow: "hidden", transform: slide, background: "#000", boxShadow: isBox ? "0 0 0 6px #fff, 0 0 0 14px #000, 0 10px 40px rgba(0,0,0,.8)" : undefined }}>
-      <div style={{ position: "absolute", inset: 0, transformOrigin: `${p.cx}% ${p.cy}%`, transform: `translateX(${dx}%) translate(${50 - p.cx}%, ${50 - p.cy}%) rotate(${rot}deg) scale(${z * (p.flipX ? -1 : 1)}, ${z * (p.flipY ? -1 : 1)})`, filter: gradeFilter }}>
+      <div style={{ position: "absolute", inset: 0, transformOrigin: `${p.cx}% ${p.cy}%`, transform: `translate3d(${dx}%, 0, 0) translate(${50 - p.cx}%, ${50 - p.cy}%) rotate(${rot}deg) scale(${z * (p.flipX ? -1 : 1)}, ${z * (p.flipY ? -1 : 1)})`, filter: gradeFilter, willChange: "transform", backfaceVisibility: "hidden" }}>
         {media(p.asset, src, { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }, idx)}
       </div>
     </div>
@@ -70,9 +74,12 @@ export function CompScene({ data, i, t, W, H, media, graded }: { data: any; i: n
   const g = globalComp(data), col = compColors(data), beat = 60 / (data.bpm ?? 120);
   const frame = Math.round(t * fps), from = Math.round(s.start * fps), len = Math.max(1, Math.round(end * fps) - from), sf = frame - from, st = t - s.start;
   const active = fxActive(c, st);
-  const amp = (c.shake ?? 0) * Math.exp(-st * 3.2);
-  const sx = (random(`shx${frame}`) - 0.5) * 2 * amp, sy = (random(`shy${frame}`) - 0.5) * 2 * amp;
-  const pk = lerp(sf, [0, 3], [1, 0], ease), punch = 1 + (c.punch ?? 0) * pk * (c.enter === "zoom" ? 3 : 1), tilt = (c.tilt ?? 0) * pk;
+  const cam = cameraOf(data);
+  // shake: smooth noise (not a new random offset every frame), fading out; only scenes that set comp.shake (impact shots)
+  const amp = (c.shake ?? 0) * Math.exp(-st * 3.2), nx = Math.max(0, st) * cam.shakeHz;
+  const sx = noise1(`shx${i}`, nx) * amp, sy = noise1(`shy${i}`, nx + 17.3) * amp * 0.7;
+  // punch-in: time-based ease-out over comp.camera.punchSec (was 3 frames -> a visible pop); only scenes that set comp.punch
+  const pk = lerp(st, [0, cam.punchSec], [1, 0], ease), punch = 1 + (c.punch ?? 0) * pk * (c.enter === "zoom" ? 3 : 1), tilt = (c.tilt ?? 0) * pk;
   const neg = active.includes("redneg") || active.includes("tealneg"), chroma = active.includes("chroma");
   const enterK = c.enter === "slash" ? lerp(sf, [0, 5], [0, 1], ease) : 1;
   const panels = resolvePanels(c, W, H, beat);
@@ -86,11 +93,15 @@ export function CompScene({ data, i, t, W, H, media, graded }: { data: any; i: n
       <feColorMatrix in="SourceGraphic" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0" result="b" /><feOffset in="b" dx={16} dy={0} result="b2" />
       <feBlend in="r2" in2="g" mode="screen" result="rg" /><feBlend in="rg" in2="b2" mode="screen" /></filter></defs></svg>
     <GradeDefs data={data} />
-    <div style={{ position: "absolute", inset: 0, transform: `translate(${sx}px,${sy}px) scale(${punch}) rotate(${tilt}deg)`, filter: [neg ? "invert(1) contrast(1.4)" : "", chroma ? "url(#comp-chroma)" : ""].join(" ").trim() || undefined, clipPath: enterK < 1 ? `polygon(0 0, ${enterK * 160}% 0, ${enterK * 160 - 60}% 100%, 0 100%)` : undefined }}>
+    {g.backdrop === "footage" && panels[0] ? <div style={{ position: "absolute", inset: 0, transform: "scale(1.15)", filter: `blur(18px) brightness(0.55) contrast(1.1)${gradeFilter ? " " + gradeFilter : ""}` }}>
+      {/* deliberate backdrop: empty slots (before a panel appears, gaps of a growing grid, a slash wipe) show this scene's own footage, never plain black */}
+      {media(panels[0].asset, panelSourceTime(panels[0], Math.max(0, st), undefined, fps), { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }, `${i}-bd`)}
+    </div> : null}
+    <div style={{ position: "absolute", inset: 0, transform: `translate3d(${sx.toFixed(2)}px,${sy.toFixed(2)}px,0) scale(${punch}) rotate(${tilt}deg)`, filter: [neg ? "invert(1) contrast(1.4)" : "", chroma ? "url(#comp-chroma)" : ""].join(" ").trim() || undefined, clipPath: enterK < 1 ? `polygon(0 0, ${enterK * 160}% 0, ${enterK * 160 - 60}% 100%, 0 100%)` : undefined }}>
       {panels.map((p, k) => {
         const a = Math.round(p.appear * fps), f = sf - a, until = p.until != null ? Math.round(p.until * fps) - a : len - a;
         if (f < 0 || f >= Math.max(1, Math.min(len - a, until))) return null;
-        return <PanelView key={k} idx={`${i}-${k}`} p={p} f={f} life={Math.max(1, len - p.appear * fps)} fps={fps} W={W} H={H} media={media} gradeFilter={gradeFilter} />;
+        return <PanelView key={k} idx={`${i}-${k}`} p={p} f={f} life={Math.max(1, len - p.appear * fps)} fps={fps} W={W} H={H} media={media} gradeFilter={gradeFilter} linear={cam.ease === "linear"} />;
       })}
       {c.border === "focus" ? <Lines kind="focus" W={W} H={H} seed={Math.floor(frame / 2)} /> : null}
       {c.border === "speed" ? <Lines kind="speed" W={W} H={H} seed={Math.floor(frame / 2)} /> : null}

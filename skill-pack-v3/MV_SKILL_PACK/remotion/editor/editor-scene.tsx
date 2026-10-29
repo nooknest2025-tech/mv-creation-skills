@@ -15,7 +15,7 @@ import {moBg,moTop} from '../src/render/MoGraph';
 import {mographEditAt,mographProps} from '../src/lib/mographEdit';
 import {CompScene} from '../src/render/Compose';
 import {hasComp,globalComp,panelSourceTime} from '../src/lib/compose';
-import {combined,wantsEditorMotion,isEdited,effectFilter,SCENE_EDIT_KEYS} from '../src/lib/lyricEdits';
+import {combined,wantsEditorMotion,isEdited,effectFilter,outlineFilter,SCENE_EDIT_KEYS} from '../src/lib/lyricEdits';
 export {combined};
 export const isTachieAsset=(a:any)=>!!a&&typeof a==='object'&&a.kind==='tachie'&&!!a.stage;
 export {clipPlan,clipSourceTime};
@@ -25,7 +25,7 @@ export function sectionFor(sections:any[]|undefined,t:number){const s=(sections?
 class LyricGuard extends React.Component<{children:any;id:string},{err:boolean}>{state={err:false};static getDerivedStateFromError(){return {err:true}}componentDidCatch(e:any){console.warn('lyric render failed',this.props.id,e)}render(){return this.state.err?null:this.props.children}}
 export {FONT_OPTIONS};
 export const POSITIONS:any={manual:'自由（現在位置）',tl:'左上',tc:'上中央',tr:'右上',ml:'左中央',mc:'中央',mr:'右中央',bl:'左下',bc:'下中央',br:'右下'};
-export const EFFECTS:any={none:'なし',double:'二重文字',shadow:'影',glow:'光彩',rgb:'色ずれ（二重）'};
+export const EFFECTS:any={none:'なし',double:'二重文字',shadow:'影',glow:'光彩',rgb:'色ずれ（二重）',outline:'縁取り＋影（明るい背景でも読める）'};
 export const TRANSITIONS:any={none:'基本のまま',lr:'左右に分かれる',tb:'上下に分かれる',fade:'フェード'};
 export {CATALOG};
 export const VIDEO_EXT=/\.(mp4|mov|m4v|webm)$/i;
@@ -75,7 +75,7 @@ export function Scene({data,t:tIn,base='',video}:{data:any;t:number;base?:string
  const ty=tachie?H*.105:position==='manual'?cy:position[0]==='t'?50+rh*fit/2:position[0]==='b'?H-50-rh*fit/2:H/2;
  const family=FONT_OPTIONS.find(f=>f.id===(editorLook(l).font))?.family??'Noto Serif JP';const effect=l.effect??'none',offset=l.effectOffset??6;
  return <LyricGuard key={l.id} id={l.id}><div style={{position:'absolute',inset:0,opacity:Math.max(0,Math.min(1,(t-l.start)/.1,(l.end-t)/.15)),'--lyric-font':`'${family}'`,'--lyric-fill':editorLook(l).fill,'--lyric-accent':editorLook(l).accent,'--lyric-stroke':editorLook(l).stroke} as any}>
- <div style={{position:'absolute',inset:0,transformOrigin:`${cx}px ${cy}px`,transform:`translate(${tx-cx}px,${ty-cy}px) rotate(${angle}deg) scale(${fit})`,filter:effect==='shadow'?`drop-shadow(${offset}px ${offset}px 3px #101310)`:effect==='glow'?`drop-shadow(0 0 ${offset+2}px #f4dfb0) drop-shadow(0 0 ${offset*2+3}px #e6aa96)`:undefined}}>
+ <div style={{position:'absolute',inset:0,transformOrigin:`${cx}px ${cy}px`,transform:`translate(${tx-cx}px,${ty-cy}px) rotate(${angle}deg) scale(${fit})`,filter:effect==='outline'?outlineFilter(offset,editorLook(l).stroke):effect==='shadow'?`drop-shadow(${offset}px ${offset}px 3px #101310)`:effect==='glow'?`drop-shadow(0 0 ${offset+2}px #f4dfb0) drop-shadow(0 0 ${offset*2+3}px #e6aa96)`:undefined}}>
  {(effect==='double'||effect==='rgb')&&<div style={{position:'absolute',inset:0,transform:`translate(${offset}px,${offset}px)`,opacity:.5,'--lyric-fill':effect==='rgb'?'#58dce6':undefined,'--lyric-accent':effect==='rgb'?'#58dce6':undefined} as any}>{out}</div>}
  {effect==='rgb'&&<div style={{position:'absolute',inset:0,transform:`translate(${-offset}px,0)`,opacity:.5,'--lyric-fill':'#ff75ad','--lyric-accent':'#ff75ad'} as any}>{out}</div>}
  {out}</div></div></LyricGuard>})}

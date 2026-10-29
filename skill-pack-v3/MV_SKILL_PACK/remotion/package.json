@@ -25,6 +25,7 @@
     "scenes": "tsx scripts/scenes.ts",
     "studio": "remotion studio",
     "test": "vitest run",
+    "qc:black": "tsx scripts/qc_black.ts",
     "typecheck": "tsc --noEmit",
     "edit": "tsx scripts/edit.ts",
     "approve": "tsx scripts/approve.ts",

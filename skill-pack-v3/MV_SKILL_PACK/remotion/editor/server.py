@@ -95,7 +95,11 @@ def check_gcomp(g):
     num=lambda x:isinstance(x,(int,float)) and not isinstance(x,bool) and math.isfinite(x)
     hexc=lambda v:re.fullmatch(r'#[0-9a-fA-F]{6}',str(v))
     def bad(m):raise ValueError(m)
-    if not isinstance(g,dict) or any(k not in ['colors','halftone','vignette','grade','particles','endFade','shade'] for k in g):bad('合成の全体設定を確認してください')
+    if not isinstance(g,dict) or any(k not in ['colors','halftone','vignette','grade','particles','endFade','shade','camera','backdrop'] for k in g):bad('合成の全体設定を確認してください')
+    if 'backdrop' in g and g['backdrop'] not in ['black','footage']:bad('背景は black / footage です')
+    if 'camera' in g:
+        m=g['camera']
+        if not isinstance(m,dict) or any(k not in ['shakeHz','punchSec','ease'] for k in m) or ('shakeHz' in m and not (num(m['shakeHz']) and 1<=m['shakeHz']<=30)) or ('punchSec' in m and not (num(m['punchSec']) and 0.05<=m['punchSec']<=1)) or ('ease' in m and m['ease'] not in ['smooth','linear']):bad('カメラ設定を確認してください（揺れ1〜30Hz・パンチ0.05〜1秒・smooth/linear）')
     if 'colors' in g and (not isinstance(g['colors'],dict) or any(k not in ['red','teal'] or not hexc(v) for k,v in g['colors'].items())):bad('合成の色は #RRGGBB で指定してください')
     if any(k in g and not (num(g[k]) and 0<=g[k]<=1) for k in ['halftone','vignette']):bad('網点・周辺の暗さは0〜1です')
     if any(k in g and not isinstance(g[k],bool) for k in ['particles','endFade','shade']):bad('合成の全体設定を確認してください')
@@ -199,7 +203,7 @@ def validate(d):
         if l.get('font','noto_serif') not in [f['id'] for f in fonts]:raise ValueError('利用できる書体を選択してください')
         if not finite(l.get('angle',0)) or not -180<=l.get('angle',0)<=180:raise ValueError('角度は-180〜180度です')
         if l.get('position','manual') not in ['manual','tl','tc','tr','ml','mc','mr','bl','bc','br']:raise ValueError('配置を確認してください')
-        if l.get('effect','none') not in ['none','double','shadow','glow','rgb'] or not finite(l.get('effectOffset',6)) or not 1<=l.get('effectOffset',6)<=24:raise ValueError('文字効果を確認してください')
+        if l.get('effect','none') not in ['none','double','shadow','glow','rgb','outline'] or not finite(l.get('effectOffset',6)) or not 1<=l.get('effectOffset',6)<=24:raise ValueError('文字効果を確認してください')
         for key in ['entrance','departure']:
             if l.get(key,'none') not in ['none','lr','tb','fade']:raise ValueError('文字の入り方・消え方を確認してください')
         if not finite(l.get('transitionDuration',.7)) or not .1<=l.get('transitionDuration',.7)<=2:raise ValueError('文字の切替時間は0.1〜2秒です')

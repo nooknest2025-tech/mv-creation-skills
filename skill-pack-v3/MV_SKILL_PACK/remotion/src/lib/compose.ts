@@ -24,7 +24,10 @@ export type CompCard = { name: string; sub?: string; color?: string; side?: "lef
 export type CompTitle = { text: string; at?: number; style?: keyof typeof COMP_TITLE };
 export type SceneComp = { layout?: CompLayout; panels: CompPanel[]; fx?: CompFx[]; shake?: number; punch?: number; tilt?: number; enter?: keyof typeof COMP_ENTER; border?: keyof typeof COMP_BORDERS; card?: CompCard; title?: CompTitle };
 export type CompGrade = { look: keyof typeof COMP_LOOKS; keep?: string[]; base?: number; lut?: string };
-export type GlobalComp = { colors?: { red?: string; teal?: string }; halftone?: number; vignette?: number; grade?: CompGrade; particles?: boolean; endFade?: boolean; shade?: boolean };
+export type GlobalComp = { colors?: { red?: string; teal?: string }; halftone?: number; vignette?: number; grade?: CompGrade; particles?: boolean; endFade?: boolean; shade?: boolean; camera?: CompCamera; backdrop?: "black" | "footage" };
+/** camera feel (data.comp.camera): shake noise speed (Hz), punch-in decay (s), zoom/tilt ramp easing. */
+export type CompCamera = { shakeHz?: number; punchSec?: number; ease?: "smooth" | "linear" };
+export const cameraOf = (data: any) => ({ shakeHz: 7, punchSec: 0.22, ease: "smooth" as "smooth" | "linear", ...(globalComp(data).camera ?? {}) });
 
 export const COMP_DEFAULT_COLORS = { red: "#E0182D", teal: "#2FF5D0" };
 export const hasComp = (s: any): s is { comp: SceneComp } => !!s && typeof s.comp === "object" && s.comp !== null && Array.isArray(s.comp.panels);
@@ -85,6 +88,13 @@ export function resolvePanels(c: SceneComp, W: number, H: number, beat: number):
   }
   return out;
 }
+/** smallest zoom at which a panel's picture still covers its whole box: zoom origin (cx, cy) and slide dx (percent of the box)
+ * push an edge in, rotation exposes the corners. Panels are drawn at max(z, coverScale) so a crop never shows an empty black strip. */
+export function coverScale(cx: number, cy: number, dx: number, rotDeg: number, boxAspect: number) {
+  const ox = (50 + Math.abs(dx)) / Math.max(1, Math.min(cx, 100 - cx)), oy = 50 / Math.max(1, Math.min(cy, 100 - cy));
+  const r = Math.abs(rotDeg) * Math.PI / 180, a = Math.max(boxAspect, 1 / Math.max(1e-3, boxAspect));
+  return Math.max(ox, oy) * (Math.cos(r) + Math.sin(r) * a);
+}
 /** seconds inside the panel's clip at `local` seconds after the panel appeared. Never loops: holds the last frame. */
 export function panelSourceTime(p: { from?: number; rate?: number; freeze?: boolean }, local: number, clipDur?: number, fps = 30) {
   const at = (p.from ?? 0) + (p.freeze ? 0 : Math.max(0, local) * (p.rate ?? 1));
@@ -141,7 +151,9 @@ export function checkComp(c: any, nAssets: number, sceneLen: number) {
 export function checkGlobalComp(g: any) {
   if (g === undefined) return;
   const bad = (m: string) => { throw new Error(m); };
-  if (!g || typeof g !== "object" || Object.keys(g).some((k) => !["colors", "halftone", "vignette", "grade", "particles", "endFade", "shade"].includes(k))) bad("合成の全体設定を確認してください");
+  if (!g || typeof g !== "object" || Object.keys(g).some((k) => !["colors", "halftone", "vignette", "grade", "particles", "endFade", "shade", "camera", "backdrop"].includes(k))) bad("合成の全体設定を確認してください");
+  if (g.backdrop !== undefined && !["black", "footage"].includes(g.backdrop)) bad("背景は black / footage です");
+  if (g.camera !== undefined) { const m = g.camera; if (!m || typeof m !== "object" || Object.keys(m).some((k) => !["shakeHz", "punchSec", "ease"].includes(k)) || (m.shakeHz !== undefined && !inR(m.shakeHz, 1, 30)) || (m.punchSec !== undefined && !inR(m.punchSec, 0.05, 1)) || (m.ease !== undefined && !["smooth", "linear"].includes(m.ease))) bad("カメラ設定を確認してください（揺れ1〜30Hz・パンチ0.05〜1秒・smooth/linear）"); }
   if (g.colors !== undefined && (!g.colors || typeof g.colors !== "object" || Object.entries(g.colors).some(([k, v]) => !["red", "teal"].includes(k) || !HEX.test(String(v))))) bad("合成の色は #RRGGBB で指定してください");
   for (const k of ["halftone", "vignette"]) if (g[k] !== undefined && !inR(g[k], 0, 1)) bad("網点・周辺の暗さは0〜1です");
   for (const k of ["particles", "endFade", "shade"]) if (g[k] !== undefined && typeof g[k] !== "boolean") bad("合成の全体設定を確認してください");

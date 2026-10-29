@@ -145,7 +145,7 @@ function stageLyrics(st: TachieStage, lyrics: LyricLite[], t: number, W: number,
     const pxy = has("position") && l.position && l.position !== "manual" ? POSITION_XY[l.position] : undefined;
     const tx = pxy ? pxy[0] * W : ax, ty = pxy ? pxy[1] * H : has("y") && Number.isFinite(l.y) ? l.y * H : ay;
     const k = has("scale") && Number.isFinite(l.scale) ? l.scale / 0.72 : 1, ang = has("angle") ? l.angle ?? 0 : 0;
-    return <div key={l.id} style={{ position: "absolute", inset: 0, transformOrigin: `${ax}px ${ay}px`, transform: `translate(${tx - ax}px,${ty - ay}px) rotate(${ang}deg) scale(${k})`, filter: has("effect") || has("effectOffset") ? effectFilter(l.effect ?? "none", l.effectOffset ?? 6) : undefined }}>{combined(el, l, t, ax, ay, W, H)}</div>;
+    return <div key={l.id} style={{ position: "absolute", inset: 0, transformOrigin: `${ax}px ${ay}px`, transform: `translate(${tx - ax}px,${ty - ay}px) rotate(${ang}deg) scale(${k})`, filter: has("effect") || has("effectOffset") ? effectFilter(l.effect ?? "none", l.effectOffset ?? 6, l.stroke) : undefined }}>{combined(el, l, t, ax, ay, W, H)}</div>;
   };
   for (const l of lyrics) {
     const i = lyrics.indexOf(l), next = lyrics[i + 1]?.start ?? Infinity, hold = Math.min(l.end + 0.1, next); // short hold, but never overlapping the next line
