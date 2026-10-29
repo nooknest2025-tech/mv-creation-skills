@@ -16,7 +16,7 @@ export function layoutH(L: ResolvedLine, W: number, H: number, o: { size?: numbe
   const size = o.size ?? 0.075, v = o.v ?? 0.8, maxw = o.maxw ?? 0.86, track = o.track ?? 0;
   let px = Math.round(size * Math.min(W, H) * 1.2 * (o.k ?? 1) * Number(L.params.size ?? 1));
   const chars = L.chars;
-  const noWrap = !!L.params?.noWrap; // editor 「改行しない」: one row, shrink to fit instead of breaking (e.g. a name like ミスター・ヘンドレ)
+  const noWrap = !!L.params?.noWrap; // editor 「改行しない」: one row, shrink to fit instead of breaking (e.g. a name like ミスター・サンプルマン)
   let adv: number[] = [], rows: number[][] = [], gaps: number[] = [];
   if (noWrap) {
     adv = chars.map((c) => advOf(c.ch, px, o.mono) + track * px);

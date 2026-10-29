@@ -19,14 +19,14 @@ describe("pack bug fixes", () => {
   });
   it("made rebuilds the imported project (title from manifest), not one named after the song file", () => {
     const d = fs.mkdtempSync(path.join(os.tmpdir(), "made-"));
-    fs.writeFileSync(path.join(d, "manifest.json"), JSON.stringify({ title: "ミスター・ヘンドレ" }));
-    expect(madeRebuildArgs("/in", d, true)).toEqual(["--input", "/in", "--title", "ミスター・ヘンドレ", "--yes"]);
+    fs.writeFileSync(path.join(d, "manifest.json"), JSON.stringify({ title: "ミスター・サンプルマン" }));
+    expect(madeRebuildArgs("/in", d, true)).toEqual(["--input", "/in", "--title", "ミスター・サンプルマン", "--yes"]);
     const e = fs.mkdtempSync(path.join(os.tmpdir(), "made-"));
     expect(madeRebuildArgs("/in", e, false)).toEqual(["--input", "/in", "--title", path.basename(e)]);
   });
   it("pro lyric layout never breaks inside a katakana or latin word", () => {
-    const s = [..."ミスター・ヘンドレ！（Hey!）"];
-    for (let i = 1; i < 9; i++) expect(canBreak(s, i)).toBe(false); // inside ミスター・ヘンドレ
+    const s = [..."ミスター・サンプルマン！（Hey!）"];
+    for (let i = 1; i < 9; i++) expect(canBreak(s, i)).toBe(false); // inside ミスター・サンプルマン
     expect(canBreak(s, 9)).toBe(false); // before ！
     expect(canBreak(s, s.indexOf("e"))).toBe(false); // inside Hey
     expect(canBreak([..."白い仮面に赤い"], 5)).toBe(true);

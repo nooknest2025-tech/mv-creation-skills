@@ -14,7 +14,7 @@ const FG = "var(--lyric-fill, #f4f2ec)", AC = "var(--lyric-accent, #d7192a)", BG
 const U = (c: Ctx) => Math.min(c.W, c.H);
 
 const KATA = /[ァ-ヺー・]/, LATIN = /[A-Za-z0-9!?'’]/, NOSTART = /[、。，．・ー！？!?）)」』】〉ゃゅょっャュョッァィゥェォ]/;
-/** line-break rule: never before closing punctuation / small kana, never inside a katakana word (ミスター・ヘンドレ) or a latin word. */
+/** line-break rule: never before closing punctuation / small kana, never inside a katakana word (ミスター・サンプルマン) or a latin word. */
 export function canBreak(chars: string[], i: number) {
   const a = chars[i - 1] ?? "", b = chars[i] ?? "";
   if (NOSTART.test(b) || /[（(「『【]/.test(a)) return false;

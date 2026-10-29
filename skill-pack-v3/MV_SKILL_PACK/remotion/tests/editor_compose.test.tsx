@@ -85,7 +85,7 @@ describe("grade LUT + no-wrap lyrics", () => {
     expect(red[0] - red[1]).toBeGreaterThan(0.4); expect(Math.abs(green[0] - green[1])).toBeLessThan(0.1);
   });
   it("「改行しない」 keeps a long name on one row / one column", () => {
-    const text = "ミスター・ヘンドレ！ミスター・ヘンドレ！";
+    const text = "ミスター・サンプルマン！ミスター・サンプルマン！";
     const L: any = { text, chars: Array.from(text).map((ch, idx) => ({ ch, idx })), params: { size: 3 } };
     expect(layoutH(L, 1280, 720).rows.length).toBeGreaterThan(1);
     const one = layoutH({ ...L, params: { size: 3, noWrap: true } }, 1280, 720);
