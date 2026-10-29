@@ -1,6 +1,6 @@
 {
   "name": "mvpack-remotion",
-  "version": "2.0.0",
+  "version": "1.0.0",
   "private": true,
   "description": "MV skill pack - Remotion lyric motion system (32 styles)",
   "type": "module",
@@ -43,7 +43,8 @@
     "pro-demo": "tsx scripts/pro_demo.ts",
     "editor": "tsx scripts/editor.ts",
     "editor:demo": "tsx scripts/editor.ts --demo --project editor-demo",
-    "fonts:editor": "tsx scripts/editor_fonts.ts"
+    "fonts:editor": "tsx scripts/editor_fonts.ts",
+    "editor:update": "tsx scripts/editor_update.ts"
   },
   "dependencies": {
     "@remotion/cli": "4.0.538",

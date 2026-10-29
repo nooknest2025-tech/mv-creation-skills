@@ -1,3 +1,5 @@
+import {TOOL_TABS,toolUnavailable} from './tool-status';
+declare const __EDITOR_BUILD__: string;
 import {editorLook} from '../src/lib/editorLook';
 import React from 'react';
 import {markEdited,STAGE_STYLES} from '../src/lib/lyricEdits';
@@ -308,12 +310,12 @@ window.addEventListener('resize',fit);window.addEventListener('beforeunload',e=>
 {const bar=$('play').parentElement;const lt=document.createElement('button');lt.id='loopToggle';lt.onclick=()=>{loopOn=!loopOn;loopUi()};const sp=document.createElement('button');sp.id='stopRange';sp.textContent='停止';sp.onclick=stopRange;const ls=document.createElement('span');ls.id='loopState';bar.append(lt,sp,ls);loopUi()}
 document.addEventListener('keydown',e=>{if(e.code!=='Space')return;const tag=(e.target as HTMLElement)?.tagName;if(/INPUT|SELECT|TEXTAREA|BUTTON/.test(tag??'')&&!(tag==='INPUT'&&(e.target as HTMLInputElement).type==='range'))return;e.preventDefault();mode='live';if(audio.paused){if(loopRange)seek(Math.max(loopRange()[0],Math.min(audio.currentTime,loopRange()[1]-.05)),true);else audio.play().catch(()=>{})}else audio.pause()});
 let previous=-1;function tick(){if(loopRange&&(!audio.paused||audio.ended)){const r=loopRange();const step=audio.ended?(loopOn?'restart':'stop'):loopStep(audio.currentTime,r,loopOn);if(step==='restart')seek(r[0],true);else if(step==='stop'){audio.pause();audio.currentTime=r[1];loopRange=null;loopUi()}}if(data&&mode==='live'){let n=Math.floor(audio.currentTime*(data?.fps??24));if(n!==previous){t=audio.currentTime;draw();previous=n}}requestAnimationFrame(tick)}
-async function toolTabs(){let tools:any={};try{const r=await fetch('tools.json');if(r.ok)tools=await r.json()}catch{}
+async function toolTabs(){let tools:any={};try{const r=await fetch('tools.json',{cache:'no-store'});if(r.ok)tools=await r.json()}catch{}
  const names:any={timing:['タイミング','切替や歌詞のタイミングを細かく調整（保存は次の本番書き出し npm run mv に反映）'],faces:['顔の位置','目・口の位置を直す（保存は次の npm run mv に反映）']};
  const bar=$('scenesTab').parentElement!;const ov=document.createElement('div');ov.id='toolOverlay';ov.hidden=true;ov.style.cssText='position:fixed;inset:0;z-index:50;background:#111;display:flex;flex-direction:column';
  const head=document.createElement('div');head.style.cssText='display:flex;gap:10px;align-items:center;padding:8px 12px;background:#1d2620;color:#eee';const back=document.createElement('button');back.textContent='← 歌詞・映像の編集に戻る';back.onclick=()=>{ov.hidden=true};const note=document.createElement('span');head.append(back,note);
  const fr=document.createElement('iframe');fr.style.cssText='flex:1;border:0;background:#fff';ov.append(head,fr);document.body.append(ov);
- for(const key of ['timing','faces']){if(!tools[key])continue;const b=document.createElement('button');b.id=key+'Tab';b.textContent=names[key][0];b.title=names[key][1];b.onclick=()=>{audio.pause();if(fr.dataset.k!==key){fr.src=tools[key];fr.dataset.k=key}note.textContent=names[key][0]+'：'+names[key][1];ov.hidden=false};bar.append(b)}}
+ for(const key of TOOL_TABS){const b=document.createElement('button');b.id=key+'Tab';b.textContent=names[key][0];b.title=names[key][1];b.onclick=()=>{if(!tools[key]){$('error').textContent=toolUnavailable(key,tools.reason);return}audio.pause();if(fr.dataset.k!==key){fr.src=tools[key];fr.dataset.k=key}note.textContent=names[key][0]+'：'+names[key][1];ov.hidden=false};bar.append(b)}}
 /* 全画面プレビュー（映像だけ・16:9のまま黒帯・曲はそのまま再生） */
 {const scr=$('screen'),bar=$('fsBar');let hideT:any=0;
  const toggle=()=>{if(document.fullscreenElement)document.exitFullscreen();else scr.requestFullscreen?.().catch((e:any)=>$('error').textContent='全画面にできません：'+e.message)};
@@ -333,3 +335,6 @@ load().then(()=>{requestAnimationFrame(tick);poll();toolTabs()}).catch(e=>$('err
 {const sv=$('save');const u=document.createElement('button');u.id='undoBtn';u.textContent='↶';u.title='元に戻す（Ctrl+Z）';u.setAttribute('aria-label','元に戻す');u.onclick=undo;const r=document.createElement('button');r.id='redoBtn';r.textContent='↷';r.title='やり直す（Ctrl+Y／Ctrl+Shift+Z）';r.setAttribute('aria-label','やり直す');r.onclick=redo;u.className=r.className='histBtn';sv.before(u,r);undoUi()}
 document.addEventListener('keydown',e=>{if(!(e.ctrlKey||e.metaKey)||e.altKey||isTextField(e.target))return;const k=e.key.toLowerCase();
  if(k==='z'&&!e.shiftKey){e.preventDefault();undo()}else if(k==='y'||(k==='z'&&e.shiftKey)){e.preventDefault();redo()}});
+
+// Compare this loaded bundle with the runtime build without discarding edits.
+{const v=document.createElement('span');v.id='editorVersion';v.style.fontSize='11px';v.textContent='エディター '+__EDITOR_BUILD__;$('catalogCount').after(v);const check=async()=>{try{const r=await fetch('editor-version.json',{cache:'no-store'});if(!r.ok)return;const n=await r.json();if(n.buildId!==__EDITOR_BUILD__)v.textContent='新しいエディターがあります。未保存の編集を保存してから再読み込みしてください。'}catch{}};window.addEventListener('focus',check);setInterval(check,30000);check()}
