@@ -68,13 +68,20 @@ function Lines({ kind, W, H, seed, color = "#fff" }: { kind: "focus" | "speed"; 
   return <svg width={W} height={H} style={{ position: "absolute", inset: 0, mixBlendMode: "screen" }}>{els}</svg>;
 }
 
-function NameCard({ c, f, red }: { c: NonNullable<SceneComp["card"]>; f: number; red: string }) {
-  const s = lerp(f, [0, 7], [1, 0], ease), left = (c.side ?? "left") === "left";
+/** name-card title size: fits the band (62% of the width minus the 5% text inset, the -14° skew lean and padding), max 120px.
+ *  CJK glyphs ~1em wide, Latin ~0.6em, plus the 10px stroke on both sides: a long name shrinks instead of spilling off the band. */
+export function cardFontSize(name: string, W: number, max = 120) {
+  const em = Array.from(name).reduce((a, ch) => a + (/[\u0000-\u024F]/.test(ch) ? 0.62 : 1), 0) || 1;
+  const avail = W * (0.62 - 0.05) - Math.tan((14 * Math.PI) / 180) * 210 - 48 - 20;
+  return Math.max(24, Math.min(max, Math.floor(avail / em)));
+}
+function NameCard({ c, f, red, W }: { c: NonNullable<SceneComp["card"]>; f: number; red: string; W: number }) {
+  const s = lerp(f, [0, 7], [1, 0], ease), left = (c.side ?? "left") === "left", fs = cardFontSize(c.name, W);
   return <div style={{ position: "absolute", inset: 0 }}>
     <div style={{ position: "absolute", left: left ? 0 : undefined, right: left ? undefined : 0, bottom: "14%", width: "62%", height: 210, background: c.color ?? red, transform: `translateX(${(left ? -1 : 1) * s * 110}%) skewX(-14deg)`, boxShadow: "0 0 0 8px #000" }} />
     <div style={{ position: "absolute", [left ? "left" : "right"]: "5%", bottom: "16.5%", transform: `translateX(${(left ? -1 : 1) * s * 140}%)`, whiteSpace: "nowrap", textAlign: left ? "left" : "right" } as any}>
       {c.sub ? <div style={{ fontFamily: fam("Bebas Neue"), fontSize: 46, letterSpacing: 10, color: "#000" }}>{c.sub}</div> : null}
-      <div style={{ fontFamily: "'Shippori Mincho B1', 'Shippori Mincho', 'Noto Serif JP', serif", fontWeight: 800, fontSize: 120, color: "#fff", lineHeight: 1.0, WebkitTextStroke: "10px #000", paintOrder: "stroke fill" } as any}>{c.name}</div>
+      <div style={{ fontFamily: "'Shippori Mincho B1', 'Shippori Mincho', 'Noto Serif JP', serif", fontWeight: 800, fontSize: fs, paddingInline: 10, color: "#fff", lineHeight: 1.0, WebkitTextStroke: "10px #000", paintOrder: "stroke fill" } as any}>{c.name}</div>
     </div>
   </div>;
 }
@@ -131,7 +138,7 @@ export function CompScene({ data, i, t, W, H, media, graded }: { data: any; i: n
       {c.border === "h" ? <div style={{ position: "absolute", left: 0, right: 0, top: "50%", height: 10, marginTop: -5, background: "#fff", boxShadow: `0 0 30px ${col.red}, 0 0 0 6px #000` }} /> : null}
       {c.border === "grid" ? <><div style={{ position: "absolute", left: "50%", top: 0, bottom: 0, width: 10, marginLeft: -5, background: col.teal, boxShadow: "0 0 0 5px #000" }} /><div style={{ position: "absolute", top: "50%", left: 0, right: 0, height: 10, marginTop: -5, background: col.teal, boxShadow: "0 0 0 5px #000" }} /></> : null}
       {c.border === "grow" ? <>{growAt.filter((a) => st0 >= a).map((_, n) => <div key={n} style={{ position: "absolute", background: "#000", boxShadow: "0 0 0 3px #fff", ...(n === 0 ? { left: "50%", top: 0, bottom: 0, width: 14, marginLeft: -7 } : n === 1 ? { left: 0, width: "50%", top: "50%", height: 14, marginTop: -7 } : { left: "50%", right: 0, top: "50%", height: 14, marginTop: -7 }) }} />)}</> : null}
-      {c.card ? <NameCard c={c.card} f={sf} red={col.red} /> : null}
+      {c.card ? <NameCard c={c.card} f={sf} red={col.red} W={W} /> : null}
     </div>
     {(g.halftone ?? 0) > 0 ? <div style={{ position: "absolute", inset: 0, backgroundImage: "radial-gradient(rgba(0,0,0,.9) 28%, transparent 30%)", backgroundSize: "9px 9px", opacity: g.halftone, mixBlendMode: "multiply" }} /> : null}
     {(g.vignette ?? 0) > 0 ? <div style={{ position: "absolute", inset: 0, background: `radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,${g.vignette}) 100%)` }} /> : null}

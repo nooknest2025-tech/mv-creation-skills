@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import React from "react"; import { renderToStaticMarkup } from "react-dom/server";
 import path from "path"; import { spawnSync } from "child_process";
 import { backdropOf, checkBackdrop, checkComp, checkGlobalComp, coverScale, resolvePanels } from "../src/lib/compose";
-import { CompScene } from "../src/render/Compose";
+import { CompScene, cardFontSize } from "../src/render/Compose";
 const R = path.resolve(__dirname, "..");
 const py = ["python3", "python"].find((c) => spawnSync(c, ["--version"]).status === 0);
 const media = (a: number, t: number, _s: any, k: string) => <i key={k} data-a={a} data-t={t.toFixed(2)} />;
@@ -95,5 +95,18 @@ print(json.dumps(out))`;
     const r = spawnSync(py!, ["-c", prog, path.join(R, "editor/server.py")], { input: JSON.stringify(cases.map(([, c, g]) => [c, g])), encoding: "utf8" });
     expect(r.stderr).toBe("");
     expect(JSON.parse(r.stdout)).toEqual(cases.map(([, c, g]) => tsOk(c, g)));
+  });
+});
+
+describe("name card title fits the band", () => {
+  it("long names shrink to fit (first glyph never off the band); short names keep 120px", () => {
+    const W = 1920, band = W * 0.62 - W * 0.05 - Math.tan((14 * Math.PI) / 180) * 210;
+    for (const n of ["ヘンドレガーディアン", "ヘンドレ侍", "HENDRE GUARDIAN THE SECOND"]) {
+      const fs = cardFontSize(n, W), em = Array.from(n).reduce((a, ch) => a + (/[\u0000-\u024F]/.test(ch) ? 0.62 : 1), 0);
+      expect(fs * em + 20).toBeLessThanOrEqual(band);
+    }
+    expect(cardFontSize("ヘンドレ侍", W)).toBe(120); expect(cardFontSize("ヘンドレガーディアン", W)).toBeLessThan(120);
+    const d = base(); d.scenes[0].comp.card = { name: "ヘンドレガーディアン", side: "right" };
+    expect(html(d, 0.5)).toContain(`font-size:${cardFontSize("ヘンドレガーディアン", 1920)}px`);
   });
 });
