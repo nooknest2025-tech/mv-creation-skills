@@ -1,5 +1,6 @@
 import {bundle} from '@remotion/bundler';
 import {renderMedia,selectComposition,RenderInternals} from '@remotion/renderer';
+import {gradeCube,gradeCopies} from './lut.mjs';
 import fs from 'node:fs';import path from 'node:path';import {fileURLToPath} from 'node:url';import {spawnSync} from 'node:child_process';
 const editor=path.dirname(fileURLToPath(import.meta.url)),remotion=path.resolve(editor,'..'),pack=path.resolve(remotion,'..');
 const snapshotFile=path.resolve(process.argv[2]),snapshot=JSON.parse(fs.readFileSync(snapshotFile,'utf8')),runtime=path.dirname(snapshotFile),output=path.resolve(process.argv[3]);
@@ -20,10 +21,12 @@ const browserExecutable=browserPath();
 const stickerFiles=st=>[...(st.floaters?.items??[]).flatMap(it=>Object.values(it.frames??{}).map(f=>(st.floaters.base??'')+f)),...Object.values(st.guests?.items??{}).flatMap(it=>Object.values(it.frames??{}).map(f=>(st.guests.base??'')+f))];
 const publicDir=path.join(runtime,'.render-public');fs.mkdirSync(publicDir,{recursive:true});
 for(const item of [...snapshot.data.assets.flatMap(a=>typeof a==='string'?[a]:a.kind==='tachie'?[a.src,...a.stage.chars.flatMap(c=>c.rig.parts.flatMap(p=>[p.src,...Object.values(p.states??{})]).map(f=>c.base+f)),...stickerFiles(a.stage)]:[a.src]),snapshot.data.audioFile,'editor.css','font-options.css']){const src=path.resolve(runtime,item),dest=path.resolve(publicDir,item);if(!src.startsWith(runtime+path.sep)||!dest.startsWith(publicDir+path.sep))throw Error('Media path must stay inside project output');fs.mkdirSync(path.dirname(dest),{recursive:true});fs.copyFileSync(src,dest)}
+/* data.comp.grade: exact LUT on the copied pictures/clips only (sources untouched); the preview uses an SVG approximation */
+const cube=gradeCube(snapshot.data,runtime);if(cube)gradeCopies(ff??bundledFF,cube,[...new Set(snapshot.data.assets.filter(a=>typeof a==='string'||a.kind!=='tachie').map(a=>path.resolve(publicDir,typeof a==='string'?a:a.src)))]);
 fs.cpSync(path.join(runtime,'editor-fonts'),path.join(publicDir,'editor-fonts'),{recursive:true});
 const serveUrl=await bundle({entryPoint:path.join(editor,'export-entry.tsx'),publicDir});
 const gl=process.env.MVPACK_GL||(process.platform==='win32'?'angle':null);const chromiumOptions=gl?{gl}:{};
-const inputProps={data:snapshot.data};const composition=await selectComposition({serveUrl,id:'EditableMV',inputProps,browserExecutable,chromiumOptions});
+const inputProps={data:cube?{...snapshot.data,_gradeBaked:true}:snapshot.data};const composition=await selectComposition({serveUrl,id:'EditableMV',inputProps,browserExecutable,chromiumOptions});
 const silent=output.replace(/\.mp4$/,'.silent.mp4'),qa=snapshot.qaFrames;
 await renderMedia({serveUrl,composition,inputProps,browserExecutable,chromiumOptions,binariesDirectory,outputLocation:silent,muted:true,codec:'h264',pixelFormat:'yuv420p',crf:20,concurrency:2,frameRange:qa?[0,qa-1]:undefined,onProgress:p=>console.log(Math.min(98,Math.round(p.progress*98))),logLevel:'error'});
 const audio=path.resolve(runtime,snapshot.data.audioFile);

@@ -3,7 +3,7 @@ export function mergeSceneSlivers<T extends { start: number; end?: number }>(sce
   const out = scenes.map((s) => ({ ...s }));
   const len = (i: number) => (out[i + 1]?.start ?? out[i].end ?? duration ?? out[i].start) - out[i].start;
   for (let i = 0; i < out.length && out.length > 1; ) {
-    if (len(i) >= min) { i++; continue; }
+    if (len(i) >= min || (out[i] as any).comp) { i++; continue; } // a composited cut (scene.comp) is intentional, even when it is 1–2 frames long
     if (i > 0) { // absorb into the previous scene
       const prev = out[i - 1]; if (prev.end !== undefined) (prev as any).end = out[i + 1]?.start ?? out[i].end ?? prev.end;
       out.splice(i, 1);
