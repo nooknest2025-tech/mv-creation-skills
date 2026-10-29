@@ -1,3 +1,4 @@
+import {editorLook} from '../src/lib/editorLook';
 import React from 'react';
 import {STYLES} from '../src/styles/styles';
 import {CATALOG} from '../src/lib/catalog';
@@ -69,8 +70,8 @@ export function Scene({data,t:tIn,base='',video}:{data:any;t:number;base?:string
  const position=l.position??'manual',fit=tachie?Math.min(1.1,(W-96)/Math.max(1,frw),H*.17/Math.max(1,frh)):position==='manual'?1:Math.min(1,(W-128)/Math.max(1,rw),(H-100)/Math.max(1,rh));
  const tx=tachie?W/2:position==='manual'?cx:position[1]==='l'?64+rw*fit/2:position[1]==='r'?W-64-rw*fit/2:W/2;
  const ty=tachie?H*.105:position==='manual'?cy:position[0]==='t'?50+rh*fit/2:position[0]==='b'?H-50-rh*fit/2:H/2;
- const family=FONT_OPTIONS.find(f=>f.id===(l.font??l.params?.font))?.family??'Noto Serif JP';const effect=l.effect??'none',offset=l.effectOffset??6;
- return <LyricGuard key={l.id} id={l.id}><div style={{position:'absolute',inset:0,opacity:Math.max(0,Math.min(1,(t-l.start)/.1,(l.end-t)/.15)),'--lyric-font':`'${family}'`,'--lyric-fill':l.fill??l.params?.palette?.fill??'#f8f3e6','--lyric-accent':l.accent??l.params?.palette?.accent??'#e6aa96','--lyric-stroke':l.stroke??l.params?.palette?.stroke??'#1f271f'} as any}>
+ const family=FONT_OPTIONS.find(f=>f.id===(editorLook(l).font))?.family??'Noto Serif JP';const effect=l.effect??'none',offset=l.effectOffset??6;
+ return <LyricGuard key={l.id} id={l.id}><div style={{position:'absolute',inset:0,opacity:Math.max(0,Math.min(1,(t-l.start)/.1,(l.end-t)/.15)),'--lyric-font':`'${family}'`,'--lyric-fill':editorLook(l).fill,'--lyric-accent':editorLook(l).accent,'--lyric-stroke':editorLook(l).stroke} as any}>
  <div style={{position:'absolute',inset:0,transformOrigin:`${cx}px ${cy}px`,transform:`translate(${tx-cx}px,${ty-cy}px) rotate(${angle}deg) scale(${fit})`,filter:effect==='shadow'?`drop-shadow(${offset}px ${offset}px 3px #101310)`:effect==='glow'?`drop-shadow(0 0 ${offset+2}px #f4dfb0) drop-shadow(0 0 ${offset*2+3}px #e6aa96)`:undefined}}>
  {(effect==='double'||effect==='rgb')&&<div style={{position:'absolute',inset:0,transform:`translate(${offset}px,${offset}px)`,opacity:.5,'--lyric-fill':effect==='rgb'?'#58dce6':undefined,'--lyric-accent':effect==='rgb'?'#58dce6':undefined} as any}>{out}</div>}
  {effect==='rgb'&&<div style={{position:'absolute',inset:0,transform:`translate(${-offset}px,0)`,opacity:.5,'--lyric-fill':'#ff75ad','--lyric-accent':'#ff75ad'} as any}>{out}</div>}

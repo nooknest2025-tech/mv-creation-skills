@@ -118,4 +118,4 @@ async function main() {
   }
   throw new UserError(`不明なコマンド: ${cmd}`, "list / fetch / add / sync / sheet");
 }
-if (process.argv[1]?.match(/fonts\.ts$/)) main().catch(fail);
+if (process.argv[1] && path.basename(process.argv[1]) === 'fonts.ts') main().catch(fail);

@@ -5,10 +5,10 @@ import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
 import { REMOTION_DIR } from "./common";
-import { fetchMissing } from "./fonts";
+import { fetchMissing, loadRegistry } from "./fonts";
 
 export const FONT_DIR = path.join(REMOTION_DIR, "public", "fonts");
-export const EDITOR_FONT_IDS = ["noto_serif", "shippori_mincho", "zen_old_mincho", "noto_sans", "zen_kaku", "mplus1p", "dela", "zen_maru", "mplus_rounded", "kosugi_maru", "rocknroll", "klee", "yomogi", "zen_kurenaido", "yusei", "yuji_syuku", "yuji_boku", "zen_antique", "hachi_maru", "mochiy", "potta", "reggae", "dotgothic", "train_one", "rampart", "kaisei_decol", "new_tegomin"];
+export const EDITOR_FONT_IDS = loadRegistry().filter(f => f.jp && /^(OFL-1.1|Apache-2.0)$/.test(f.license)).map(f => f.id);
 export const extraFonts = (): any[] => JSON.parse(fs.readFileSync(path.join(REMOTION_DIR, "editor", "extra-fonts.json"), "utf8"));
 
 /** Minimal ZIP reader (stored/deflate) so no extra dependency or OS unzip tool is needed (Windows-safe). */
@@ -50,8 +50,10 @@ export async function ensureEditorFonts(o: { quiet?: boolean } = {}): Promise<{ 
     try { if (await fetchExtra(f)) console.log(`⬇ ${f.label}（作者: ${f.author}、利用条件: ${f.permissionSource}）`); }
     catch (e: any) { skipped.push(`${f.label}: ${e?.message ?? e}`); }
   }
-  const missing = [...EDITOR_FONT_IDS.map((id) => id), ...extraFonts().map((f) => f.id)];
-  const ok = missing.length - skipped.length;
+  const expected = [...loadRegistry().filter(f => EDITOR_FONT_IDS.includes(f.id)), ...extraFonts()];
+  const missing = expected.filter(f => !fs.existsSync(path.join(FONT_DIR, f.file)));
+  const ok = expected.length - missing.length;
+  for (const f of missing) if (!skipped.some(s => s.startsWith(`${f.label ?? f.id}:`))) skipped.push(`${f.label ?? f.id}: 未取得`);
   if (skipped.length) console.log(`⚠️ 一部の書体を取得できませんでした（ネット接続を確認し、後で npm run fonts:editor で再試行できます。手元にある書体だけで編集UIは使えます）:\n  - ${skipped.join("\n  - ")}`);
   else if (!o.quiet) console.log("✅ 編集UIの書体は揃っています");
   return { ok, skipped };

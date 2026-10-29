@@ -14,6 +14,15 @@ const data = (motion: string, sections?: any[]) => ({
 });
 
 describe("editor preview renders stills-mode pro_* lyrics", () => {
+  test('saved imported palette and manual appearance edits reach the renderer',()=>{
+    const d:any=data('pro_slide');
+    const initial=renderToString(<Scene data={JSON.parse(JSON.stringify(d))} t={1.5}/>);
+    expect(initial).toContain('--lyric-fill:#ffffff');
+    d.lyrics[0].fill='#12ab34';d.lyrics[0].font='klee';
+    const saved=renderToString(<Scene data={JSON.parse(JSON.stringify(d))} t={1.5}/>);
+    expect(saved).toContain('--lyric-fill:#12ab34');
+    expect(saved).toContain('Klee One');
+  });
   for (const motion of ["pro_slide", "pro_diag", "pro_box", "pro_stretch", "pro_smash"])
     for (const sections of [undefined, [{ type: "verse", label: "Aメロ", start: 0, end: 30 }]])
       test(`${motion} ${sections ? "with" : "without"} sections at 1.5s`, () => {

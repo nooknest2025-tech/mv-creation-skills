@@ -14,6 +14,18 @@ import numpy as np
 
 
 class DecodeAudioTests(unittest.TestCase):
+    def test_no_matching_lyrics_are_not_silently_uniformly_placed(self):
+        with self.assertRaises(SystemExit):
+            module.align(['ななつはん'], [])
+
+    def test_compressed_repeats_and_overlaps_are_reported_without_rewriting(self):
+        lines = [dict(text='ななつはん', start=1, end=1.2),
+                 dict(text='ななつはん', start=1.1, end=1.3)]
+        issues = module.timing_issues(lines, 5)
+        self.assertEqual(len(issues), 2)
+        self.assertIn('前の行と重複', issues[1]['reasons'])
+        self.assertEqual(lines[1]['start'], 1.1)
+
     def test_stereo_48k_in_unicode_path_decodes_to_mono_16k(self):
         with tempfile.TemporaryDirectory(prefix='mv audio ') as tmp:
             path = Path(tmp) / '音声 テスト.wav'

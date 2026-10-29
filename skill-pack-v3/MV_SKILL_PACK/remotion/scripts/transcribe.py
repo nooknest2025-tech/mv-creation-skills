@@ -102,13 +102,6 @@ def align(text_lines, segs):
     # interpolate gaps between known neighbours
     known = [i for i, t in enumerate(times) if t]
     if not known:
-        print("⚠️ 歌詞と音声の一致が取れなかったため、行を均等に配置しました（npm run timing で直せます）", file=sys.stderr)
-        t0 = segs[0]["start"] if segs else 1.0
-        t1 = segs[-1]["end"] if segs else t0 + 3.0 * len(lyr) / max(1, len(text_lines))
-        step = (t1 - t0) / max(1, len(lyr))
-        times = [(t0 + step * i, t0 + step * (i + 1)) for i in range(len(lyr))]
-        known = list(range(len(lyr)))
-    if False:
         raise SystemExit("❌ 歌詞と音声がほとんど一致しませんでした。\n💡 対処: 歌詞テキストが曲と同じか確認するか、ボーカルだけの音源を --vocals で渡してください。")
     for i in range(len(times)):
         if times[i]:
@@ -141,6 +134,24 @@ def align(text_lines, segs):
     return lines
 
 
+def timing_issues(lines, duration):
+    """Flag suspicious estimates without changing lyrics or inventing timings."""
+    issues = []
+    for i, line in enumerate(lines):
+        start, end = line['start'], line['end']
+        reasons = []
+        if start < 0 or end > duration + .05 or end <= start:
+            reasons.append('時刻が音源の範囲外、または終了が開始以前')
+        count = len([c for c in line['text'] if not SKIP.match(c)])
+        if end - start < .45 or count / max(.01, end - start) > 10:
+            reasons.append('表示時間が短すぎる可能性')
+        if i and start < lines[i-1]['end'] - .02:
+            reasons.append('前の行と重複')
+        if reasons:
+            issues.append(dict(line=i+1, text=line['text'], start=start, end=end, reasons=reasons))
+    return issues
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("audio"); ap.add_argument("--text"); ap.add_argument("--out", required=True)
@@ -153,11 +164,16 @@ def main():
         lyrics, source = align(text_lines, segs), "aligned"
     else:
         lyrics, source = segs, "whisper"
+    issues = timing_issues(lyrics, dur)
     data = {"schemaVersion": "1.0", "projectName": a.audio.rsplit("/", 1)[-1].rsplit(".", 1)[0], "audio": {"name": a.audio, "duration": dur},
-            "fps": 30, "lyrics": lyrics, "sections": [], "analysis": {}, "source": source, "_note": "自動生成。間違いは timing エディタ（npm run timing）で直せます"}
+            "fps": 30, "lyrics": lyrics, "sections": [], "analysis": {}, "source": source,
+            "timingReview": {"status": "needs-review" if issues else "not-listened", "issues": issues},
+            "_note": "自動生成・聴取未確認。間違いは timing エディタ（npm run timing）で直せます"}
     json.dump(data, open(a.out, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     hit = sum(1 for _ in segs)
-    print(f"✅ {source}: {len(lyrics)}行 → {a.out}（認識セグメント {hit}）")
+    print(f"{'⚠️' if issues else '✅'} {source}: {len(lyrics)}行 → {a.out}（認識セグメント {hit}、聴取未確認）")
+    for issue in issues:
+        print(f"⚠️ {issue['line']}行目 {issue['start']:.2f}〜{issue['end']:.2f}秒: {'・'.join(issue['reasons'])}「{issue['text']}」")
 
 
 if __name__ == "__main__":

@@ -25,6 +25,7 @@ describe("editor fonts", () => {
   });
   it("every editor font id is a free (OFL/Apache) registry font with a Google Fonts source", () => {
     const reg = YAML.parse(fs.readFileSync(path.join(__dirname, "..", "..", "fonts.yaml"), "utf8")).fonts;
+    expect(EDITOR_FONT_IDS).toEqual(reg.filter((f:any)=>f.jp && /^(OFL-1.1|Apache-2.0)$/.test(f.license)).map((f:any)=>f.id));
     for (const id of EDITOR_FONT_IDS) { const f = reg.find((x: any) => x.id === id); expect(f, id).toBeTruthy(); expect(f.license).toMatch(/^(OFL-1.1|Apache-2.0)$/); expect(f.jp).toBe(true); }
   });
   it("extra fonts are credited, come from the author's site and are not committed", () => {
