@@ -26,10 +26,10 @@ export function applyRecipe(data: any, tpl: any, map: Record<string, number> = {
   scenes.forEach((s: any, i: number) => checkComp(s.comp, out.assets.length, (scenes[i + 1]?.start ?? out.duration) - s.start));
   return { data: out, pick };
 }
-if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(__filename)) {
+if (process.argv[1] && /recipe_battle\.ts$/.test(process.argv[1])) {
   const a = process.argv.slice(2), opt = (k: string) => { const i = a.indexOf(k); return i >= 0 ? a[i + 1] : undefined; };
   const project = opt("--project"); if (!project) { console.error("使い方: npm run recipe:battle -- --project <名前> [--map slot=番号,...]"); process.exit(2); }
-  const pack = path.resolve(__dirname, "../.."), file = path.join(pack, "projects", project, "out/editor/editor-state.json");
+  const pack = path.resolve(path.dirname(path.resolve(process.argv[1])), "../.."), file = path.join(pack, "projects", project, "out/editor/editor-state.json");
   if (!fs.existsSync(file)) { console.error(`編集画面のデータがありません: ${file}（先に npm run editor -- --project ${project}）`); process.exit(2); }
   const tpl = JSON.parse(fs.readFileSync(opt("--template") ?? path.join(pack, "docs/recipes/anime_battle_mv_template.json"), "utf8"));
   const map = Object.fromEntries((opt("--map") ?? "").split(",").filter(Boolean).map((kv) => { const [k, v] = kv.split("="); return [k, Number(v)]; }));

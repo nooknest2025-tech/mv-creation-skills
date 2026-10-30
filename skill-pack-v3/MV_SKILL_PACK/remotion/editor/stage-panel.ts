@@ -33,6 +33,30 @@ export function stagePanel(host: HTMLElement, ctx: Ctx) {
     sec.append(el("div", { className: "lineNav" },
       el("button", { textContent: "このカットの設定を全シーンへ", onclick: () => edit(() => { for (const x of data.scenes) if (x !== s && s.stage?.chars) x.stage = { ...(x.stage ?? {}), chars: structuredClone(s.stage.chars) }; }) }),
       el("button", { textContent: "元に戻す（このカット）", onclick: () => edit(() => { delete s.stage; }) })));
+    // ---- v7: cut layout / background / camera (this cut) + choreography (project) for stages that declare them ----
+    if ("layout" in base || "hits" in base) {
+      const L: Record<string, string> = { full: "全身", bust: "上半身", face: "顔アップ", trio: "3人並び", split: "斜め分割", invert: "反転", letterbox: "シネスコ帯", duo: "標準（全員）" };
+      const BG: Record<string, string> = { "": "（構図のおまかせ）", "image-dots": "背景画像＋ドット", "image-rays": "背景画像＋放射", "image-grid": "背景画像＋グリッド", "cafe-dots": "背景画像＋ドット（旧名）", "cafe-rays": "背景画像＋放射（旧名）", "cafe-grid": "背景画像＋グリッド（旧名）", sunburst: "放射", halftone: "ハーフトーン", grid: "グリッド", rings: "同心円", stripes: "ストライプ", checker: "チェッカー", shapes: "図形" };
+      const imgs: Record<string, string> = Object.fromEntries((base.bgImages ?? []).map((f: string) => [f, f]));
+      sec.append(el("h3", { textContent: "カットの構図・背景（このカット）" }));
+      sec.append(el("div", { className: "lookControls" },
+        field("構図", cur.layout ?? "full", "select", (v) => P(["layout"], v), { options: L }),
+        field("背景", cur.cutBg ?? (cur.layout === "full" || !cur.layout ? cur.bg : "") ?? "", "select", (v) => P(["cutBg"], v || null, null), { options: BG }),
+        ...(Object.keys(imgs).length ? [field("背景画像", cur.bgImage ?? "", "select", (v) => P(["bgImage"], v), { options: imgs })] : []),
+        field("入り（ポップ）", cur.enter === "pop", "check", (v) => P(["enter"], v ? "pop" : "cut")),
+        field("集中線", !!cur.speed, "check", (v) => P(["speed"], v, false)),
+        field("カメラ傾き°", cur.cam?.r ?? 0, "num", (v) => P(["cam"], { ...(cur.cam ?? {}), r: v }), { min: -30, max: 30, step: 1 }),
+        field("カメラ拡大", cur.cam?.s ?? 1, "num", (v) => P(["cam"], { ...(cur.cam ?? {}), s: v }), { min: 0.5, max: 3, step: 0.05 }),
+        field("カメラ横", cur.cam?.x ?? 0, "num", (v) => P(["cam"], { ...(cur.cam ?? {}), x: v }), { min: -0.5, max: 0.5 }),
+        field("カメラ縦", cur.cam?.y ?? 0, "num", (v) => P(["cam"], { ...(cur.cam ?? {}), y: v }), { min: -0.5, max: 0.5 })));
+      const ta = el("textarea", { rows: 5, value: JSON.stringify(s.stage ?? {}, null, 1), style: "width:100%;font:12px monospace" });
+      sec.append(el("label", { className: "wide" }, "このカットの設定（JSON・上級）", ta), el("button", { textContent: "JSONを反映（このカット）", onclick: () => { try { const v = JSON.parse(ta.value || "{}"); edit(() => { s.stage = v; }); } catch (e) { alert("JSONの形式が正しくありません: " + e); } } }));
+      sec.append(el("h3", { textContent: "振付・Hey!/Ho!（全体）" + (data.stage?.hits || data.stage?.routine || data.stage?.moves ? " ✎" : "") }));
+      for (const [key, label] of [["hits", "見せ場（秒・ポーズ・文字）"], ["routine", "振付の並び（区間ごと [ポーズ, 拍]）"], ["moves", "ポーズの追加・上書き（関節角度）"]] as const) {
+        const cur2 = data.stage?.[key] ?? base[key], t2 = el("textarea", { rows: key === "hits" ? 6 : 4, value: JSON.stringify(cur2 ?? {}, null, 1), style: "width:100%;font:12px monospace" });
+        sec.append(el("label", { className: "wide" }, label, t2), el("button", { textContent: "反映", onclick: () => { try { const v = JSON.parse(t2.value); edit(() => { data.stage = data.stage ?? {}; data.stage[key] = v; }); } catch (e) { alert("JSONの形式が正しくありません: " + e); } } }));
+      }
+    }
     // ---- project-wide: guests / name tags / interlude telop ----
     const proj = (key: string) => firstWith(data, key);
     const Q = (path: any[], v: any, dflt?: any) => edit(() => { data.stage = setPatch(data.stage, proj(String(path[0])), path, v, dflt); });

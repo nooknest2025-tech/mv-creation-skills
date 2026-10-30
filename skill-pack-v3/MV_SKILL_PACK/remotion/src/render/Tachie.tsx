@@ -10,7 +10,8 @@ const tf = (p: Part, q?: PartPose) => { const v = q ?? { rot: 0, dx: 0, dy: 0, s
 function Puppet({ c, pose, base }: { c: TachieChar; pose: Record<string, PartPose>; base: string }) {
   const [W, H] = c.rig.size, byId = new Map(c.rig.parts.map((p) => [p.id, p]));
   const chain = (p: Part) => { const out: Part[] = []; let q: Part | undefined = p; const seen = new Set<string>(); while (q && !seen.has(q.id)) { seen.add(q.id); out.unshift(q); q = q.parent ? byId.get(q.parent) : undefined; } return out; };
-  return <>{[...c.rig.parts].sort((a, b) => a.z - b.z).map((p) => {
+  const zOf = (p: Part) => ((pose[p.id] as any)?.z ?? p.z) as number; // v8.1: pose may override a part's layer
+  return <>{[...c.rig.parts].sort((a, b) => zOf(a) - zOf(b)).map((p) => {
     const q = pose[p.id], file = q?.state && p.states?.[q.state] ? p.states[q.state] : p.src;
     const img = <img src={base + c.base + file} draggable={false} style={{ position: "absolute", left: 0, top: 0, width: W, height: H }} />;
     return <React.Fragment key={p.id}>{chain(p).reduceRight<React.ReactNode>((inner, a) => <div style={{ position: "absolute", left: 0, top: 0, width: W, height: H, ...tf(a, pose[a.id]) }}>{inner}</div>, img)}</React.Fragment>;
@@ -21,6 +22,18 @@ function Bg({ st, t, W, H, beat, chorus, kind, bar }: { st: TachieStage; t: numb
   const [c0, c1, c2, c3] = rot4(st.palette, chorus ? bar % 4 : Math.floor(bar / 2) % 2 ? 1 : 0), // colour change per bar
  cx = W / 2, cy = H * 0.45, B = beatLen(beat), ph = ((t - beat.phase) / B) % 1;
   const pulse = Math.exp(-ph * 5);
+  if (/^(cafe|image)/.test(kind)) { // v7: painted background image ("image-dots" | "image-rays" | "image-grid"; "cafe-*" = old name) (stage.bgImages[], one per cut via stage.bgImage) + pop overlay mixed on top
+    const img = (st as any).bgImage ?? (st as any).bgImages?.[0], ov = kind.replace(/^(cafe|image)-?/, "") || "dots", op = (st as any).bgFxOpacity ?? 0.38, k = (st as any).bgZoom ?? 1.08;
+    const drift = Math.floor(t * ANIM_FPS) / ANIM_FPS, dx = Math.sin(drift * 0.6) * W * 0.01;
+    return <div style={{ position: "absolute", inset: 0, overflow: "hidden", background: c0 }}>
+      {img && <img src={(st as any)._base + img} draggable={false} style={{ position: "absolute", left: 0, top: 0, width: W, height: H, objectFit: "cover", transform: `translate(${dx}px,0) scale(${k})`, filter: `brightness(${(st as any).bgDim ?? 0.82}) saturate(1.15)` }} />}
+      <svg width={W} height={H} style={{ position: "absolute", inset: 0 }}>
+        {ov === "rays" && <g opacity={op} transform={`rotate(${t * 12} ${cx} ${cy})`}>{Array.from({ length: 24 }, (_, i) => { const a0 = (i / 24) * 2 * Math.PI, a1 = ((i + 0.5) / 24) * 2 * Math.PI, R = W * 1.2; return <polygon key={i} points={`${cx},${cy} ${cx + R * Math.cos(a0)},${cy + R * Math.sin(a0)} ${cx + R * Math.cos(a1)},${cy + R * Math.sin(a1)}`} fill={c1} />; })}</g>}
+        {ov === "grid" && <g opacity={op}>{Array.from({ length: Math.ceil(W / 80) + 2 }, (_, i) => <line key={"v" + i} x1={i * 80 - (t * 60) % 80} y1={0} x2={i * 80 - (t * 60) % 80} y2={H} stroke={c3} strokeWidth={3} />)}{Array.from({ length: Math.ceil(H / 80) + 2 }, (_, i) => <line key={"h" + i} x1={0} y1={i * 80 - (t * 60) % 80} x2={W} y2={i * 80 - (t * 60) % 80} stroke={c3} strokeWidth={3} />)}</g>}
+        {ov === "dots" && <Dots W={W} H={H} color={c3} t={t} op={op} />}
+        <rect width={W} height={H} fill="url(#cafevg)" /><defs><radialGradient id="cafevg"><stop offset="60%" stopColor="#000" stopOpacity={0} /><stop offset="100%" stopColor="#1a0a00" stopOpacity={0.55} /></radialGradient></defs>
+      </svg></div>;
+  }
   if (kind === "rings") { // concentric rings pulsing outward one ring per beat (stepped)
     const step = Math.floor((t - beat.phase) / B), g = 70;
     return <svg width={W} height={H} style={{ position: "absolute", inset: 0 }}><rect width={W} height={H} fill={c0} />
@@ -100,6 +113,9 @@ function Particles({ W, H, t, colors }: { W: number; H: number; t: number; color
 // character; vertical (tategaki) lines in jagged black balloons next to the singer; small sticker bubbles cloned in corners;
 // concentric rings + speed lines; letterbox bars with a framed subtitle. Everything held, changing on beats (2s).
 export type Layout = "duo" | "closeA" | "closeB" | "clones" | "split" | "invert" | "letterbox";
+/** v7 named cut layouts usable as stage.layout (per cut via scene.stage): full = whole body, bust = upper body, face = face close-up, trio = same character x3 */
+export const CUT_LAYOUTS: Record<string, string> = { full: "全身", bust: "上半身", face: "顔アップ", trio: "3人並び", split: "斜め分割", invert: "反転", letterbox: "シネスコ帯", duo: "標準（全員）" };
+const normLayout = (l: string): Layout => (l === "full" ? "duo" : l === "bust" || l === "face" ? "closeA" : l === "trio" ? "clones" : (l as Layout));
 const CHORUS_LAYOUT: [Layout, number][] = [["duo", 2], ["closeA", 1], ["closeB", 1], ["clones", 2], ["split", 2], ["duo", 1], ["invert", 1], ["closeB", 2], ["letterbox", 2], ["closeA", 1], ["split", 1], ["clones", 1], ["invert", 1]];
 const VERSE_LAYOUT: [Layout, number][] = [["duo", 8], ["letterbox", 4], ["closeA", 4], ["duo", 8], ["closeB", 4], ["split", 4]];
 export function layoutAt(beatIdx: number, chorus: boolean, intro: boolean): Layout {
@@ -107,7 +123,7 @@ export function layoutAt(beatIdx: number, chorus: boolean, intro: boolean): Layo
   const L = chorus ? CHORUS_LAYOUT : VERSE_LAYOUT, tot = L.reduce((a, x) => a + x[1], 0); let b = ((beatIdx % tot) + tot) % tot;
   for (const [l, n] of L) { if (b < n) return l; b -= n; } return "duo";
 }
-export type LyricMode = "bigBehind" | "tate" | "band" | "ghost" | "pop" | "center";
+export type LyricMode = "bigBehind" | "tate" | "band" | "ghost" | "pop" | "center" | "hw";
 const MODES: LyricMode[] = ["tate", "bigBehind", "band", "pop", "ghost", "tate", "center", "bigBehind"];
 /** v5.3: ONE style per lyric line, locked by line index (never by the current cut/layout). */
 export const lyricModeOf = (i: number, _layout?: Layout): LyricMode => MODES[i % MODES.length];
@@ -141,21 +157,22 @@ function stageLyrics(st: TachieStage, lyrics: LyricLite[], t: number, W: number,
   /* v6.5: built-in look = default; the editor's per-line edits (l.edited, diffed against original-source) always win. Untouched lines render exactly as before. */
   const wrap = (l: any, el: React.ReactNode, ax: number, ay: number) => {
     const ed: string[] = Array.isArray(l.edited) ? l.edited : [], has = (k: string) => ed.includes(k);
-    if (!["position", "y", "scale", "angle", "effect", "effectOffset", "entrance", "departure", "transitionDuration"].some(has)) return el;
+    if (!["position", "x", "y", "scale", "angle", "effect", "effectOffset", "entrance", "departure", "transitionDuration"].some(has)) return el;
     const pxy = has("position") && l.position && l.position !== "manual" ? POSITION_XY[l.position] : undefined;
-    const tx = pxy ? pxy[0] * W : ax, ty = pxy ? pxy[1] * H : has("y") && Number.isFinite(l.y) ? l.y * H : ay;
+    const tx = pxy ? pxy[0] * W : has("x") && Number.isFinite(l.x) ? l.x * W : ax, ty = pxy ? pxy[1] * H : has("y") && Number.isFinite(l.y) ? l.y * H : ay; // v8.2: x/y = per-line drag position
     const k = has("scale") && Number.isFinite(l.scale) ? l.scale / 0.72 : 1, ang = has("angle") ? l.angle ?? 0 : 0;
     return <div key={l.id} style={{ position: "absolute", inset: 0, transformOrigin: `${ax}px ${ay}px`, transform: `translate(${tx - ax}px,${ty - ay}px) rotate(${ang}deg) scale(${k})`, filter: has("effect") || has("effectOffset") ? effectFilter(l.effect ?? "none", l.effectOffset ?? 6, l.stroke) : undefined }}>{combined(el, l, t, ax, ay, W, H)}</div>;
   };
-  for (const l of lyrics) {
-    const i = lyrics.indexOf(l), next = lyrics[i + 1]?.start ?? Infinity, hold = Math.min(l.end + 0.1, next); // short hold, but never overlapping the next line
-    if (!(t >= l.start && t < hold)) continue;
+  // v8.1 exactly-once: at most ONE stage lyric line is drawn per frame (the latest that has started), and never a second copy of the same text
+  const vis = lyrics.filter((l, i) => t >= l.start && t < Math.min(l.end + 0.1, lyrics[i + 1]?.start ?? Infinity) && !wantsEditorMotion(l)).sort((a, b) => b.start - a.start).slice(0, 1);
+  for (const l of vis) {
+    const i = lyrics.indexOf(l);
     if (wantsEditorMotion(l)) continue; // drawn by the editor's normal motion renderer (モーションの見本 picked for this line)
     const ed: string[] = Array.isArray((l as any).edited) ? (l as any).edited : [], lx = l as any;
     const FILL = ed.includes("fill") ? lx.fill : undefined, STROKE = ed.includes("stroke") ? lx.stroke : undefined, ACC = ed.includes("accent") ? lx.accent : undefined;
     const FONT = ed.includes("font") ? FONT_OPTIONS.find((f: any) => f.id === lx.font)?.family : undefined, FJP = FONT ? `'${FONT}',${JP}` : JP, FMIN = FONT ? `'${FONT}',${MIN}` : MIN;
     const text = l.text.replace(/（.*?）|\(.*?\)/g, ""), chars = Array.from(text), n = revealN(l, t, chars.length), shown = chars.slice(0, n).join("");
-    const mode = (lx.stageStyle && lx.stageStyle !== "auto" && STAGE_STYLES[lx.stageStyle] ? lx.stageStyle : lyricModeOf(i, layout)) as LyricMode, kw = keywordOf(text), [c0, c1, c2, c3] = st.palette;
+    const mode = (lx.stageStyle === "hw" ? "hw" : lx.stageStyle && lx.stageStyle !== "auto" && STAGE_STYLES[lx.stageStyle] ? lx.stageStyle : lyricModeOf(i, layout)) as LyricMode, kw = keywordOf(text), [c0, c1, c2, c3] = st.palette;
     const singer = singersOf(st, lyrics, l).map((id) => st.chars.find((c) => c.id === id)!).filter(Boolean)[0] ?? st.chars[0];
     const sideX = singer.x < 0.5 ? Math.min(W * 0.47, singer.x * W + W * 0.2) : Math.max(W * 0.53, singer.x * W - W * 0.2);
     const trio = st.chars.length >= 3 && (layout === "duo" || layout === "invert" || layout === "letterbox"), xs = st.chars.map((c) => c.x).sort((a, b) => a - b);
@@ -164,6 +181,7 @@ function stageLyrics(st: TachieStage, lyrics: LyricLite[], t: number, W: number,
     const clo = st.chars.length >= 3 && layout === "clones"; // v5.8: row of three (black centre + cafe sides, or three copies) -> balloon in the gap beside the centre figure
     const closeUp = false, bx2 = clo ? W * (singer.x < 0.5 ? 0.34 : 0.66) : trio ? W * gap : tsplit ? W * seam : singer.x < 0.5 ? W * 0.14 : W * 0.86; void sideX; // fixed per line: screen edge on the singer's side (also clear of close-up faces) // never over a close-up face
     const stroke = (c: string, wpx: number) => ({ WebkitTextStroke: `${wpx}px ${STROKE ?? c}`, paintOrder: "stroke fill" } as any);
+    if (mode === "hw") { { const R0 = hwGeom(st, l, i, W, H).rect; front.push(wrap(l, <HwLyric key={l.id} st={st} l={l} i={i} t={t} W={W} H={H} n={n} FONT={FONT} FILL={FILL} />, R0.x + R0.w / 2, R0.y + R0.h / 2)); } continue; }
     if (mode === "bigBehind") { // v5.2: the WHOLE line (once) huge behind the characters, two rows split at the space; keyword in mincho
       const rows = text.split(/[　\s]/).filter(Boolean); let k = 0;
       back.push(wrap(l, <div key={l.id} style={{ position: "absolute", left: 0, right: 0, top: H * 0.06, textAlign: "center", fontFamily: FJP, fontWeight: 900, lineHeight: 1.02, color: FILL ?? "#111", opacity: 0.82 }}>{rows.map((r, j) => { const a2 = Array.from(r), m = Math.max(0, Math.min(a2.length, n - k)); k += a2.length + 1; return <div key={j} style={{ fontSize: Math.min(H * 0.36, (W * 0.92) / Math.max(1, a2.length)), whiteSpace: "nowrap" }}>{a2.slice(0, m).join("") || "\u00a0"}</div>; })}</div>, W / 2, H * 0.3));
@@ -196,42 +214,43 @@ export function TachieStage({ st, t: t0raw, t0, data, base = "", W, H }: { st: T
   // v5.1: everything (dance, camera, bg, bubbles, lyrics) stops at the end of the LAST LYRIC; final kime snaps there, then a still to the song end
   if (st.pause) return <PauseStage st={st} t={t0raw} data={data} base={base} W={W} H={H} beat={beat} />;
   const lyrics: LyricLite[] = lyricsInWin(data.lyrics ?? [], st.win); // v6.0: each loop's stages only see their own lines
-  const end: number | undefined = stopTimeOf(lyrics, Number.isFinite(data.duration) ? Math.min(data.duration, st.win?.[1] ?? Infinity) : (data.sections ?? []).at?.(-1)?.end, st.stopAt, data.fps ?? 30);
+  const end: number | undefined = stopTimeOf(lyrics, Number.isFinite(data.duration) ? Math.min(data.duration, st.win?.[1] ?? Infinity) : (data.sections ?? []).at?.(-1)?.end, st.stopAt, data.fps ?? 30, (st as any).freezeAt);
   const vocal = shiftVocal(st.vocal, st.win?.[0] ?? 0);
   const t = freezeT(t0raw, beat, end), frozen = end != null && t0raw >= lastBeatOf(beat, end), tL = Math.min(t0raw, t); void tL;
   const sec = (data.sections ?? []).find((s: any) => t >= s.start && t < s.end) ?? (data.sections ?? []).at?.(-1);
   const chorus = sec ? /chorus|サビ/i.test(sec.type + sec.label) : !!st.punch, intro = !!sec && /intro|イントロ/i.test(sec.type + sec.label);
   const live = lyrics.filter((l) => t >= l.start - 0.05 && t < l.end + 0.05 && !frozen);
   const bx = (t - beat.phase) / B, bi = Math.floor(bx), bar = Math.floor(bx / 4), beatIn = bx - bi;
-  const sinceSec = Math.floor((t - t0) / B), layout: Layout = frozen ? "duo" : t - t0 < 4 * B ? "duo" : layoutAt(sinceSec, chorus, intro);
-  const bgs = st.bgs?.length ? st.bgs : [st.bg], kind = bgs[((bar % bgs.length) + bgs.length) % bgs.length];
+  const sinceSec = Math.floor((t - t0) / B), cutL = (st as any).layout as string | undefined, layout: Layout = cutL ? normLayout(cutL) : frozen ? "duo" : t - t0 < 4 * B ? "duo" : layoutAt(sinceSec, chorus, intro);
+  (st as any)._base = base + ((st as any).floaters?.base ?? ""); // v7: background images live next to the floater stickers
+  const bgs = st.bgs?.length && !cutL ? st.bgs : [st.bg], kind = bgs[((bar % bgs.length) + bgs.length) % bgs.length];
   const seed = hash("stage", t0), cam = stageCamera(st, t, t0, beat, chorus, seed);
   const singNow = live.flatMap((l) => singersOf(st, lyrics, l));
   const focusA = st.chars.find((c) => singNow.includes(c.id)) ?? st.chars[bar % st.chars.length], focusB = st.chars.find((c) => c !== focusA) ?? focusA;
-  const silhouette = chorus && !frozen && ((bar % 8) + 8) % 8 === 7 && bi % 4 === 3;
+  const silhouette = chorus && !frozen && ((bar % 8) + 8) % 8 === 7 && bi % 4 === 3 && (st as any).silhouette !== false && !((st as any).silhouette === "noClose" && /^(face|bust)$/.test(String((st as any).layout))); // v7: stage.silhouette false | "noClose"
   const bubbles: React.ReactNode[] = [];
   const poses = new Map(st.chars.map((c) => { const mine = live.filter((l) => singersOf(st, lyrics, l).includes(c.id)), singing = mine.length > 0 && !frozen;
-    return [c.id, solveChar(c, { t, beat, chorus, singing, mora: mine.flatMap((l) => moraOf({ ...l, text: st.readings?.[l.text] ?? l.text })), seed: hash(c.id) % 1000, section: sec ? String(sec.type ?? sec.label) : undefined, vocal, end })]; }));
+    return [c.id, solveChar(c, { t, beat, chorus, singing, mora: mine.flatMap((l) => moraOf({ ...l, text: st.readings?.[l.text] ?? l.text })), seed: hash(c.id) % 1000, section: sec ? String(sec.type ?? sec.label) : undefined, vocal, end, hits: st.hits, moves: st.moves, routine: st.routine, finale: (st as any).finale })]; }));
   /** one puppet at stage position (x = centre fraction, h = height fraction, y = feet fraction). */
   const puppet = (c: TachieChar, key: string, x0: number, h0: number, y0: number, i: number, extra = "", poseOv?: Record<string, PartPose>) => {
     { const e = c as any; if (e.hide) return null; if (e.dx) x0 += e.dx; if (e.dy) y0 += e.dy; if (e.k && e.k !== 1) h0 *= e.k; } // v6.6 editor: per-cut character offset / size / hide (applies in every layout)
     const sc = (H * h0) / c.rig.size[1], w = c.rig.size[0] * sc;
-    const pt = Math.floor((t - t0 - i * 0.15) * ANIM_FPS) / ANIM_FPS, pp = clamp01(pt / 0.3), pop = pp <= 0 ? 0 : pp < 0.5 ? 0.6 : pp < 1 ? 1.12 : 1;
+    const pt = Math.floor((t - t0 - i * 0.15) * ANIM_FPS) / ANIM_FPS, pp = (st as any).enter === "cut" ? 1 : clamp01(pt / 0.3), pop = pp <= 0 ? 0 : pp < 0.5 ? 0.6 : pp < 1 ? 1.12 : 1; // v7: enter "cut" = hard cut, no pop-in
     if (pop <= 0) return null;
     const f = pop === 0.6 ? 0.85 : pop > 1 ? 1.06 : 1, Hs = c.rig.size[1] * sc, x = x0 * W - w / 2, y = H * y0 - Hs + (1 - Math.min(1, pop)) * H * 0.5;
     return <div key={key} style={{ position: "absolute", left: x, top: y, width: c.rig.size[0], height: c.rig.size[1], transformOrigin: "0 0", transform: `translate(0px,${Hs * (1 - f)}px) scale(${sc * (c.flip ? -1 : 1)},${sc * f})`, filter: (silhouette && layout !== "invert" ? "brightness(0) " : "") + extra + "drop-shadow(5px 0 0 #fff) drop-shadow(-5px 0 0 #fff) drop-shadow(0 5px 0 #fff) drop-shadow(0 -5px 0 #fff) drop-shadow(14px 14px 0 rgba(0,0,0,.45))" }}>
       <Puppet c={c} pose={poseOv ?? poses.get(c.id)!} base={base} /></div>;
   };
   const layoutNow = layout;
-  for (const c of st.chars) { if (st.bubbles === false) break; for (const l of live.filter((l) => singersOf(st, lyrics, l).includes(c.id))) { const call = l.text.match(/[（(]([^）)]+)[）)]/)?.[1]; const tc = l.end - 0.75; if (call && t > tc) {
+  for (const c of st.chars) { if (st.bubbles === false) break; for (const l of live.filter((l) => singersOf(st, lyrics, l).includes(c.id))) { const call = l.text.match(/[（(]([^）)]+)[）)]/)?.[1]; const tc = (st.hits ?? []).find((h) => h.t >= l.start && h.t < l.end + 0.3)?.t ?? l.end - 0.75; if ((st as any).callBubbles === false) continue; if (call && t > tc) {
     // sticker clones: the call pops in all four corners, one more each 2 frames
     const k = Math.floor((t - tc) * ANIM_FPS / 2) + 1; (layoutNow === "clones" ? [[0.1, 0.11], [0.9, 0.11]] : [[0.14, 0.18], [0.86, 0.2], [0.12, 0.8], [0.88, 0.78]]).slice(0, k).forEach(([sx, sy], j) => bubbles.push(<Bubble key={c.id + l.id + j} x={sx * W} y={sy * H} tx={sx * W + (sx < 0.5 ? 60 : -60)} ty={sy * H + 70} text={call} s={0.9} color={st.palette[3]} />)); } } }
-  const [lyrBack, lyrFront] = stageLyrics(st, lyrics, t, W, H, layout);
+  const [lyrBack, lyrFront] = frozen && (st as any).hideLyricsAtStop ? [[], []] : stageLyrics(st, lyrics, t, W, H, layout); // v7: no lyric left on the held final pose
   const bgEl = (k2 = kind, pal?: string[]) => <Bg st={pal ? { ...st, palette: pal } : st} t={t} W={W} H={H} beat={beat} chorus={chorus} kind={k2} bar={bar} />;
   let scene: React.ReactNode;
   if (layout === "closeA" || layout === "closeB") { // hard cut to a bust shot of the singer (or the other one), rings behind
-    const c = layout === "closeA" ? focusA : focusB;
-    scene = <>{bgEl("rings")}{lyrBack}{puppet(c, "close", 0.5, 1.75, 1.62, 0)}</>;
+    const c = layout === "closeA" ? focusA : focusB, sh = (c.rig as any).shots?.[cutL === "face" ? "face" : "bust"], cx0 = (c as any).x != null && cutL ? (c as any).x : 0.5;
+    scene = <>{bgEl((st as any).cutBg ?? "rings")}{lyrBack}{sh ? puppet(c, "close", cx0, sh.h, sh.y, 0) : puppet(c, "close", 0.5, 1.75, 1.62, 0)}</>;
   } else if (layout === "clones") { // the singer copied in a row, alternately mirrored
     const blk = st.chars.find((c) => c.id === "black"), cafe = st.chars.find((c) => c.id === "cafe");
     if (blk && cafe && focusA === blk) { // v5.8: black in the centre, the cafe girl on both sides (not mirrored so the CAFE MONDAY logo stays readable; right one dances half a beat late; lips stay on time)
@@ -242,7 +261,11 @@ export function TachieStage({ st, t: t0raw, t0, data, base = "", W, H }: { st: T
         <div key="cl2" style={{ position: "absolute", inset: 0 }}>{puppet(cafe, "cl2", 0.82, 0.64, 1.0, 0, "", cafeLate)}</div>
         <div key="cl1" style={{ position: "absolute", inset: 0 }}>{puppet(blk, "cl1", 0.5, 0.8, 1.0, 0)}</div></>;
     } else
-    scene = <>{bgEl("checker")}{lyrBack}{[0.18, 0.5, 0.82].map((x, j) => <div key={j} style={{ position: "absolute", inset: 0, transform: j === 1 ? undefined : `scaleX(-1)`, transformOrigin: `${x * W}px 0` }}>{puppet(focusA, "cl" + j, x, j === 1 ? 0.8 : 0.62, 1.0, 0)}</div>)}</>;
+    { const tr = (st as any).trio ?? {}, mir = tr.mirror ?? true, late = tr.late ?? 0; // v7: trio options (mirror sides / sides dance `late` beats behind)
+      const side = late ? solveChar(focusA, { t: t - late * B, beat, chorus, singing: false, mora: [], seed: (hash(focusA.id) + 77) % 1000, section: sec ? String(sec.type ?? sec.label) : undefined, vocal, end, hits: st.hits, moves: st.moves, routine: st.routine, finale: (st as any).finale }) : undefined;
+      if (side) { const on = poses.get(focusA.id)!; for (const p of focusA.rig.parts) if (p.kind === "mouth" || p.kind === "eye_l" || p.kind === "eye_r") side[p.id] = on[p.id]; }
+      const hs = tr.h ?? [0.62, 0.8, 0.62], ys = tr.y ?? [1.0, 1.0, 1.0], xs3 = tr.x ?? [0.18, 0.5, 0.82];
+      scene = <>{bgEl((st as any).cutBg ?? "checker")}{lyrBack}{[0, 2, 1].map((j) => { const x = xs3[j]; return <div key={j} style={{ position: "absolute", inset: 0, transform: j === 1 || !mir ? undefined : `scaleX(-1)`, transformOrigin: `${x * W}px 0` }}>{puppet(focusA, "cl" + j, x, hs[j], ys[j], 0, "", j === 1 ? undefined : side)}</div>; })}</>; }
   } else if (layout === "split") { // diagonal split panels, each character in its own colour panel
     const p2 = [st.palette[1], st.palette[0], st.palette[3], st.palette[2]];
     if (st.chars.length >= 3) { // v5.7: three slanted panels, one dancer each (screen order), seams in white+black
@@ -254,31 +277,68 @@ export function TachieStage({ st, t: t0raw, t0, data, base = "", W, H }: { st: T
       <div style={{ position: "absolute", inset: 0, clipPath: "polygon(58% 0,100% 0,100% 100%,42% 100%)" }}>{bgEl("halftone", p2)}{puppet(st.chars[1] ?? st.chars[0], "s1", 0.75, 0.85, 1.02, 1)}</div>
       <svg width={W} height={H} style={{ position: "absolute", inset: 0 }}><line x1={W * 0.58} y1={0} x2={W * 0.42} y2={H} stroke="#fff" strokeWidth={22} /><line x1={W * 0.58} y1={0} x2={W * 0.42} y2={H} stroke="#111" strokeWidth={8} /></svg><div style={{ position: "absolute", inset: 0, opacity: 0.55 }}>{lyrBack}</div></>;
   } else { // duo / invert / letterbox
-    scene = <>{bgEl()}{(chorus || kind === "shapes") && <Particles W={W} H={H} t={t} colors={st.palette} />}{lyrBack}{st.chars.map((c, i) => puppet(c, c.id, c.x, c.h, c.y ?? 1, i))}</>;
+    scene = <>{bgEl((st as any).cutBg ?? kind)}{(chorus || kind === "shapes") && <Particles W={W} H={H} t={t} colors={st.palette} />}{lyrBack}{st.chars.map((c, i) => puppet(c, c.id, c.x, c.h, c.y ?? 1, i))}</>;
   }
   const flash = chorus && !frozen && bi % 4 === 0 && beatIn * B < 2 / ANIM_FPS;
   const wipe = clamp01((t - t0) / 0.35), wq = Math.floor(wipe * 6) / 6;
   const zoomed = layout !== "duo" && layout !== "invert" && layout !== "letterbox";
+  const cc = (st as any).cam ?? {}, hitNow = (st.hits ?? []).filter((h) => t >= h.t && t < h.t + 0.7 && h.t >= t0 - 0.05 && !frozen).at(-1) /* only inside the cut that starts on the hit */, hk = hitNow ? Math.exp(-(Math.floor((t - hitNow.t) * ANIM_FPS) / ANIM_FPS) * 7) : 0;
+  const cutCam = `translate(${(cc.x ?? 0) * W}px,${(cc.y ?? 0) * H}px) rotate(${cc.r ?? 0}deg) scale(${(cc.s ?? 1) * (1 + 0.1 * hk)})`;
   return <div style={{ position: "absolute", inset: 0, overflow: "hidden", filter: layout === "invert" ? "invert(1) hue-rotate(180deg)" : undefined }}>
-    <div style={{ position: "absolute", inset: 0, transformOrigin: "50% 55%", transform: zoomed ? undefined : `translate(${cam.dx}px,${cam.dy}px) rotate(${cam.r}deg) scale(${cam.s})` }}>
+    {((cc.s ?? 1) < 1 || cc.x || cc.y || cc.r) ? bgEl((st as any).cutBg ?? (layout === "closeA" || layout === "closeB" ? "rings" : layout === "clones" ? "checker" : kind)) : null /* v2.2: a pulled-back / moved cut camera never shows an empty edge */}
+    <div style={{ position: "absolute", inset: 0, transformOrigin: "50% 55%", transform: (zoomed ? "" : `translate(${cam.dx}px,${cam.dy}px) rotate(${cam.r}deg) scale(${cam.s}) `) + cutCam }}>
       {scene}
       {silhouette && <div style={{ position: "absolute", inset: 0, background: st.palette[1], mixBlendMode: "multiply", opacity: 0.6 }} />}
     </div>
-    {st.lines !== false && (chorus || layout === "closeA" || layout === "closeB") && layout !== "split" && <SpeedLines W={W} H={H} t={t} seed={seed} />}
+    {((st.lines !== false && (chorus || layout === "closeA" || layout === "closeB") && layout !== "split") || (st as any).speed || hitNow) && <SpeedLines W={W} H={H} t={t} seed={seed} />}
     {layout === "letterbox" && <><div style={{ position: "absolute", left: 0, right: 0, top: 0, height: H * 0.11, background: "#111" }} /><div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: H * 0.14, background: "#111" }} /></>}
-    {floaters(st, t, beat, W, H, base, frozen)}
+    {floaters(st, t, beat, W, H, base, frozen, frozen && (st as any).hideLyricsAtStop ? [] : hwRects(st, lyrics, t, W, H))}
     {st.guests && <GuestLayer G={st.guests} t={t} beat={beat} W={W} H={H} base={base} stop={end} layout={layout} />}
     {lyrFront}
     {bubbles}
+    {hitNow?.text && <HitBurst h={hitNow} t={t} W={W} H={H} pal={st.palette} />}
+    {(st as any).title && <TitleCard T={(st as any).title} t={t0raw} W={W} H={H} pal={st.palette} />}
     {flash && <div style={{ position: "absolute", inset: 0, background: "#fff", opacity: 0.55 }} />}
-    {wq < 1 && <div style={{ position: "absolute", inset: 0, background: st.palette[2], clipPath: `polygon(${wq * 130}% 0, 130% 0, 130% 100%, ${wq * 130 - 30}% 100%)` }} />}
+    {wq < 1 && (st as any).wipe !== false && <div style={{ position: "absolute", inset: 0, background: st.palette[2], clipPath: `polygon(${wq * 130}% 0, 130% 0, 130% 100%, ${wq * 130 - 30}% 100%)` }} />}
   </div>;
 }
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
-/** v5.8: seal / puppy stickers floating in lyric-free corners for a few sections each. Stepped bob at 12fps (on twos), frame swaps per beat + blinks. Drawn under the lyrics. */
-function floaters(st: TachieStage, t: number, beat: Beat, W: number, H: number, base: string, frozen: boolean) {
+/** v7 accent burst (Hey!/Ho!): jagged starburst + huge slanted word, slams in over 3 drawings, shakes on 2s. Placed at h.x/h.y (default upper side, clear of the centre face). */
+function HitBurst({ h, t, W, H, pal }: { h: any; t: number; W: number; H: number; pal: string[] }) {
+  const f = Math.floor((t - h.t) * ANIM_FPS + 1e-6), s = f <= 0 ? 1.6 : f === 1 ? 0.92 : f === 2 ? 1.06 : 1, x = (h.x ?? 0.2) * W, y = (h.y ?? 0.3) * H, R = H * 0.24 * (h.size ?? 1);
+  const jx = f % 2 ? 6 : -6, pts = Array.from({ length: 28 }, (_, i) => { const a = (i / 28) * 2 * Math.PI, r = i % 2 ? R * 0.68 : R * (1.05 + 0.12 * ((hash("hb", i, Math.floor(f / 2)) % 3) / 2)); return `${Math.cos(a) * r * 1.35},${Math.sin(a) * r}`; }).join(" ");
+  return <svg width={W} height={H} style={{ position: "absolute", inset: 0, pointerEvents: "none", overflow: "visible" }}>
+    <g transform={`translate(${x + jx} ${y}) rotate(${h.rot ?? -10}) scale(${s})`}>
+      <polygon points={pts} fill={h.color ?? pal[1]} stroke="#111" strokeWidth={10} strokeLinejoin="round" />
+      <text textAnchor="middle" dominantBaseline="central" fontSize={R * 0.95} fontWeight={900} fill="#fff" stroke="#111" strokeWidth={R * 0.09} paintOrder="stroke" style={{ fontFamily: "'Dela Gothic One','Noto Sans JP',sans-serif", fontStyle: "italic" }}>{h.text}</text>
+    </g></svg>;
+}
+/** v7 title card for the hook: diagonal band + slam title, char by char on 12fps, gone at T.end. */
+function TitleCard({ T, t, W, H, pal }: { T: any; t: number; W: number; H: number; pal: string[] }) {
+  // v8: whole title shown at once (no typewriter — a frozen end frame must never show a cut-off title), SVG text auto-fit to the band width
+  // with textLength, regular weight (no faux-bold blobbing) and a round-joined outline drawn under the fill (paint-order) so ミ etc. stay open.
+  if (t < (T.start ?? 0) || t >= (T.end ?? 1.5)) return null;
+  const f = Math.floor((t - (T.start ?? 0)) * ANIM_FPS), y = (T.y ?? 0.78) * H, k = f <= 0 ? 0.6 : f === 1 ? 1.1 : 1;
+  const text = String(T.text ?? ""), sub = T.sub ? String(T.sub) : "", n = Math.max(1, Array.from(text).length);
+  const bandH = H * 0.24 * (T.size ?? 1), fs0 = bandH * (sub ? 0.5 : 0.62), fs = Math.min(fs0, (W * 0.84) / n), tw = Math.min(W * 0.84, fs * n * 1.0);
+  const sfs = Math.min(bandH * 0.15, (W * 0.6) / Math.max(1, sub.length * 0.75)), font = T.font ?? "'Dela Gothic One','Noto Sans JP',sans-serif";
+  return <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+    <svg width={W} height={H} style={{ position: "absolute", left: 0, top: 0, overflow: "visible" }}>
+      <g transform={`rotate(-4 ${W / 2} ${y}) translate(${W / 2} ${y}) scale(${k}) translate(${-W / 2} ${-y})`}>
+        <rect x={-W * 0.1} y={y - bandH / 2} width={W * 1.2} height={bandH} fill={T.band ?? "#140a1e"} stroke={pal[1]} strokeWidth={10} />
+        <text x={W / 2} y={sub ? y - bandH * 0.08 : y} textAnchor="middle" dominantBaseline="central" fontSize={fs} textLength={tw} lengthAdjust="spacingAndGlyphs" fill={T.color ?? "#fff"} stroke={T.stroke ?? pal[1]} strokeWidth={fs * 0.09} strokeLinejoin="round" paintOrder="stroke" style={{ fontFamily: font, fontWeight: 400 }}>{text}</text>
+        {sub && <text x={W / 2} y={y + bandH * 0.32} textAnchor="middle" dominantBaseline="central" fontSize={sfs} letterSpacing={sfs * 0.25} fill={pal[3] ?? "#ffd23f"} style={{ fontFamily: font, fontWeight: 400 }}>{sub}</text>}
+      </g>
+    </svg>
+  </div>;
+}
+function floaters(st: TachieStage, t: number, beat: Beat, W: number, H: number, base: string, frozen: boolean, avoid: Rect[] = []) {
   const fl = st.floaters; if (!fl?.items?.length) return null;
-  return <>{fl.items.flatMap((it) => { const r = floaterAt(it, t, beat); if (!r) return [];
+  return <>{fl.items.flatMap((it) => { const r0 = floaterAt(it, t, beat); if (!r0) return [];
+    // v8 collision check: the mascot never sits under a lyric box. try its spot, the mirrored spot, then the two upper corners; hide if all collide.
+    const fr = (x: number, y: number): Rect => { const h = it.h * H * 0.9, w = it.h * H * 0.7; return { x: x * W - w / 2, y: y * H - h / 2, w, h }; };
+    const cand = [[r0.x, r0.y], [1 - r0.x, r0.y], [r0.x, 0.2], [1 - r0.x, 0.2]].filter(([x, y]) => !avoid.some((a) => hit2(a, fr(x, y))));
+    if (!cand.length) return []; const r = { ...r0, x: r0.x + (cand[0][0] - (r0.x)), y: r0.y + (cand[0][1] - r0.y) };
     const ow = Math.max(3, Math.round(H * 0.0042)); void frozen;
     return [<img key={it.id} src={base + (fl.base ?? "") + it.frames[r.frame]} draggable={false} style={{ position: "absolute", left: r.x * W, top: r.y * H, height: it.h * H * r.s, transform: `translate(-50%,-50%) rotate(${r.rot}deg)`, transformOrigin: "50% 50%",
       filter: `drop-shadow(${ow}px 0 0 #fff) drop-shadow(-${ow}px 0 0 #fff) drop-shadow(0 ${ow}px 0 #fff) drop-shadow(0 -${ow}px 0 #fff) drop-shadow(${ow * 2.5}px ${ow * 2.5}px 0 rgba(0,0,0,.45))` }} />]; })}</>;
@@ -340,5 +400,64 @@ function PauseStage({ st, t, data, base, W, H, beat }: { st: TachieStage; t: num
     {GO && (P.intro ?? []).map((g: any) => { const s = popAt(tq, g.t); if (!s || g.off || G.items?.[g.id]?.off) return null; const bob = Math.sin(2 * Math.PI * (tq - g.t) / (2 * B)) * H * 0.01;
       return <React.Fragment key={g.id}><GuestImg G={G} id={g.id} t={t} beat={beat} cx={W * g.x} by={H * (g.y ?? 0.8) + bob} h={H * (sizeH[g.id] ?? 0.3) * (g.scale ?? 1) * (G.items?.[g.id]?.scale ?? 1)} base={base} scale={s} />
         <GuestTelop G={G} name={G.items[g.id]?.name ?? g.id} t={tq} t0={g.t} x={W * g.x} y={H * (g.y == null ? 0.89 : g.y + 0.09)} H={H} accent="#ffd400" /></React.Fragment>; })}
+  </div>;
+}
+
+// ---- v8 Halloween lyric style ("hw") -------------------------------------------------------------------
+// Opt-in per line: lyric.stageStyle = "hw". Placement belongs to the LINE (stage.hwLyrics[id].place = "side" | "bottom", side = "l" | "r"),
+// never to the cut, plus the editor drag position (x, y). Side = vertical column at the screen edge, bottom = strip over the legs.
+// The same box is used by the mascot collision check. Theme: stage.hwTheme = { colors: [[fill, outline, glow], ...], fonts: { id: "css family" } }.
+export type Rect = { x: number; y: number; w: number; h: number };
+const hit2 = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+const HW_FONTS: Record<string, string> = { pop: "'Mochiy Pop One','Noto Sans JP',sans-serif", spooky: "'Reggae One','Noto Sans JP',sans-serif", ankoku: "'Ankoku Onryou','Noto Sans JP',sans-serif", potta: "'Potta One','Noto Sans JP',sans-serif", dela: "'Dela Gothic One','Noto Sans JP',sans-serif" };
+const HW_COLORS = [["#ff8a1c", "#2b0f3a", "#ffb347"], ["#b77bff", "#120818", "#d9b8ff"], ["#f4f0ff", "#2b0f3a", "#9cff6a"], ["#ffd23f", "#2b0f3a", "#ff8a1c"]];
+const hwColors = (st: TachieStage): string[][] => (st as any).hwTheme?.colors ?? HW_COLORS, hwFonts = (st: TachieStage): Record<string, string> => ({ ...HW_FONTS, ...((st as any).hwTheme?.fonts ?? {}) });
+function hwCfg(st: TachieStage, l: LyricLite, i: number) { const all = (st as any).hwLyrics ?? {}; return { side: i % 2 ? "r" : "l", font: i % 3 === 2 ? "spooky" : "pop", color: i % 4, deco: ["pumpkin", "bat"], ...(all[l.id] ?? {}) }; }
+function hwGeom(st: TachieStage, l: LyricLite, i: number, W: number, H: number) {
+  // v8.2 placement is decided once per LINE (hwLyrics[id].place = "side" | "bottom", side = "l" | "r"), never per cut, so a line never jumps at a cut change.
+  const cfg = hwCfg(st, l, i), text = l.text.replace(/（.*?）|\(.*?\)/g, "");
+  const bottom = cfg.place === "bottom";
+  if (bottom) { const n = Math.max(1, Array.from(text).length), fs = Math.min(H * 0.095, (W * 0.8) / n), w = n * fs, h = fs * 1.5;
+    return { cfg, text, bottom: true, fs, cols: [text], rect: { x: W / 2 - w / 2 - fs * 0.9, y: H * 0.875 - h / 2 - fs * 0.35, w: w + fs * 1.8, h: h + fs * 0.6 } as Rect }; }
+  const cols = text.split(/[　\s]/).filter(Boolean), maxLen = Math.max(1, ...cols.map((c) => Array.from(c).length));
+  const fs = Math.min(H * 0.1, (H * 0.68) / (maxLen * 1.06)), cw = fs * 1.3, w = cols.length * cw, h = maxLen * fs * 1.06;
+  const x = cfg.side === "l" ? W * 0.045 : W * 0.955 - w, y = H * 0.47 - h / 2;
+  return { cfg, text, bottom: false, fs, cols, rect: { x: x - fs * 0.35, y: y - fs * 0.9, w: w + fs * 0.7, h: h + fs * 1.6 } as Rect, x, y, cw };
+}
+export function hwRects(st: TachieStage, lyrics: LyricLite[], t: number, W: number, H: number): Rect[] {
+  return lyrics.flatMap((l, i) => { const lx = l as any; if (lx.stageStyle !== "hw") return []; const hold = Math.min(l.end + 0.1, lyrics[i + 1]?.start ?? Infinity); if (!(t >= l.start - 0.05 && t < hold)) return []; const R = hwGeom(st, l, i, W, H).rect, ed: string[] = Array.isArray(lx.edited) ? lx.edited : [], has = (k: string) => ed.includes(k);
+    const pxy = has("position") && lx.position && lx.position !== "manual" ? POSITION_XY[lx.position] : undefined, k = has("scale") && Number.isFinite(lx.scale) ? lx.scale / 0.72 : 1;
+    const cx = pxy ? pxy[0] * W : has("x") && Number.isFinite(lx.x) ? lx.x * W : R.x + R.w / 2, cy = pxy ? pxy[1] * H : has("y") && Number.isFinite(lx.y) ? lx.y * H : R.y + R.h / 2;
+    return [{ x: cx - (R.w * k) / 2, y: cy - (R.h * k) / 2, w: R.w * k, h: R.h * k }]; }); // same per-line placement (incl. editor drag/preset/scale) for the mascot check // (kept slightly wider in time than drawing so the mascot moves before a line pops in)
+}
+function Deco({ kind, x, y, s, f }: { kind: string; x: number; y: number; s: number; f: number }) {
+  const bob = Math.sin(f * 0.9) * s * 0.08, g = `translate(${x} ${y + bob}) scale(${s / 100})`;
+  if (kind === "pumpkin") return <g transform={g}><ellipse cx={0} cy={8} rx={46} ry={38} fill="#ff7a12" stroke="#111" strokeWidth={6} /><ellipse cx={0} cy={8} rx={18} ry={38} fill="none" stroke="#c24f00" strokeWidth={4} /><rect x={-5} y={-40} width={10} height={16} fill="#3a7a20" stroke="#111" strokeWidth={4} /><polygon points="-24,-2 -12,-2 -18,-14" fill="#111" /><polygon points="24,-2 12,-2 18,-14" fill="#111" /><path d="M-24 18 Q0 38 24 18 L14 22 L8 16 L0 24 L-8 16 L-14 22 Z" fill="#111" /></g>;
+  if (kind === "bat") { const w = f % 2 ? 1 : 0.6; return <g transform={g}><path d={`M0 0 C-20 -${30 * w} -50 -${36 * w} -70 -${10 * w} C-58 -6 -48 0 -40 8 C-30 0 -18 6 -10 12 Z M0 0 C20 -${30 * w} 50 -${36 * w} 70 -${10 * w} C58 -6 48 0 40 8 C30 0 18 6 10 12 Z`} fill="#1a0d24" stroke="#ff8a1c" strokeWidth={3} /><circle cx={0} cy={4} r={12} fill="#1a0d24" /><circle cx={-4} cy={2} r={2.5} fill="#ffd23f" /><circle cx={4} cy={2} r={2.5} fill="#ffd23f" /></g>; }
+  if (kind === "ghost") return <g transform={g}><path d="M-34 30 L-34 -6 A34 34 0 0 1 34 -6 L34 30 L22 20 L11 32 L0 20 L-11 32 L-22 20 Z" fill="#fbf7ff" stroke="#111" strokeWidth={5} /><ellipse cx={-11} cy={-6} rx={5} ry={8} fill="#111" /><ellipse cx={11} cy={-6} rx={5} ry={8} fill="#111" /></g>;
+  if (kind === "web") return <g transform={g} stroke="#e9e2ff" strokeWidth={3} fill="none" opacity={0.9}>{[0, 22, 45, 67, 90].map((a) => <line key={a} x1={0} y1={0} x2={Math.cos((a * Math.PI) / 180) * 80} y2={Math.sin((a * Math.PI) / 180) * 80} />)}{[25, 48, 72].map((r) => <path key={r} d={[0, 22, 45, 67, 90].map((a, j) => `${j ? "L" : "M"}${Math.cos((a * Math.PI) / 180) * r} ${Math.sin((a * Math.PI) / 180) * r}`).join(" ")} />)}</g>;
+  if (kind === "candle") return <g transform={g}><rect x={-12} y={-10} width={24} height={50} rx={4} fill="#f6e7c8" stroke="#111" strokeWidth={4} /><path d={`M0 -14 Q${f % 2 ? 9 : -9} -30 0 -46 Q${f % 2 ? -7 : 7} -30 0 -14`} fill="#ffb21c" stroke="#ff5a00" strokeWidth={3} /></g>;
+  return null;
+}
+function HwLyric({ st, l, i, t, W, H, n, FONT, FILL }: { st: TachieStage; l: LyricLite; i: number; t: number; W: number; H: number; n: number; FONT?: string; FILL?: string }) {
+  const G = hwGeom(st, l, i, W, H), cfg = G.cfg, [fill, dark, glow] = hwColors(st)[(cfg.color ?? 0) % hwColors(st).length], fam = FONT ? `'${FONT}',${HW_FONTS.pop}` : hwFonts(st)[cfg.font] ?? HW_FONTS.pop;
+  const tq = Math.floor(t * ANIM_FPS + 1e-6) / ANIM_FPS, f = Math.round(tq * ANIM_FPS), fs = G.fs;
+  const B = 60 / ((st as any).bpmHint ?? 120), bIn = ((((tq - ((st as any).beatPhase ?? 0)) / B) % 1) + 1) % 1, bump = bIn < 1 / ANIM_FPS / B ? 1.07 : 1; // pops on every beat (one drawn frame)
+  const ch = Array.from(G.text.replace(/[　\s]/g, "")), mt = moraOf(l); // char k appears at its sung mora
+  const appearAt = (k: number) => mt[Math.min(k, mt.length - 1)]?.t0 ?? l.start;
+  const one = (c: string, k: number, key: string) => { const a = (tq - appearAt(k)) * ANIM_FPS; if (a < 0) return <span key={key} style={{ display: "inline-block", width: fs, height: fs }} />;
+    const sc = a < 1 ? 0.45 : a < 2 ? 1.25 : 1, wob = Math.sin(f * 0.75 + k * 1.3), drip = 0.25 + ((k * 37 + i * 11) % 5) / 8;
+    return <span key={key} style={{ position: "relative", display: "inline-block", width: fs, height: fs * (G.bottom ? 1 : 1.06), lineHeight: 1, textAlign: "center", transform: `translateY(${wob * fs * 0.06}px) rotate(${wob * 5}deg) scale(${sc})`, transformOrigin: "50% 60%" }}>
+      <span style={{ position: "absolute", left: 0, top: 0, width: fs, fontFamily: fam, fontWeight: 400, fontSize: fs, color: FILL ?? fill, WebkitTextStroke: `${(fs * 0.14).toFixed(1)}px ${dark}`, paintOrder: "stroke fill", textShadow: `0 0 ${fs * 0.22}px ${glow}, 0 0 ${fs * 0.45}px ${glow}88` } as any}>{c}</span>
+      {G.bottom && <svg width={fs} height={fs * 0.9} style={{ position: "absolute", left: 0, top: fs * 0.82, overflow: "visible" }}><path d={`M${fs * 0.38} 0 L${fs * 0.38} ${fs * drip * Math.min(1, Math.max(0, a / 6))} a${fs * 0.07} ${fs * 0.07} 0 0 0 ${fs * 0.14} 0 L${fs * 0.52} 0 Z`} fill={FILL ?? fill} stroke={dark} strokeWidth={2} /></svg>}
+    </span>; };
+  const R = G.rect, decoS = fs * 1.05, kinds: string[] = cfg.deco ?? [];
+  const decoXY = G.bottom ? [[R.x - decoS * 0.2, R.y + R.h * 0.4], [R.x + R.w + decoS * 0.2, R.y + R.h * 0.35]] : [[R.x + R.w / 2, R.y + fs * 0.25], [R.x + R.w / 2, R.y + R.h + fs * 0.15]];
+  let k = 0; const ap = Math.floor((tq - l.start) * ANIM_FPS), ps = ap <= 0 ? 0.5 : ap === 1 ? 1.08 : 1;
+  return <div style={{ position: "absolute", inset: 0, pointerEvents: "none", transform: `scale(${bump})`, transformOrigin: `${R.x + R.w / 2}px ${R.y + R.h / 2}px` }}>
+    {cfg.plate !== false && <div style={{ position: "absolute", left: R.x, top: R.y + (G.bottom ? 0 : fs * 0.55), width: R.w, height: R.h - (G.bottom ? 0 : fs * 1.0), background: "rgba(24,8,36,.72)", border: `${Math.max(3, fs * 0.06)}px solid ${fill}`, borderRadius: fs * 0.35, boxShadow: `0 0 ${fs * 0.4}px ${glow}66, ${fs * 0.1}px ${fs * 0.12}px 0 rgba(0,0,0,.5)`, transform: `scale(${ps}) rotate(${cfg.side === "l" ? -2 : 2}deg)`, transformOrigin: "50% 50%" }} />}
+    {G.bottom ? <div style={{ position: "absolute", left: R.x, top: R.y, width: R.w, height: R.h, display: "flex", alignItems: "center", justifyContent: "center", whiteSpace: "nowrap" }}>{ch.map((c) => one(c, k, "c" + k++))}</div>
+      : <div style={{ position: "absolute", left: (G as any).x, top: (G as any).y, display: "flex", flexDirection: "row-reverse", gap: 0 }}>{G.cols.map((col, j) => <div key={j} style={{ display: "flex", flexDirection: "column", alignItems: "center", width: (G as any).cw }}>{Array.from(col).map((c) => /[ー〜]/.test(c) ? <span key={k} style={{ display: "inline-block", transform: "rotate(90deg)" }}>{one(c, k, "c" + k++)}</span> : one(c, k, "c" + k++))}</div>)}</div>}
+    <svg width={W} height={H} style={{ position: "absolute", left: 0, top: 0, overflow: "visible" }}>{kinds.slice(0, 2).map((d, j) => <Deco key={d + j} kind={d} x={decoXY[j][0]} y={decoXY[j][1]} s={decoS * (j ? 0.8 : 1)} f={f + j * 3} />)}</svg>
   </div>;
 }

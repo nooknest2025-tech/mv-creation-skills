@@ -4,10 +4,10 @@ import React from "react";
  * "Edited" = differs from the project's original-source.json (what the generator wrote). Editor defaults never count as edits.
  * The result is stored on the line as `edited: string[]` (and on scenes as `edited`), recomputed by the editor front-end and by server.py on save/export.
  */
-export const LYRIC_EDIT_KEYS = ["motion", "params", "font", "fill", "stroke", "accent", "scale", "y", "position", "angle", "effect", "effectOffset", "motionDuration", "entrance", "departure", "transitionDuration", "stageStyle"] as const;
+export const LYRIC_EDIT_KEYS = ["motion", "params", "font", "fill", "stroke", "accent", "scale", "x", "y", "position", "angle", "effect", "effectOffset", "motionDuration", "entrance", "departure", "transitionDuration", "stageStyle"] as const;
 export const SCENE_EDIT_KEYS = ["stage", "camera", "cameraMove", "cameraStrength", "cameraSync", "zoom", "x", "y", "mograph", "comp"] as const;
 /** stage-native lyric styles a custom stage offers per line (editor: 「ステージの文字スタイル」). */
-export const STAGE_STYLES: Record<string, string> = { auto: "おまかせ（元の見た目）", tate: "縦書き吹き出し", bigBehind: "後ろに大きく", band: "下の帯", pop: "ポップ（強調語を大きく）", ghost: "斜めの半透明", center: "中央の縦書き" };
+export const STAGE_STYLES: Record<string, string> = { auto: "おまかせ（元の見た目）", tate: "縦書き吹き出し", bigBehind: "後ろに大きく", band: "下の帯", pop: "ポップ（強調語を大きく）", ghost: "斜めの半透明", center: "中央の縦書き", hw: "ハロウィン（よけ配置・ゆらゆら）" };
 const same = (a: any, b: any) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 const baseOf = (x: any, byId: Map<string, any>) => byId.get(x.id) ?? byId.get(x.sourceParts?.[0]?.line);
 export function editedKeys(x: any, base: any, keys: readonly string[]): string[] {
