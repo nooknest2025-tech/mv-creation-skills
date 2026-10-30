@@ -27,7 +27,7 @@ def export_info():
     title=(read()['data'].get('title') or 'MV')
     return {'folder':folder,'default':str(ROOT),'suggestedName':safe_name('',title,next_version(folder,title))}
 def read():return json.loads(STATE.read_text(encoding='utf-8'))
-LYRIC_EDIT_KEYS=['motion','params','font','fill','stroke','accent','scale','y','position','angle','effect','effectOffset','motionDuration','entrance','departure','transitionDuration','stageStyle']
+LYRIC_EDIT_KEYS=['motion','params','font','fill','stroke','accent','scale','x','y','position','angle','effect','effectOffset','motionDuration','entrance','departure','transitionDuration','stageStyle']
 MO_LOOKS=['none','blocks','geo','burst','hud','tanzaku','mono']
 MO_TRANS=['cut','circle','rect','ripple','cloud','glyph_zoom','push_text','diag_sweep','slow_wipe']
 def check_mo(e):
@@ -134,7 +134,7 @@ def check_gcomp(g,n_assets=None):
         if 'lut' in k and not (isinstance(k['lut'],str) and re.fullmatch(r'[A-Za-z0-9_\-/.]+\.cube',k['lut']) and '..' not in k['lut'] and not k['lut'].startswith('/')):bad('LUTファイルはプロジェクト内の .cube を指定してください')
         if k['look']=='cube' and not k.get('lut'):bad('LUTファイルを指定してください')
 SCENE_EDIT_KEYS=['stage','camera','cameraMove','cameraStrength','cameraSync','zoom','x','y','mograph','comp']
-STAGE_STYLES=['auto','tate','bigBehind','band','pop','ghost','center']
+STAGE_STYLES=['auto','tate','bigBehind','band','pop','ghost','center','hw']
 def mark_edited(d):
     """v6.5 (mirror of src/lib/lyricEdits.tsx): built-in look = default, editor edits always win. `edited` = keys that differ from original-source.json."""
     try:orig=json.loads((ROOT/'original-source.json').read_text(encoding='utf-8'))
@@ -221,7 +221,7 @@ def validate(d):
             if not finite(l[k]):raise ValueError('数値を確認してください')
         if not 0<=l['start']<l['end']<=d['duration']-1:raise ValueError('歌詞の開始・終了を曲内に収めてください（最後の1秒は文字なし）')
         # Overlapping lines are supported by the shared scene renderer.
-        if l['motion'] not in catalog or not .3<=l['scale']<=3 or not .15<=l['y']<=.85 or not .1<=l['motionDuration']<=3:raise ValueError('文字設定の範囲を確認してください')
+        if l['motion'] not in catalog or not .3<=l['scale']<=3 or not .05<=l['y']<=.95 or not (finite(l.get('x',.5)) and .02<=l.get('x',.5)<=.98) or not .1<=l['motionDuration']<=3:raise ValueError('文字設定の範囲を確認してください')
         fonts=json.loads((EDITOR/'font-options.json').read_text(encoding='utf-8'))
         if l.get('font','noto_serif') not in [f['id'] for f in fonts]:raise ValueError('利用できる書体を選択してください')
         if not finite(l.get('angle',0)) or not -180<=l.get('angle',0)<=180:raise ValueError('角度は-180〜180度です')

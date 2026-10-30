@@ -1,0 +1,741 @@
+{
+ "name": "パーツアニメで踊るMV（全身リグ・カクカク振付・ハロウィン歌詞）",
+ "note": "cuts = 区間の種類ごとの [拍数, 構図, このカットの追加設定]。曲の区間（sections）に沿って繰り返し並べます。npm run recipe:dance で既存の立ち絵プロジェクトに当てはめます。",
+ "cuts": {
+  "intro": [
+   [
+    2,
+    "full",
+    {
+     "cutBg": "sunburst",
+     "enter": "pop",
+     "speed": true
+    }
+   ],
+   [
+    2,
+    "face",
+    {
+     "cutBg": "rings"
+    }
+   ]
+  ],
+  "verse": [
+   [
+    4,
+    "full",
+    {}
+   ],
+   [
+    2,
+    "bust",
+    {
+     "cutBg": "stripes"
+    }
+   ],
+   [
+    2,
+    "face",
+    {
+     "cutBg": "rings"
+    }
+   ],
+   [
+    4,
+    "trio",
+    {
+     "cutBg": "checker"
+    }
+   ],
+   [
+    2,
+    "bust",
+    {
+     "cutBg": "sunburst",
+     "cam": {
+      "r": -4,
+      "s": 1,
+      "x": 0,
+      "y": 0
+     }
+    }
+   ],
+   [
+    2,
+    "split",
+    {}
+   ]
+  ],
+  "pre": [
+   [
+    2,
+    "bust",
+    {
+     "cutBg": "checker"
+    }
+   ],
+   [
+    2,
+    "face",
+    {
+     "cutBg": "rings",
+     "speed": true
+    }
+   ],
+   [
+    4,
+    "trio",
+    {
+     "cutBg": "checker"
+    }
+   ],
+   [
+    2,
+    "face",
+    {
+     "cutBg": "rings",
+     "speed": true
+    }
+   ],
+   [
+    2,
+    "split",
+    {}
+   ]
+  ],
+  "chorus": [
+   [
+    3,
+    "trio",
+    {
+     "cutBg": "sunburst",
+     "speed": true
+    }
+   ],
+   [
+    2,
+    "bust",
+    {
+     "cutBg": "rings",
+     "speed": true
+    }
+   ],
+   [
+    1,
+    "face",
+    {
+     "cutBg": "rings"
+    }
+   ],
+   [
+    2,
+    "split",
+    {}
+   ],
+   [
+    4,
+    "full",
+    {
+     "cutBg": "sunburst"
+    }
+   ],
+   [
+    2,
+    "bust",
+    {
+     "cutBg": "rings"
+    }
+   ],
+   [
+    2,
+    "face",
+    {
+     "cutBg": "rings",
+     "speed": true
+    }
+   ]
+  ],
+  "outro": [
+   [
+    3,
+    "trio",
+    {
+     "cutBg": "sunburst",
+     "speed": true
+    }
+   ],
+   [
+    2,
+    "bust",
+    {
+     "cutBg": "rings",
+     "speed": true
+    }
+   ],
+   [
+    1,
+    "face",
+    {
+     "cutBg": "rings"
+    }
+   ],
+   [
+    2,
+    "split",
+    {}
+   ],
+   [
+    4,
+    "full",
+    {
+     "cutBg": "sunburst"
+    }
+   ],
+   [
+    2,
+    "bust",
+    {
+     "cutBg": "rings"
+    }
+   ],
+   [
+    2,
+    "face",
+    {
+     "cutBg": "rings",
+     "speed": true
+    }
+   ]
+  ]
+ },
+ "minCutSec": 0.45,
+ "stage": {
+  "layout": "full",
+  "enter": "cut",
+  "wipe": false,
+  "lines": false,
+  "bubbles": true,
+  "callBubbles": false,
+  "hideLyricsAtStop": true,
+  "silhouette": "noClose",
+  "cam": {
+   "r": 0,
+   "s": 1,
+   "x": 0,
+   "y": 0
+  },
+  "trio": {
+   "mirror": false,
+   "late": 0.5,
+   "h": [
+    0.62,
+    0.8,
+    0.62
+   ],
+   "y": [
+    0.99,
+    1.0,
+    0.99
+   ],
+   "x": [
+    0.2,
+    0.5,
+    0.8
+   ]
+  },
+  "moves": {
+   "akimbo_l": {
+    "b": -5,
+    "bx": -0.03,
+    "by": 0.01,
+    "h": 9,
+    "l": 52,
+    "r": 52,
+    "el": 82,
+    "er": 82,
+    "sl": -0.06,
+    "sr": 0.0,
+    "hr": -5
+   },
+   "akimbo_r": {
+    "b": 5,
+    "bx": 0.03,
+    "by": 0.01,
+    "h": -9,
+    "l": 52,
+    "r": 52,
+    "el": 82,
+    "er": 82,
+    "sl": 0.0,
+    "sr": 0.06,
+    "hr": 5
+   },
+   "paw_l": {
+    "b": -7,
+    "bx": -0.02,
+    "h": 12,
+    "hy": -0.003,
+    "l": 80,
+    "r": 52,
+    "el": -105,
+    "er": 82,
+    "sl": -0.05,
+    "sr": 0.03,
+    "fr": 0.03
+   },
+   "paw_r": {
+    "b": 7,
+    "bx": 0.02,
+    "h": -12,
+    "hy": -0.003,
+    "l": 52,
+    "r": 80,
+    "el": 82,
+    "er": -105,
+    "sl": -0.03,
+    "sr": 0.05,
+    "fl": 0.03
+   },
+   "robot_a": {
+    "b": -4,
+    "bx": -0.015,
+    "h": 6,
+    "l": 88,
+    "r": 6,
+    "el": -90,
+    "er": 92,
+    "sl": -0.04,
+    "sr": 0.02
+   },
+   "robot_b": {
+    "b": 4,
+    "bx": 0.015,
+    "h": -6,
+    "l": 6,
+    "r": 88,
+    "el": 92,
+    "er": -90,
+    "sl": -0.02,
+    "sr": 0.04
+   },
+   "flex_l": {
+    "b": -8,
+    "bx": -0.03,
+    "by": 0.012,
+    "h": 10,
+    "l": 92,
+    "r": 52,
+    "el": -95,
+    "er": 82,
+    "sl": -0.07,
+    "sr": 0.02,
+    "hr": -4
+   },
+   "point_out_r": {
+    "b": 10,
+    "bx": 0.03,
+    "h": -14,
+    "l": 6,
+    "r": 88,
+    "el": 20,
+    "er": 0,
+    "sl": -0.02,
+    "sr": 0.08,
+    "hr": 5
+   },
+   "heart": {
+    "by": 0.012,
+    "sq": 0.02,
+    "h": -4,
+    "hy": 0.004,
+    "l": 26,
+    "r": 26,
+    "el": 145,
+    "er": 145,
+    "sl": -0.03,
+    "sr": 0.03
+   },
+   "heart_up": {
+    "by": -0.02,
+    "sq": -0.03,
+    "h": 4,
+    "l": 40,
+    "r": 40,
+    "el": 140,
+    "er": 140,
+    "sl": -0.03,
+    "sr": 0.03,
+    "fl": 0.02,
+    "fr": 0.02
+   },
+   "claw": {
+    "b": -3,
+    "by": 0.02,
+    "sq": 0.02,
+    "h": 8,
+    "l": 70,
+    "r": 70,
+    "el": -60,
+    "er": -60,
+    "sl": -0.07,
+    "sr": 0.07
+   },
+   "claw_low": {
+    "b": 3,
+    "by": 0.05,
+    "sq": 0.04,
+    "h": -8,
+    "hy": 0.006,
+    "l": 55,
+    "r": 55,
+    "el": 40,
+    "er": 40,
+    "sl": -0.08,
+    "sr": 0.08
+   },
+   "peek_l": {
+    "b": -10,
+    "bx": -0.025,
+    "h": 14,
+    "l": 60,
+    "r": 6,
+    "el": -115,
+    "er": 20,
+    "sl": -0.05,
+    "sr": 0.02,
+    "hr": -4
+   },
+   "peek_r": {
+    "b": 10,
+    "bx": 0.025,
+    "h": -14,
+    "l": 6,
+    "r": 60,
+    "el": 20,
+    "er": -115,
+    "sl": -0.02,
+    "sr": 0.05,
+    "hr": 4
+   },
+   "punch_l": {
+    "b": -6,
+    "bx": -0.015,
+    "by": -0.015,
+    "sq": -0.03,
+    "h": 10,
+    "l": 160,
+    "r": 52,
+    "el": 0,
+    "er": 82,
+    "sl": -0.05,
+    "sr": 0.03,
+    "fr": 0.03
+   },
+   "punch_r": {
+    "b": 6,
+    "bx": 0.015,
+    "by": -0.015,
+    "sq": -0.03,
+    "h": -10,
+    "l": 52,
+    "r": 160,
+    "el": 82,
+    "er": 0,
+    "sl": -0.03,
+    "sr": 0.05,
+    "fl": 0.03
+   },
+   "shrug_small": {
+    "by": -0.006,
+    "h": -12,
+    "l": 30,
+    "r": 30,
+    "el": 6,
+    "er": -15,
+    "sl": -0.03,
+    "sr": 0.03
+   },
+   "hit_hey": {
+    "b": -6,
+    "bx": -0.012,
+    "by": -0.09,
+    "sq": -0.05,
+    "h": 10,
+    "l": 165,
+    "r": 52,
+    "el": 0,
+    "er": 82,
+    "sl": -0.06,
+    "sr": 0.03,
+    "fl": 0.02,
+    "fr": 0.07
+   },
+   "hit_ho": {
+    "b": 6,
+    "bx": 0.012,
+    "by": -0.09,
+    "sq": -0.05,
+    "h": -10,
+    "l": 52,
+    "r": 165,
+    "el": 82,
+    "er": 0,
+    "sl": -0.03,
+    "sr": 0.06,
+    "fl": 0.07,
+    "fr": 0.02
+   },
+   "jump_claw": {
+    "by": -0.08,
+    "sq": -0.05,
+    "h": 0,
+    "l": 95,
+    "r": 95,
+    "el": -70,
+    "er": -70,
+    "sl": -0.06,
+    "sr": 0.06,
+    "fl": 0.04,
+    "fr": 0.04
+   },
+   "kime_paw": {
+    "b": -9,
+    "bx": -0.025,
+    "by": 0.012,
+    "h": 13,
+    "hy": -0.004,
+    "l": 80,
+    "r": 52,
+    "el": -105,
+    "er": 82,
+    "sl": -0.09,
+    "sr": 0.05,
+    "hr": -5
+   },
+   "stand": {
+    "l": 6,
+    "r": 6,
+    "el": 10,
+    "er": 10
+   }
+  },
+  "routine": {
+   "intro": [
+    [
+     "stand",
+     2
+    ],
+    [
+     "shrug_small",
+     1
+    ],
+    [
+     "akimbo_l",
+     1
+    ]
+   ],
+   "verse": [
+    [
+     "akimbo_l",
+     1
+    ],
+    [
+     "paw_r",
+     1
+    ],
+    [
+     "akimbo_r",
+     1
+    ],
+    [
+     "paw_l",
+     1
+    ],
+    [
+     "robot_a",
+     1
+    ],
+    [
+     "robot_b",
+     1
+    ],
+    [
+     "flex_l",
+     1
+    ],
+    [
+     "point_out_r",
+     1
+    ]
+   ],
+   "pre": [
+    [
+     "heart",
+     1
+    ],
+    [
+     "heart_up",
+     1
+    ],
+    [
+     "claw",
+     1
+    ],
+    [
+     "claw_low",
+     1
+    ],
+    [
+     "peek_l",
+     1
+    ],
+    [
+     "peek_r",
+     1
+    ],
+    [
+     "claw_low",
+     1
+    ],
+    [
+     "jump_claw",
+     1
+    ]
+   ],
+   "chorus": [
+    [
+     "punch_r",
+     1
+    ],
+    [
+     "akimbo_l",
+     1
+    ],
+    [
+     "punch_l",
+     1
+    ],
+    [
+     "akimbo_r",
+     1
+    ],
+    [
+     "robot_a",
+     1
+    ],
+    [
+     "robot_b",
+     1
+    ],
+    [
+     "jump_claw",
+     1
+    ],
+    [
+     "paw_l",
+     1
+    ]
+   ],
+   "outro": [
+    [
+     "punch_r",
+     1
+    ],
+    [
+     "akimbo_l",
+     1
+    ],
+    [
+     "punch_l",
+     1
+    ],
+    [
+     "akimbo_r",
+     1
+    ],
+    [
+     "robot_a",
+     1
+    ],
+    [
+     "robot_b",
+     1
+    ],
+    [
+     "jump_claw",
+     1
+    ],
+    [
+     "paw_l",
+     1
+    ]
+   ]
+  },
+  "finale": "kime_paw"
+ },
+ "motion": "pop_dance",
+ "hits": {
+  "moves": [
+   "hit_hey",
+   "hit_ho"
+  ],
+  "beats": 1.5,
+  "x": [
+   0.17,
+   0.83
+  ],
+  "y": 0.24,
+  "size": 0.72,
+  "colors": [
+   "#ff7a12",
+   "#b77bff"
+  ]
+ },
+ "title": {
+  "atStart": true,
+  "atEnd": true,
+  "startSec": 1.2,
+  "endHoldSec": 1.3,
+  "y": 0.8,
+  "size": 0.85
+ },
+ "lyrics": {
+  "style": "hw",
+  "fonts": [
+   "pop",
+   "pop",
+   "spooky",
+   "potta",
+   "dela"
+  ],
+  "decos": [
+   [
+    "pumpkin",
+    "bat"
+   ],
+   [
+    "ghost",
+    "web"
+   ],
+   [
+    "candle",
+    "bat"
+   ],
+   [
+    "pumpkin",
+    "ghost"
+   ]
+  ],
+  "bottomWhen": [
+   "trio",
+   "split"
+  ],
+  "bustCamInBottom": {
+   "s": 0.86,
+   "y": -0.07
+  }
+ },
+ "freeze": {
+  "tailSec": 0.02
+ }
+}

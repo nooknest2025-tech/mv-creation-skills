@@ -40,7 +40,7 @@ export type VideoRenderer=(src:string,srcTime:number,style:any,key:any)=>React.R
 export function sceneClipTime(data:any,i:number,t:number){const s=data.scenes[i],end=data.scenes[i+1]?.start??data.duration,a=data.assets[s.asset];return clipSourceTime(clipPlan(s,end-s.start,typeof a==='object'?a.duration:undefined),t-s.start)}
 
 export function Scene({data,t:tIn,base='',video}:{data:any;t:number;base?:string;video?:VideoRenderer}) {
- /* 立ち絵: the whole picture (fx, particles, stage) freezes at the end of the last lyric */const lastScene=data.scenes?.find((s:any,i:number)=>tIn>=s.start&&tIn<(data.scenes[i+1]?.start??Infinity))??data.scenes?.at(-1);const stopT=isTachieAsset(data.assets?.[lastScene?.asset])?stopTimeOf(data.lyrics,data.duration,data.assets[lastScene.asset].stage.stopAt,data.fps??30):undefined;const t=stopT!=null?Math.min(tIn,stopT):tIn;
+ /* 立ち絵: the whole picture (fx, particles, stage) freezes at the end of the last lyric */const lastScene=data.scenes?.find((s:any,i:number)=>tIn>=s.start&&tIn<(data.scenes[i+1]?.start??Infinity))??data.scenes?.at(-1);const stopT=isTachieAsset(data.assets?.[lastScene?.asset])?stopTimeOf(data.lyrics,data.duration,data.assets[lastScene.asset].stage.stopAt,data.fps??30,data.assets[lastScene.asset].stage.freezeAt):undefined;const t=stopT!=null?Math.min(tIn,stopT):tIn;
  const W=data.width??1280,H=data.height??720; const scenes=data.scenes;const assets=data.assets.map((a:any)=>typeof a==='string'?a:a.src);const kinds=data.assets.map((a:any)=>isVideoAsset(a));
  let idx=scenes.findIndex((s:any,i:number)=>t>=s.start&&t<(scenes[i+1]?.start??data.duration)); if(idx<0)idx=scenes.length-1;
  const beat={bpm:data.bpm??120,phase:data.phase??0,beatsPerBar:4};

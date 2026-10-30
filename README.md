@@ -1,6 +1,6 @@
 # MV制作パック（Codex など AI エージェント用・日本語）
 
-バージョン: 2.1.0（変更点は [CHANGELOG.md](CHANGELOG.md)）
+バージョン: 2.2.0（変更点は [CHANGELOG.md](CHANGELOG.md)）
 
 曲を入れるだけで、歌詞が動くMV（MP4）を作れる道具一式です。AI（Codex など）に日本語で話しかけて「サビはグリッチで」「縦長にして」のように直すこともできます。
 既定は全部無料（PCの中で処理）。有料の生成AIは、使うときだけ金額を見せて確認してから使います。
@@ -61,7 +61,7 @@ cd skill-pack-v3/MV_SKILL_PACK/remotion
 npm run editor -- --demo --project editor-demo   # 見本で試す
 npm run editor -- --project <曲名>               # 作ったMVを開く
 ```
-表示された `http://127.0.0.1:5195/editor.html` をブラウザで開きます。詳しくは [docs/EDITOR_ja.md](skill-pack-v3/MV_SKILL_PACK/docs/EDITOR_ja.md)。アニメバトルMVの作り方は [レシピ](skill-pack-v3/MV_SKILL_PACK/docs/recipes/anime_battle_mv_ja.md)。
+表示された `http://127.0.0.1:5195/editor.html` をブラウザで開きます。詳しくは [docs/EDITOR_ja.md](skill-pack-v3/MV_SKILL_PACK/docs/EDITOR_ja.md)。アニメバトルMVの作り方は [レシピ](skill-pack-v3/MV_SKILL_PACK/docs/recipes/anime_battle_mv_ja.md)、パーツのキャラが踊るMVは [パーツアニメで踊るMV](skill-pack-v3/MV_SKILL_PACK/docs/recipes/parts_dance_mv_ja.md)（`npm run recipe:dance`）。
 
 ## AIへ
 
