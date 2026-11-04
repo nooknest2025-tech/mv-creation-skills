@@ -16,6 +16,7 @@ description: 書き出したMVを確認するとき（自動QAの結果の読み
 静止画は構図の確認に使い、同期・動きは音付き再生で別途確認する。全体表示を指定した画像は、動きや切り替えの途中も端が切れないかを見る。
 
 ### 冒頭0〜3秒の静止画プレビュー（本番書き出し前に必須）
+編集画面のプロジェクトなら、MP4 を書き出す前に `remotion/` で `npm run editor:stills -- <プロジェクト名>` を実行すると、書き出しと同じ描画で 0・1・2・3 秒の静止画と一覧 `sheet.jpg` が `projects/<名前>/out/editor/stills-check/` にできます（別の秒は `--at 0,1,2,3,30`）。書き出し済みの MP4 から確かめるときは次の手順:
 ```bash
 for t in 0 1 2 3; do ffmpeg -y -ss $t -i out.mp4 -frames:v 1 hook_${t}s.png; done
 ffmpeg -y -i hook_0s.png -i hook_1s.png -i hook_2s.png -i hook_3s.png -filter_complex "[0][1][2][3]xstack=inputs=4:layout=0_0|w0_0|0_h0|w0_h0" hook_sheet.png

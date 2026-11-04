@@ -27,7 +27,26 @@ def export_info():
     title=(read()['data'].get('title') or 'MV')
     return {'folder':folder,'default':str(ROOT),'suggestedName':safe_name('',title,next_version(folder,title))}
 def read():return json.loads(STATE.read_text(encoding='utf-8'))
-LYRIC_EDIT_KEYS=['motion','params','font','fill','stroke','accent','scale','x','y','position','angle','effect','effectOffset','motionDuration','entrance','departure','transitionDuration','stageStyle']
+LYRIC_EDIT_KEYS=['motion','params','font','fill','stroke','accent','scale','x','y','position','angle','effect','effectOffset','motionDuration','entrance','departure','transitionDuration','stageStyle','boxX','boxY']
+# 「ライブDVD風」 captions (mirror of src/lib/dvd.ts). dvd_sub is a lyric look; the others carry their own text (venue card, title, camera label, credits).
+DVD_FREE_TEXT=['dvd_card','dvd_title','dvd_cam','dvd_dim','dvd_roll']
+def is_caption(l,original):
+    """an added caption line (not part of the song's lyrics): marked extra, or an older dvd_* line that never came from the lyrics"""
+    return l.get('extra') is True or (str(l.get('motion','')).startswith('dvd_') and 'sourceParts' not in l and l.get('id') not in original)
+def check_caption_fields(l,caption):
+    num=lambda x:isinstance(x,(int,float)) and not isinstance(x,bool) and math.isfinite(x)
+    if caption:
+        if not str(l.get('motion','')).startswith('dvd_'):raise ValueError('追加テロップのモーションはライブDVD風（dvd_*）から選んでください')
+        if not isinstance(l.get('text'),str) or not 0<len(l['text'])<=600 or 'sourceParts' in l:raise ValueError('追加テロップの文字（1〜600文字）を確認してください')
+    for k in ['sub','pre']:
+        if k in l and (not isinstance(l[k],str) or len(l[k])>120):raise ValueError('テロップのサブ行・上の行は120文字までです')
+    if 'beat' in l and not (num(l['beat']) and 0<=l['beat']<=4):raise ValueError('タイトルの間隔（beat）は0〜4秒です')
+    p=l.get('params') or {}
+    if not isinstance(p,dict):raise ValueError('文字設定の範囲を確認してください')
+    if 'dim' in p and not (num(p['dim']) and 0<=p['dim']<=1):raise ValueError('暗さ（dim）は0〜1です')
+    if str(l.get('motion','')).startswith('dvd_') and 'exit' in p and not (num(p['exit']) and .05<=p['exit']<=3):raise ValueError('消える時間（exit）は0.05〜3秒です')
+    for k in ['boxX','boxY']:
+        if k in l and not (num(l[k]) and 0<=l[k]<=1):raise ValueError('文字の箱の位置（boxX / boxY）は0〜1です')
 MO_LOOKS=['none','blocks','geo','burst','hud','tanzaku','mono']
 MO_TRANS=['cut','circle','rect','ripple','cloud','glyph_zoom','push_text','diag_sweep','slow_wipe']
 def check_mo(e):
@@ -211,7 +230,8 @@ def validate(d):
     coverage=[];ids=set()
     for i,l in enumerate(d['lyrics']):
         if not re.fullmatch(r'[A-Za-z0-9_-]{1,64}',l['id']) or l['id'] in ids:raise ValueError('歌詞IDを確認してください')
-        ids.add(l['id']);source=l.get('sourceParts',[{'line':l['id'],'start':0,'end':len(l['text'])}]);text=''
+        ids.add(l['id']);caption=is_caption(l,original);check_caption_fields(l,caption)
+        source=[] if caption else l.get('sourceParts',[{'line':l['id'],'start':0,'end':len(l['text'])}]);text=l['text'] if caption else ''
         for part in source:
             key=part['line'];a=part['start'];b=part['end']
             if key not in original or not isinstance(a,int) or not isinstance(b,int) or not 0<=a<b<=len(original[key]):raise ValueError('元の歌詞の範囲を確認してください')
@@ -219,7 +239,7 @@ def validate(d):
         if text!=l['text']:raise ValueError('元の歌詞を保持してください')
         for k in ['start','end','scale','y','motionDuration']:
             if not finite(l[k]):raise ValueError('数値を確認してください')
-        if not 0<=l['start']<l['end']<=d['duration']-1:raise ValueError('歌詞の開始・終了を曲内に収めてください（最後の1秒は文字なし）')
+        if not 0<=l['start']<l['end']<=d['duration']-(0 if caption else 1):raise ValueError('歌詞の開始・終了を曲内に収めてください（最後の1秒は文字なし）')
         # Overlapping lines are supported by the shared scene renderer.
         if l['motion'] not in catalog or not .3<=l['scale']<=3 or not .05<=l['y']<=.95 or not (finite(l.get('x',.5)) and .02<=l.get('x',.5)<=.98) or not .1<=l['motionDuration']<=3:raise ValueError('文字設定の範囲を確認してください')
         fonts=json.loads((EDITOR/'font-options.json').read_text(encoding='utf-8'))

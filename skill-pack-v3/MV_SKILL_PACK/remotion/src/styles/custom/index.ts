@@ -19,3 +19,5 @@ export const CUSTOM_STYLES: Record<string, StyleFn> = {
 import { MOOD_STYLES } from "../../lib/moods";
 import { motionStyle } from "../motion";
 for (const [k, m] of Object.entries(MOOD_STYLES)) CUSTOM_STYLES[k] = motionStyle(m.spec);
+import { DVD_STYLES } from "./dvd";
+Object.assign(CUSTOM_STYLES, DVD_STYLES);

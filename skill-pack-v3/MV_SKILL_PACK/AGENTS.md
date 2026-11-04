@@ -81,8 +81,9 @@
 | 1発で作る | `npm run mv`（`--yes` で確認なし、`--range 40-58` で一部だけ、`--aspects 16:9,9:16`、`--davinci`） |
 | プレビュー静止画だけ | `npm run preview` |
 | 透過の歌詞だけ（DaVinci 用） | `npm run overlay` |
-| 全スタイル見本（81種） | `npm run styles`（一覧）/ `npm run showcase`（動画） |
+| 全スタイル見本（87種） | `npm run styles`（一覧）/ `npm run showcase`（動画） |
 | 編集画面（後から直す・保存値で MP4） | `npm run editor -- --project <曲名>`（見本 `npm run editor:demo`。`http://127.0.0.1:5195/editor.html`） |
+| 編集内容の静止画チェック（冒頭3秒など。MP4 は作らない） | `npm run editor:stills -- <曲名>`（既定 0,1,2,3秒。`--at 0,1,2,3,45`） |
 | パーツアニメのキャラ取り込み | `npm run parts -- import キャラ.psd` / `npm run parts -- split 画像.png` |
 | Studio で確認 | `npm run studio` |
 | テスト | `npm test` |
@@ -97,7 +98,7 @@
 | プリセット比較動画 | `npm run presets-demo -- --project <曲名>` |
 
 ## 新しい動き・書体を頼まれたら
-- 既存スタイル（81種）で足りない動き → スキル `mv-style-create` の手順どおりに作る: `npm run style:new` → 実装 → `npm run style:check` → 静止画を目で確認 → `npm test`
+- 既存スタイル（87種）で足りない動き → スキル `mv-style-create` の手順どおりに作る: `npm run style:new` → 実装 → `npm run style:check` → 静止画を目で確認 → `npm test`
 - 書体の追加 → `npm run fonts:add`。**ファイルで渡された書体はライセンスを必ずユーザーに確認**（不明なら同梱しない）。一覧と見本: `npm run fonts` / `docs/FONTS_ja.md`
 
 ## 動画生成 MCP（Pollo / Grok / Runway など、ユーザーが入れているもの）
