@@ -128,3 +128,83 @@ export function mergeSceneWithNext(sc: any[], i: number, duration: number, opt: 
   }
   sc.splice(i + 1, 1); if (sc[i + 1]?.clipChain && sc[i + 1].asset !== a.asset) delete sc[i + 1].clipChain; return null;
 }
+
+/* ---- one-step trims / delete / add (v6.5) ---- */
+type ClipInfo = (s: any) => { video: boolean; clipDur?: number };
+/** fix a video scene's current speed (fit/auto → fixed speed) so trimming its length cuts/extends footage instead of re-timing it. */
+export function bakeClip(sc: any[], i: number, duration: number, info: ClipInfo) {
+  const s = sc[i]; if (!s) return; const { video, clipDur } = info(s); if (!video) return;
+  const d = sceneEnd(sc, i, duration) - s.start, { p, segs } = bakedSegs(s, d, clipDur);
+  if (p.mode !== "play") return; applySegs(s, segs); s.clipFrom = r3(p.inPoint);
+}
+/** call once when an edge drag starts: bake both scenes around boundary b; the left scene's OUT is freed so its tail can grow. */
+export function prepareTrim(sc: any[], b: number, duration: number, info: ClipInfo) {
+  if (b <= 0 || b >= sc.length) return; bakeClip(sc, b - 1, duration, info); bakeClip(sc, b, duration, info);
+  delete sc[b - 1].clipTo; delete sc[b].clipChain;
+}
+const firstSpeed = (s: any) => (s.segments?.length ? s.segments[0].speed : s.speed ?? 1) || 1;
+const lastSpeed = (s: any) => (s.segments?.length ? s.segments[s.segments.length - 1].speed : s.speed ?? 1) || 1;
+/** one-step trim of boundary b (= sc[b].start). The scene BEFORE keeps start + IN (its tail is cut/extended);
+ *  the scene AFTER keeps its end, and its IN moves with the cut so its footage stays in place.
+ *  Left-edge trim of scene i = trimBoundary(i); right-edge trim of scene i = trimBoundary(i+1). Clamped to the source videos. */
+export function trimBoundary(sc: any[], b: number, t: number, duration: number, info: ClipInfo): number {
+  if (b <= 0 || b >= sc.length) return sc[b]?.start ?? 0;
+  const A = sc[b - 1], B = sc[b], t0 = B.start; let lo = A.start + MIN_SCENE, hi = sceneEnd(sc, b, duration) - MIN_SCENE;
+  const ia = info(A), ib = info(B);
+  if (ib.video && clipPlan(B, sceneEnd(sc, b, duration) - t0, ib.clipDur).mode === "play") {
+    const cf = B.clipFrom ?? 0, v = firstSpeed(B); lo = Math.max(lo, t0 - cf / v);
+    if (ib.clipDur !== undefined) hi = Math.min(hi, t0 + (ib.clipDur - 0.06 - cf) / v);
+  }
+  if (ia.video && ia.clipDur !== undefined) {
+    const dA = t0 - A.start, p = clipPlan(A, dA, ia.clipDur);
+    if (p.mode === "play") { const endNow = clipSourceTime(p, dA); hi = Math.min(hi, t0 + Math.max(0, ia.clipDur - endNow) / lastSpeed(A)); }
+  }
+  const v = r3(Math.max(lo, Math.min(Math.max(lo, hi), t))), delta = v - t0; if (Math.abs(delta) < 1e-6) return t0;
+  B.start = v;
+  if (ib.video) {
+    B.clipFrom = r3(Math.max(0, (B.clipFrom ?? 0) + delta * firstSpeed(B)));
+    if (B.clipTo !== undefined && B.clipTo <= B.clipFrom + 0.05) delete B.clipTo;
+    if (B.segments?.length > 1) {
+      const segs = B.segments.map((g: any) => ({ at: g.at - delta, speed: g.speed }));
+      const act = [...segs].reverse().find((g: any) => g.at <= 0) ?? segs[0];
+      const rest = segs.filter((g: any) => g.at > MIN_SCENE && g.at < sceneEnd(sc, b, duration) - v - MIN_SCENE);
+      applySegs(B, [{ at: 0, speed: act.speed }, ...rest]);
+    }
+  }
+  return v;
+}
+/** delete scene i; the previous scene grows to fill the gap (the next one when i is the first scene). Always keeps ≥1 scene. */
+export function deleteScene(sc: any[], i: number): string | null {
+  if (sc.length <= 1) return "最後の1シーンは削除できません";
+  if (!sc[i]) return "削除するシーンがありません";
+  if (i === 0) sc[1].start = 0;
+  sc.splice(i, 1);
+  const nx = sc[i]; if (nx?.clipChain && (i === 0 || sc[i - 1].asset !== nx.asset)) delete nx.clipChain;
+  return null;
+}
+let addSeq = 0;
+/** insert `asset` as a new scene at time t inside scene i. It takes time from that scene (video: its own length, image: 4 s,
+ *  never past the scene's end). The host's later part keeps playing where it would have (no jump). clipFrom = 0, no gaps. */
+export function insertAssetAt(sc: any[], t: number, asset: number, duration: number, info: ClipInfo, assetInfo: { video: boolean; clipDur?: number }, min = MIN_SPLIT, tpl?: any, wantLen?: number): { index: number } | string {
+  let i = 0; sc.forEach((s, k) => { if (s.start <= t + 1e-6) i = k; });
+  const host = sc[i], s0 = host.start, e = sceneEnd(sc, i, duration);
+  if (t - s0 < min) t = s0;
+  if (e - t < min) return `ここは場面の終わりに近すぎます（${min}秒以上の余裕が必要です）`;
+  let len = wantLen ?? (assetInfo.video && assetInfo.clipDur ? Math.max(min, assetInfo.clipDur) : 4); len = Math.min(len, e - t);
+  if (e - (t + len) < min) len = e - t;
+  const end = r3(t + len);
+  if (end < e - 1e-6) { const err = splitSceneAt(sc, i, end, duration, info(host)); if (err) return err; }
+  let k = i;
+  if (t > s0 + 1e-6) { const err = splitSceneAt(sc, i, r3(t), duration, info(sc[i])); if (err) return err; k = i + 1; }
+  const ids = new Set(sc.map((x) => x.id)); let id; do id = `ADD-${++addSeq}`; while (ids.has(id));
+  let n: any;
+  if (tpl) { n = structuredClone(tpl); delete n.clipChain; n.id = id; n.start = r3(t); }
+  else { n = resetClipForAsset(structuredClone(sc[k]), false); n.id = id; n.asset = asset; n.start = r3(t); n.transition = 0; delete n.label; delete n.name;
+    if (assetInfo.video) { n.clipFrom = 0; n.speed = 1; } }
+  sc[k] = n; if (sc[k + 1]?.clipChain) delete sc[k + 1].clipChain;
+  return { index: k };
+}
+/** Ctrl+V: paste a copied scene (look, asset, IN, speed…) at t. Keeps its length where the landing scene has room. fit scenes are pasted with their baked speed. */
+export function pasteSceneAt(sc: any[], t: number, copied: { scene: any; len: number }, duration: number, info: ClipInfo) {
+  return insertAssetAt(sc, t, copied.scene.asset, duration, info, info(copied.scene), MIN_SPLIT, copied.scene, copied.len);
+}

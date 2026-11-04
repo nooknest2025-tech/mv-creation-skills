@@ -11,14 +11,14 @@ import {createRoot} from 'react-dom/client';
 import {lyricRange,sceneRange,loopStep} from './loop';
 import {sceneName} from '../src/lib/editstate';
 import {History,isTextField} from './history';
-import {snapTime,pinDefault,resizeBoundary,sceneEdges,sceneBoundaryIndex,splitSceneAt,mergeSceneWithNext,resolveClipChains,resizeSceneOnly,moveSceneOnly,resetClipForAsset,ADD_ASSET_EXT,isVideoName,moveLyricEdge,moveLyric,slideInPoint,fmt} from './timeline';
+import {snapTime,pinDefault,resizeBoundary,sceneEdges,sceneBoundaryIndex,splitSceneAt,mergeSceneWithNext,resolveClipChains,resizeSceneOnly,moveSceneOnly,resetClipForAsset,ADD_ASSET_EXT,isVideoName,moveLyricEdge,moveLyric,slideInPoint,fmt,prepareTrim,trimBoundary,deleteScene,insertAssetAt,pasteSceneAt,bakeClip} from './timeline';
 import {clipPlan,clipSummary,trimSpan,SPEED_PRESETS,TAILS,SPEED_MIN,SPEED_MAX} from '../src/lib/clipspeed';
 import {Scene,isVideoAsset,CATALOG,FONT_OPTIONS,POSITIONS,EFFECTS,TRANSITIONS,CAMERA_MOVES,EFFECT_FX,STRENGTH,SYNC,sceneMove} from './editor-scene';
 const root=createRoot(document.getElementById('stage')!);
 let data:any,revision=0,dirty=false,t=0,mode='live',busy=false,lastJob:any=null;
 let refreshLineList=()=>{};
 let refreshSceneList=()=>{};
-let selectSceneUi=(_i:number)=>{},selectLyricUi=(_id:string)=>{},drawTimeline=()=>{},refreshClip=()=>{};
+let followHead=()=>{},selectSceneUi=(_i:number)=>{},selectLyricUi=(_id:string)=>{},drawTimeline=()=>{},refreshClip=()=>{};
 const lyricHistory:any[]=[];
 const checkedLyrics=new Set<string>();let sampleMotion:string|null=null;const bulkHistory:any[][]=[];
 function parts(l:any){return l.sourceParts??[{line:l.id,start:0,end:Array.from(l.text).length}]}
@@ -31,7 +31,7 @@ function motionGroup(k:string){if(/^pro_/.test(k))return 'プロ演出（pro）'
 const motionGroups=[...new Set(styles.map(([k])=>motionGroup(k)))];
 const optionHtml=motionGroups.map(group=>`<optgroup label="${group}">${styles.filter(([k])=>motionGroup(k)===group).map(([k,v])=>`<option value="${k}">${v.short}</option>`).join('')}</optgroup>`).join('');
 function fit(){const W=data?.width??1280,H=data?.height??720,st=$('stage');st.style.width=W+'px';st.style.height=H+'px';if(document.fullscreenElement===$('screen')){const k=Math.min(innerWidth/W,innerHeight/H);st.style.position='absolute';st.style.left=(innerWidth-W*k)/2+'px';st.style.top=(innerHeight-H*k)/2+'px';st.style.transform=`scale(${k})`;$('screen').style.height='';return}st.style.position='';st.style.left='';st.style.top='';const w=$('screen').clientWidth;st.style.transform=`scale(${w/W})`;$('screen').style.height=`${w*H/W}px`}
-function draw(){root.render(<Scene data={data} t={t}/>);$('time').textContent=t.toFixed(2)+'秒';$('seek').value=t;if(!$('fsBar').hidden){$('fsSeek').value=t;$('fsTime').textContent=`${t.toFixed(2)} / ${data.duration.toFixed(2)}秒`}const ph=$('tlHead');if(ph)ph.style.left=(t*pxs)+'px'}
+function draw(){root.render(<Scene data={data} t={t}/>);$('time').textContent=t.toFixed(2)+'秒';$('seek').value=t;if(!$('fsBar').hidden){$('fsSeek').value=t;$('fsTime').textContent=`${t.toFixed(2)} / ${data.duration.toFixed(2)}秒`}const ph=$('tlHead');if(ph){ph.style.left=(t*pxs)+'px';followHead()}}
 let pxs=40;
 function status(){ $('status').textContent=dirty?'未保存（プレビューに反映中）':`編集版 ${revision} 保存済み`;$('render').disabled=dirty||busy;$('save').disabled=!dirty||busy;if(lastJob?.status==='done'&&(dirty||lastJob.revision!==revision))$('exportStatus').textContent=`書き出し未反映（前の出力は編集版 ${lastJob.revision}）`;}
 function sanitizeRamps(){for(let i=0;i<data.scenes.length;i++){const s=data.scenes[i];if(!s.segments)continue;const d=sceneDur(i);s.segments=s.segments.filter((g:any,k:number)=>k===0||g.at<d-.05);if(s.segments.length<2){delete s.segments;delete s.solve}else if(s.solve!==undefined&&s.solve>=s.segments.length)s.solve=s.segments.length-1}}
@@ -203,7 +203,7 @@ function clipPanel(cur:()=>number,preview:()=>void){
 const PIN_KEY='mvEditor.pinTimeline.v2'; /* v6.4: new key -> an old saved ON is ignored; default OFF (only the preview stays on top) */
 const pinWanted=()=>{let v:string|null=null;try{v=localStorage.getItem(PIN_KEY)}catch{}return pinDefault(v,innerHeight)};
 function timeline(){
- const host=$('timeline');host.innerHTML=`<div class="tlBar"><b>タイムライン</b><button id="pinToggle" class="pinToggle" aria-pressed="false" title="映像はいつも上に固定。タイムラインも一緒に固定するか">タイムラインも固定 OFF</button><label>ズーム <input id="tlZoom" type="range" min="10" max="200" value="${pxs}" aria-label="タイムラインのズーム"></label><button id="tlSplit" title="赤い線の位置でシーンを切る（S キー）">✂ ここで切る（S）</button><span class="hint tlKeys">端をドラッグ：隣も連動 ／ Ctrl＋ドラッグ：そのシーンだけ ／ Shift・Alt：拍に吸着しない ／ 右クリック：切る・つなげる ／ Ctrl+Z：元に戻す</span></div>
+ const host=$('timeline');host.innerHTML=`<div class="tlBar"><b>タイムライン</b><button id="pinToggle" class="pinToggle" aria-pressed="false" title="映像はいつも上に固定。タイムラインも一緒に固定するか">タイムラインも固定 OFF</button><label>ズーム <input id="tlZoom" type="range" min="10" max="200" value="${pxs}" aria-label="タイムラインのズーム"></label><button id="tlSplit" title="赤い線の位置でシーンを切る（S キー）">✂ ここで切る（S）</button><button id="tlDel" title="選んでいるシーンを削除。前のシーンが伸びてすき間を埋めます（Delete キー）">削除（Del）</button><select id="tlAddAsset" aria-label="追加する素材" title="「シーン追加」で入れる素材"></select><button id="tlAdd" title="選んだ素材を赤い線の位置に新しいシーンとして入れます（入る場所のシーンから時間をもらいます）">＋シーン追加</button><button id="tlFollow" aria-pressed="true" title="再生中、赤い線が見えるようにタイムラインを自動で動かす">追従 ON</button><span class="hint tlKeys">端をドラッグ：映像ごとトリム ／ Alt＋端：切替点だけ移動 ／ Ctrl＋ドラッグ：そのシーンだけ ／ Shift：拍に吸着しない ／ S：分割 ／ Delete：削除 ／ Ctrl+C・V：シーンをコピー・貼り付け ／ 右クリック：切る・つなげる・削除 ／ Ctrl+Z：元に戻す</span></div>
  <div id="tlScroll"><div id="tlInner"><div id="tlBeats"></div><div class="tlRow" id="tlScenes"></div><div class="tlRow" id="tlLyrics"></div><div id="tlHead"></div></div></div><div id="tlTip" hidden></div>`;
  const sc=$('tlScroll'),tip=$('tlTip');
  const sceneAt=(x:number)=>{let k=0;data.scenes.forEach((s:any,i:number)=>{if(s.start<=x+1e-6)k=i});return k};
@@ -212,11 +212,28 @@ function timeline(){
  const doSplit=(x:number,i=sceneAt(x))=>{const err=splitSceneAt(data.scenes,i,snapTime(x,data.bpm||120,data.phase??0,0.0001),data.duration,opt(i));if(err){$('error').textContent=err;return}restructure(i+1,`シーンを ${fmt(data.scenes[i+1].start)} で2つに切りました（Ctrl+Z で戻せます）`)};
  const doMerge=(i:number)=>{const err=mergeSceneWithNext(data.scenes,i,data.duration,opt(i));if(err){$('error').textContent=err;return}restructure(i,'次のシーンとつなげました（Ctrl+Z で戻せます）')};
  $('tlSplit').onclick=()=>doSplit(t);
+  const info=(s:any)=>({video:isVideoAsset(data.assets[s.asset]),clipDur:clipLen(s)});
+  const doDelete=(i=currentScene())=>{const err=deleteScene(data.scenes,i);if(err){$('error').textContent=err;return}restructure(Math.max(0,i-1),'シーンを削除しました（Ctrl+Z で戻せます）')};
+  const fillAdd=()=>{const s=$('tlAddAsset') as HTMLSelectElement,v=s.value;s.replaceChildren();data.assets.forEach((a:any,k:number)=>{const o=document.createElement('option');o.value=String(k);o.textContent=(isVideoAsset(a)?'🎞 ':'')+(a.label??('素材 '+(k+1)));s.append(o)});if(v&&Number(v)<data.assets.length)s.value=v};fillAdd();
+  $('tlAddAsset').onfocus=fillAdd;
+  const placed=(r:any,msg:string)=>{if(typeof r==='string'){$('error').textContent=r;return}restructure(r.index,msg)};
+  const doAdd=()=>{const a=Number(($('tlAddAsset') as HTMLSelectElement).value);if(!(a>=0))return;const ai={video:isVideoAsset(data.assets[a]),clipDur:typeof data.assets[a]==='object'?data.assets[a].duration:undefined};placed(insertAssetAt(data.scenes,t,a,data.duration,info,ai),`${fmt(t)} にシーンを追加しました（Ctrl+Z で戻せます）`)};
+  $('tlDel').onclick=()=>doDelete();$('tlAdd').onclick=doAdd;
+  let copied:any=null;
+  const doCopy=()=>{const i=currentScene(),tmp=structuredClone(data.scenes);bakeClip(tmp,i,data.duration,info);copied={scene:tmp[i],len:sceneDur(i)};$('sample').textContent=`シーンをコピーしました（${copied.len.toFixed(2)}秒）。赤い線の位置で Ctrl+V で貼り付け`};
+  const doPaste=()=>{if(!copied){$('error').textContent='先に Ctrl+C でシーンをコピーしてください';return}placed(pasteSceneAt(data.scenes,t,copied,data.duration,info),`${fmt(t)} にシーンを貼り付けました（Ctrl+Z で戻せます）`)};
+  document.addEventListener('keydown',e=>{if(isTextField(e.target)||/SELECT/.test((e.target as HTMLElement)?.tagName??''))return;const sceneTab=$('scenesTab').getAttribute('aria-pressed')==='true';
+   if((e.key==='Delete'||e.key==='Backspace')&&!e.ctrlKey&&!e.metaKey&&sceneTab){e.preventDefault();doDelete()}
+   else if((e.ctrlKey||e.metaKey)&&!e.shiftKey&&(e.key==='c'||e.key==='C')&&sceneTab&&!String(window.getSelection()??'')){e.preventDefault();doCopy()}
+   else if((e.ctrlKey||e.metaKey)&&!e.shiftKey&&(e.key==='v'||e.key==='V')&&copied){e.preventDefault();doPaste()}});
+  const fb=$('tlFollow');let followPaused=false;const followOn=()=>fb.getAttribute('aria-pressed')==='true';fb.onclick=()=>{const on=!followOn();fb.setAttribute('aria-pressed',String(on));fb.textContent='追従 '+(on?'ON':'OFF');followPaused=false};
+  const pauseFollow=()=>{if(!audio.paused)followPaused=true};sc.addEventListener('wheel',pauseFollow,{passive:true});sc.addEventListener('pointerdown',pauseFollow);audio.addEventListener('play',()=>{followPaused=false});
+  followHead=()=>{if(!followOn()||followPaused||audio.paused)return;const x=t*pxs,w=sc.clientWidth;if(x<sc.scrollLeft+20||x>sc.scrollLeft+w-60)sc.scrollLeft=Math.max(0,x-w*0.15)};
  document.addEventListener('keydown',e=>{if((e.key==='s'||e.key==='S')&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&!isTextField(e.target)&&!/SELECT/.test((e.target as HTMLElement)?.tagName??'')){e.preventDefault();doSplit(t)}});
  const menu=document.createElement('div');menu.id='tlMenu';menu.hidden=true;document.body.append(menu);const hideMenu=()=>{menu.hidden=true};document.addEventListener('pointerdown',e=>{if(!menu.contains(e.target as Node))hideMenu()});
  sc.addEventListener('contextmenu',(e:MouseEvent)=>{const blk=(e.target as HTMLElement).closest('[data-scene]') as HTMLElement|null;if(!blk)return;e.preventDefault();const i=Number(blk.dataset.scene),r=$('tlInner').getBoundingClientRect(),x=Math.max(0,Math.min(data.duration,(e.clientX-r.left)/pxs));
   menu.replaceChildren();const item=(label:string,fn:()=>void,dis=false)=>{const b=document.createElement('button');b.textContent=label;b.disabled=dis;b.onclick=()=>{hideMenu();fn()};menu.append(b)};
-  item(`✂ ここで切る（${fmt(x)}）`,()=>doSplit(x,i));item('⇥ 次とつなげる',()=>doMerge(i),i>=data.scenes.length-1);
+  item(`✂ ここで切る（${fmt(x)}）`,()=>doSplit(x,i));item('⇥ 次とつなげる',()=>doMerge(i),i>=data.scenes.length-1);item('🗑 このシーンを削除',()=>doDelete(i),data.scenes.length<=1);
   menu.style.left=e.clientX+'px';menu.style.top=e.clientY+'px';menu.hidden=false});
  const pb=$('pinToggle'),pinSync=()=>{const on=pinWanted();document.body.classList.toggle('pinTimeline',on);const top=$('stickyTop'),tl=$('timeline');if(on){if(tl.parentElement!==top)top.append(tl)}else if(tl.parentElement===top)top.after(tl);pb.setAttribute('aria-pressed',String(on));pb.textContent='タイムラインも固定 '+(on?'ON':'OFF')};pb.onclick=()=>{try{localStorage.setItem(PIN_KEY,pinWanted()?'0':'1')}catch{}pinSync()};pinSync();
  $('tlZoom').oninput=()=>{const mid=(sc.scrollLeft+sc.clientWidth/2)/pxs;pxs=Number($('tlZoom').value);drawTimeline();sc.scrollLeft=mid*pxs-sc.clientWidth/2};
@@ -224,7 +241,7 @@ function timeline(){
  drawTimeline=()=>{if(!data)return;$('tlInner').style.width=data.duration*pxs+20+'px';
   const B=60/(data.bpm||120),beats=$('tlBeats');beats.replaceChildren();if(B*pxs>=4)for(let k=Math.ceil(-(data.phase??0)/B),x=0;(x=(data.phase??0)+k*B)<data.duration;k++){const d=document.createElement('i');d.className=k%4===0?'bar':'';d.style.left=x*pxs+'px';beats.append(d)}
   const cs=currentScene(),cl=$('lookLine')?.value,sceneTab=$('scenesTab').getAttribute('aria-pressed')==='true';
-  $('tlScenes').replaceChildren(...data.scenes.map((s:any,i:number)=>{const vid=isVideoAsset(data.assets[s.asset]);const d=el('tlScene'+(vid?' video':'')+(sceneTab&&i===cs?' sel':''),s.start,s.start+sceneDur(i),(vid?'🎞 ':'')+sceneName(s,i,data.sections)+(vid?` ${clipPlan(s,sceneDur(i),clipLen(s)).speeds.map(v=>v.toFixed(2)).join('→')}倍`:''),{scene:String(i)});for(const e of sceneEdges(i,data.scenes.length)){const h=document.createElement('span');h.className='edge '+(e==='start'?'left':'right');h.dataset.edge=e;h.title=e==='start'?'左端：ドラッグで開始を変更':'右端：ドラッグで終わりを変更';d.append(h)}return d}));
+  $('tlScenes').replaceChildren(...data.scenes.map((s:any,i:number)=>{const vid=isVideoAsset(data.assets[s.asset]);const d=el('tlScene'+(vid?' video':'')+(sceneTab&&i===cs?' sel':''),s.start,s.start+sceneDur(i),(vid?'🎞 ':'')+sceneName(s,i,data.sections)+(vid?` ${clipPlan(s,sceneDur(i),clipLen(s)).speeds.map(v=>v.toFixed(2)).join('→')}倍`:''),{scene:String(i)});for(const e of sceneEdges(i,data.scenes.length)){const h=document.createElement('span');h.className='edge '+(e==='start'?'left':'right');h.dataset.edge=e;h.title=e==='start'?'左端ドラッグ：頭をトリム（終わりは固定・映像の使い始めも動く）／Alt：切替点だけ ／ Ctrl：このシーンだけ':'右端ドラッグ：お尻をトリム（開始は固定・映像の終わりを切る/伸ばす）／Alt：切替点だけ ／ Ctrl：このシーンだけ';d.append(h)}return d}));
   $('tlLyrics').replaceChildren(...data.lyrics.map((l:any)=>{const d=el('tlLyric'+(!sceneTab&&l.id===cl?' sel':''),l.start,l.end,l.text,{lyric:l.id});for(const e of ['start','end']){const h=document.createElement('span');h.className='edge '+(e==='start'?'left':'right');h.dataset.edge=e;h.title=e==='start'?'左端：開始を変更':'右端：終わりを変更';d.append(h)}return d}));
   $('tlHead').style.left=t*pxs+'px'};
  let drag:any=null;
@@ -233,18 +250,19 @@ function timeline(){
   if(!blk){cue(x);return}
   const edge=tg.dataset.edge;
   if(blk.dataset.scene){const i=Number(blk.dataset.scene),s=data.scenes[i];selectSceneUi(i);
-   const solo=e.ctrlKey||e.metaKey;if(solo&&edge)drag={kind:'soloEdge',i,edge};else if(solo)drag={kind:'soloMove',i,x0:x,s0:s.start,e0:s.start+sceneDur(i),moved:false};else if(edge)drag={kind:'cut',i:sceneBoundaryIndex(i,edge as any)};else if(isVideoAsset(data.assets[s.asset]))drag={kind:'slide',i,x0:x,from0:s.clipFrom??0,to0:s.clipTo,rate:clipPlan(s,sceneDur(i),clipLen(s)).rate,moved:false};else drag=null}
+   const solo=e.ctrlKey||e.metaKey;if(solo&&edge)drag={kind:'soloEdge',i,edge};else if(solo)drag={kind:'soloMove',i,x0:x,s0:s.start,e0:s.start+sceneDur(i),moved:false};else if(edge&&e.altKey)drag={kind:'cut',i:sceneBoundaryIndex(i,edge as any)};else if(edge){const b=sceneBoundaryIndex(i,edge as any);prepareTrim(data.scenes,b,data.duration,info);drag={kind:'trim',i,b,edge}}else if(isVideoAsset(data.assets[s.asset]))drag={kind:'slide',i,x0:x,from0:s.clipFrom??0,to0:s.clipTo,rate:clipPlan(s,sceneDur(i),clipLen(s)).rate,moved:false};else drag=null}
   else{const id=blk.dataset.lyric!;selectLyricUi(id);drag=edge?{kind:'lyr',id,edge}:{kind:'lyrMove',id,x0:x,s0:data.lyrics.find((l:any)=>l.id===id).start,moved:false}}
   if(drag){sc.setPointerCapture(e.pointerId);e.preventDefault()}});
- sc.addEventListener('pointermove',(e:PointerEvent)=>{if(!drag)return;let x=at(e);const free=e.shiftKey||e.altKey;const snap=(v:number)=>free?v:snapTime(v,data.bpm||120,data.phase??0,Math.max(.04,6/pxs));let msg='';
-  if(drag.kind==='cut'){const v=resizeBoundary(data.scenes,drag.i,snap(x),data.duration);msg=`切替 ${fmt(v)}（前の場面 ${sceneDur(drag.i-1).toFixed(2)}秒／この場面 ${sceneDur(drag.i).toFixed(2)}秒）`}
+ sc.addEventListener('pointermove',(e:PointerEvent)=>{if(!drag)return;let x=at(e);const free=e.shiftKey||(e.altKey&&drag.kind!=='cut');const snap=(v:number)=>free?v:snapTime(v,data.bpm||120,data.phase??0,Math.max(.04,6/pxs));let msg='';
+  if(drag.kind==='trim'){const v=trimBoundary(data.scenes,drag.b,snap(x),data.duration,info);const s=data.scenes[drag.i];msg=`トリム：${drag.edge==='start'?'開始':'終わり'} ${fmt(v)}（長さ ${sceneDur(drag.i).toFixed(2)}秒`+(isVideoAsset(data.assets[s.asset])?`・IN ${(s.clipFrom??0).toFixed(2)}秒）`:'）')}
+  else if(drag.kind==='cut'){const v=resizeBoundary(data.scenes,drag.i,snap(x),data.duration);msg=`切替 ${fmt(v)}（前の場面 ${sceneDur(drag.i-1).toFixed(2)}秒／この場面 ${sceneDur(drag.i).toFixed(2)}秒）`}
   else if(drag.kind==='soloEdge'){const v=resizeSceneOnly(data.scenes,drag.i,drag.edge,snap(x),data.duration);msg=`このシーンだけ：${drag.edge==='start'?'開始':'終わり'} ${fmt(v)}（長さ ${sceneDur(drag.i).toFixed(2)}秒）`}
   else if(drag.kind==='soloMove'){if(Math.abs(x-drag.x0)*pxs<3&&!drag.moved)return;drag.moved=true;moveSceneOnly(data.scenes,drag.i,drag.s0,drag.e0,snap(drag.s0+(x-drag.x0))-drag.s0,data.duration);msg=`このシーンだけ移動：${fmt(data.scenes[drag.i].start)}〜${fmt(data.scenes[drag.i].start+sceneDur(drag.i))}`}
   else if(drag.kind==='slide'){const s=data.scenes[drag.i];delete s.clipChain;const L=clipLen(s);if(drag.to0!==undefined){const w=drag.to0-drag.from0;s.clipFrom=slideInPoint(drag.from0,x-drag.x0,drag.rate,L!==undefined?L-w+.05:undefined);s.clipTo=+(s.clipFrom+w).toFixed(3)}else s.clipFrom=slideInPoint(drag.from0,x-drag.x0,drag.rate,L);drag.moved=true;msg=`使う部分 IN ${s.clipFrom.toFixed(2)}秒`+(s.clipTo!==undefined?`〜OUT ${s.clipTo.toFixed(2)}秒`:'')}
   else if(drag.kind==='lyr'){const l=data.lyrics.find((l:any)=>l.id===drag.id);const v=moveLyricEdge(l,drag.edge,snap(x),data.duration);msg=`${drag.edge==='start'?'開始':'終了'} ${fmt(v)}（長さ ${(l.end-l.start).toFixed(2)}秒）`}
   else{const l=data.lyrics.find((l:any)=>l.id===drag.id);if(Math.abs(x-drag.x0)*pxs<3&&!drag.moved)return;drag.moved=true;const len=l.end-l.start;moveLyric(l,snap(drag.s0+(x-drag.x0))-l.start,data.duration);msg=`歌詞 ${fmt(l.start)}〜${fmt(l.start+len)}`}
   tip.hidden=false;tip.textContent=msg+(free?'　（自由）':'　（拍にくっつく・Shift/Altで自由）');tip.style.left=e.clientX+12+'px';tip.style.top=e.clientY-34+'px';change()});
- const end=()=>{if(drag){if(drag.kind==='cut'||drag.kind==='soloEdge'||drag.kind==='soloMove')cue(data.scenes[drag.i].start)}drag=null;tip.hidden=true};
+ const end=()=>{if(drag){if(drag.kind==='trim'){cue(data.scenes[drag.b].start)}else if(drag.kind==='cut'||drag.kind==='soloEdge'||drag.kind==='soloMove')cue(data.scenes[drag.i].start)}drag=null;tip.hidden=true};
  sc.addEventListener('pointerup',end);sc.addEventListener('pointercancel',end);
  drawTimeline();
 }
