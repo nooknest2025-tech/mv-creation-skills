@@ -15,6 +15,13 @@ describe("editor timeline: one-step trim / delete / add / paste", () => {
     expect(sc[1].clipFrom).toBeCloseTo(11);
     expect(srcAt(sc, 1, 6)).toBeCloseTo(before, 3);
   });
+  it("trimming past a speed change keeps the footage in place too", () => {
+    const sc: any[] = scenes(); sc[1].segments = [{ at: 0, speed: 1 }, { at: 1, speed: 0.5 }]; sc[1].speed = 1;
+    prepareTrim(sc, 1, D, info); const before = srcAt(sc, 1, 7);
+    expect(trimBoundary(sc, 1, 6, D, info)).toBeCloseTo(6);
+    expect(sc[1].clipFrom).toBeCloseTo(11.5); // 1 s at 1x + 1 s at 0.5x
+    expect(srcAt(sc, 1, 7)).toBeCloseTo(before, 3);
+  });
   it("trim is clamped to the source (cannot pull IN before 0)", () => {
     const sc = scenes(); sc[1].clipFrom = 2; prepareTrim(sc, 1, D, info);
     expect(trimBoundary(sc, 1, 0.5, D, info)).toBeCloseTo(2); // only 2 s of footage before IN

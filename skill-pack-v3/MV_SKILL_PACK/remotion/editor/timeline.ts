@@ -162,7 +162,10 @@ export function trimBoundary(sc: any[], b: number, t: number, duration: number, 
   const v = r3(Math.max(lo, Math.min(Math.max(lo, hi), t))), delta = v - t0; if (Math.abs(delta) < 1e-6) return t0;
   B.start = v;
   if (ib.video) {
-    B.clipFrom = r3(Math.max(0, (B.clipFrom ?? 0) + delta * firstSpeed(B)));
+    /* footage stays in place: cutting the head = the old plan's source time at delta (follows speed changes inside the clip);
+       extending the head = earlier footage at the first speed. */
+    const before = clipPlan({ ...B, start: t0 }, sceneEnd(sc, b, duration) - t0, ib.clipDur);
+    B.clipFrom = r3(Math.max(0, delta > 0 && before.mode === "play" ? clipSourceTime(before, delta) : (B.clipFrom ?? 0) + delta * firstSpeed(B)));
     if (B.clipTo !== undefined && B.clipTo <= B.clipFrom + 0.05) delete B.clipTo;
     if (B.segments?.length > 1) {
       const segs = B.segments.map((g: any) => ({ at: g.at - delta, speed: g.speed }));

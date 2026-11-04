@@ -250,11 +250,11 @@ function timeline(){
   if(!blk){cue(x);return}
   const edge=tg.dataset.edge;
   if(blk.dataset.scene){const i=Number(blk.dataset.scene),s=data.scenes[i];selectSceneUi(i);
-   const solo=e.ctrlKey||e.metaKey;if(solo&&edge)drag={kind:'soloEdge',i,edge};else if(solo)drag={kind:'soloMove',i,x0:x,s0:s.start,e0:s.start+sceneDur(i),moved:false};else if(edge&&e.altKey)drag={kind:'cut',i:sceneBoundaryIndex(i,edge as any)};else if(edge){const b=sceneBoundaryIndex(i,edge as any);prepareTrim(data.scenes,b,data.duration,info);drag={kind:'trim',i,b,edge}}else if(isVideoAsset(data.assets[s.asset]))drag={kind:'slide',i,x0:x,from0:s.clipFrom??0,to0:s.clipTo,rate:clipPlan(s,sceneDur(i),clipLen(s)).rate,moved:false};else drag=null}
+   const solo=e.ctrlKey||e.metaKey;if(solo&&edge)drag={kind:'soloEdge',i,edge};else if(solo)drag={kind:'soloMove',i,x0:x,s0:s.start,e0:s.start+sceneDur(i),moved:false};else if(edge&&e.altKey)drag={kind:'cut',i:sceneBoundaryIndex(i,edge as any)};else if(edge){const b=sceneBoundaryIndex(i,edge as any);drag={kind:'trim',i,b,edge,x0:x,prepared:false}/* the clips are baked on the first real move, so a click on an edge changes nothing */}else if(isVideoAsset(data.assets[s.asset]))drag={kind:'slide',i,x0:x,from0:s.clipFrom??0,to0:s.clipTo,rate:clipPlan(s,sceneDur(i),clipLen(s)).rate,moved:false};else drag=null}
   else{const id=blk.dataset.lyric!;selectLyricUi(id);drag=edge?{kind:'lyr',id,edge}:{kind:'lyrMove',id,x0:x,s0:data.lyrics.find((l:any)=>l.id===id).start,moved:false}}
   if(drag){sc.setPointerCapture(e.pointerId);e.preventDefault()}});
  sc.addEventListener('pointermove',(e:PointerEvent)=>{if(!drag)return;let x=at(e);const free=e.shiftKey||(e.altKey&&drag.kind!=='cut');const snap=(v:number)=>free?v:snapTime(v,data.bpm||120,data.phase??0,Math.max(.04,6/pxs));let msg='';
-  if(drag.kind==='trim'){const v=trimBoundary(data.scenes,drag.b,snap(x),data.duration,info);const s=data.scenes[drag.i];msg=`トリム：${drag.edge==='start'?'開始':'終わり'} ${fmt(v)}（長さ ${sceneDur(drag.i).toFixed(2)}秒`+(isVideoAsset(data.assets[s.asset])?`・IN ${(s.clipFrom??0).toFixed(2)}秒）`:'）')}
+  if(drag.kind==='trim'){if(!drag.prepared){if(Math.abs(x-drag.x0)*pxs<3)return;prepareTrim(data.scenes,drag.b,data.duration,info);drag.prepared=true}const v=trimBoundary(data.scenes,drag.b,snap(x),data.duration,info);const s=data.scenes[drag.i];msg=`トリム：${drag.edge==='start'?'開始':'終わり'} ${fmt(v)}（長さ ${sceneDur(drag.i).toFixed(2)}秒`+(isVideoAsset(data.assets[s.asset])?`・IN ${(s.clipFrom??0).toFixed(2)}秒）`:'）')}
   else if(drag.kind==='cut'){const v=resizeBoundary(data.scenes,drag.i,snap(x),data.duration);msg=`切替 ${fmt(v)}（前の場面 ${sceneDur(drag.i-1).toFixed(2)}秒／この場面 ${sceneDur(drag.i).toFixed(2)}秒）`}
   else if(drag.kind==='soloEdge'){const v=resizeSceneOnly(data.scenes,drag.i,drag.edge,snap(x),data.duration);msg=`このシーンだけ：${drag.edge==='start'?'開始':'終わり'} ${fmt(v)}（長さ ${sceneDur(drag.i).toFixed(2)}秒）`}
   else if(drag.kind==='soloMove'){if(Math.abs(x-drag.x0)*pxs<3&&!drag.moved)return;drag.moved=true;moveSceneOnly(data.scenes,drag.i,drag.s0,drag.e0,snap(drag.s0+(x-drag.x0))-drag.s0,data.duration);msg=`このシーンだけ移動：${fmt(data.scenes[drag.i].start)}〜${fmt(data.scenes[drag.i].start+sceneDur(drag.i))}`}
@@ -262,7 +262,7 @@ function timeline(){
   else if(drag.kind==='lyr'){const l=data.lyrics.find((l:any)=>l.id===drag.id);const v=moveLyricEdge(l,drag.edge,snap(x),data.duration);msg=`${drag.edge==='start'?'開始':'終了'} ${fmt(v)}（長さ ${(l.end-l.start).toFixed(2)}秒）`}
   else{const l=data.lyrics.find((l:any)=>l.id===drag.id);if(Math.abs(x-drag.x0)*pxs<3&&!drag.moved)return;drag.moved=true;const len=l.end-l.start;moveLyric(l,snap(drag.s0+(x-drag.x0))-l.start,data.duration);msg=`歌詞 ${fmt(l.start)}〜${fmt(l.start+len)}`}
   tip.hidden=false;tip.textContent=msg+(free?'　（自由）':'　（拍にくっつく・Shift/Altで自由）');tip.style.left=e.clientX+12+'px';tip.style.top=e.clientY-34+'px';change()});
- const end=()=>{if(drag){if(drag.kind==='trim'){cue(data.scenes[drag.b].start)}else if(drag.kind==='cut'||drag.kind==='soloEdge'||drag.kind==='soloMove')cue(data.scenes[drag.i].start)}drag=null;tip.hidden=true};
+ const end=()=>{if(drag){if(drag.kind==='trim'){if(drag.prepared)cue(data.scenes[drag.b]?.start??0)}else if(drag.kind==='cut'||drag.kind==='soloEdge'||drag.kind==='soloMove')cue(data.scenes[drag.i].start)}drag=null;tip.hidden=true};
  sc.addEventListener('pointerup',end);sc.addEventListener('pointercancel',end);
  drawTimeline();
 }
