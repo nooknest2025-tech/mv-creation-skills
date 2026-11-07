@@ -7,9 +7,10 @@ body{height:100vh;overflow:hidden;font-size:13px}main{max-width:none;margin:0;pa
 #timeline{margin-top:10px;background:#1c2c23;border:1px solid #435547;border-radius:8px;padding:6px 8px}
 .tlBar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12px}.tlBar input[type=range]{width:110px;vertical-align:middle}.hint{font-size:11px;color:#afbea8}
 #tlScroll{overflow-x:auto;overflow-y:hidden;margin-top:6px;touch-action:none;user-select:none}
-#tlInner{position:relative;height:96px;min-width:100%}
+#tlInner{position:relative;height:142px;min-width:100%}
 #tlBeats i{position:absolute;top:0;bottom:0;width:1px;background:#ffffff14}#tlBeats i.bar{background:#ffffff40}
-.tlRow{position:absolute;left:0;right:0;height:40px}#tlScenes{top:4px}#tlLyrics{top:50px}
+.tlRow{position:absolute;left:0;right:0;height:40px}#tlOverlays{top:4px}#tlScenes{top:50px}#tlLyrics{top:96px}
+.overlayControls{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin:8px 0;font-size:12px}.overlayControls span{color:#afbea8}.overlayFields{display:flex;flex-wrap:wrap;gap:6px}.overlayFields label{white-space:nowrap}.overlayFields input{width:65px}.tlOverlay{position:absolute;top:0;height:100%;box-sizing:border-box;border:1px solid #bd98d3;border-radius:4px;padding:3px 12px;background:#684277;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:grab}.tlOverlay.sel{outline:2px solid #f1dfb4;z-index:2}
 .tlScene,.tlLyric{position:absolute;top:0;height:100%;box-sizing:border-box;border:1px solid #6d7b68;border-radius:4px;padding:3px 6px;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;background:#35473c}
 .tlScene.video{background:#3d3550;cursor:grab}.tlLyric{background:#2c4a5a;height:32px;top:4px}
 .tlScene.sel,.tlLyric.sel{outline:2px solid #f1dfb4;z-index:2}

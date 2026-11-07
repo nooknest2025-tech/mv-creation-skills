@@ -194,6 +194,23 @@ def validate(d):
     sids=[s.get('id') for s in d['scenes']]
     if any(not isinstance(x,str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,64}',x) for x in sids) or len(set(sids))!=len(sids):raise ValueError('場面IDを確認してください（切る・つなげるで重複しないように）')
     def finite(x):return isinstance(x,(float,int)) and math.isfinite(x)
+    overlays=d.get('overlays',[])
+    if not isinstance(overlays,list) or len(overlays)>100:raise ValueError('重ねる映像は100個までです')
+    overlay_ids=set()
+    for o in overlays:
+        if not isinstance(o,dict) or set(o)!={'id','asset','start','end','from','x','y','w','h','opacity'}:raise ValueError('重ねる映像の設定を確認してください')
+        oid=o.get('id');ai=o.get('asset')
+        if not isinstance(oid,str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,64}',oid) or oid in overlay_ids:raise ValueError('重ねる映像のIDを確認してください')
+        overlay_ids.add(oid)
+        if not isinstance(ai,int) or isinstance(ai,bool) or not 0<=ai<len(orig['assets']):raise ValueError('重ねる素材を確認してください')
+        a=orig['assets'][ai]
+        if isinstance(a,dict) and a.get('kind')=='tachie':raise ValueError('上段には画像か動画を選んでください')
+        num=lambda v:isinstance(v,(int,float)) and not isinstance(v,bool) and math.isfinite(v)
+        if any(not num(o.get(k)) for k in ['start','end','from','x','y','w','h','opacity']):raise ValueError('重ねる映像の数値を確認してください')
+        if not (0<=o['start']<o['end']<=d['duration'] and o['end']-o['start']>=.049 and o['from']>=0):raise ValueError('重ねる映像の開始・終了を確認してください')
+        if not (0<=o['x']<=1 and 0<=o['y']<=1 and .05<=o['w']<=1 and .05<=o['h']<=1 and o['x']+o['w']<=1.000001 and o['y']+o['h']<=1.000001 and 0<=o['opacity']<=1):raise ValueError('重ねる映像の位置・大きさ・透明度を確認してください')
+        clip=a.get('duration') if isinstance(a,dict) else None
+        if num(clip) and clip>0 and o['from']>=clip:raise ValueError('重ねる動画の開始位置は動画の長さ未満です')
     for i,s in enumerate(d['scenes']):
         if not finite(s['start']) or not 0<=s['start']<d['duration'] or s['asset'] not in range(len(orig['assets'])):raise ValueError('場面の設定を確認してください')
         if i==0 and s['start']!=0:raise ValueError('最初の場面は0秒からです')
