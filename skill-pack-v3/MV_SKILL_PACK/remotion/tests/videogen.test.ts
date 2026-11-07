@@ -7,6 +7,7 @@ import { adapt, packRefs, recommendModel, snapDuration, CAPS } from "../src/lib/
 import { selectRefs, missingAssets, type Asset } from "../src/lib/assets";
 import { parseAssetCmd, planImages, addAsset, loadLib, setApproval } from "../scripts/assets_lib";
 import type { Shot } from "../src/lib/types";
+import { promptForReplan } from "../scripts/gen";
 
 const MODELS = YAML.parse(fs.readFileSync(path.join(__dirname, "../../gen/models.yaml"), "utf8")).models;
 const M = (id: string) => MODELS.find((m: any) => m.id === id);
@@ -26,6 +27,15 @@ describe("shot spec builder", () => {
   });
   it("beat-matched duration + match cuts", () => { expect(specs[0].beatSec % 0.5).toBeCloseTo(0); expect(specs[5].matchCutTo).toBe("S007"); expect(specs[6].startFrame).toBeTruthy(); });
   it("dance negatives", () => expect(specs[5].negatives).toContain("sliding feet"));
+  it("does not invent singing for an unspecified chorus, and preserves a static camera", () => {
+    const sp = buildSpecs([shot("S1", "chorus", "chorus", "none")])[0];
+    expect(sp.performance).toBe("none"); expect(sp.action).not.toMatch(/sing/i); expect(sp.move.mm).toBe("static");
+    expect(adapt(sp, M("grok-imagine-video-1.5")).prompt).not.toMatch(/lips are precisely synced/i);
+  });
+  it("warns that requested lip sync requires route and result verification", () => {
+    const sp = buildSpecs([shot("S1", "chorus", "chorus", "face_push", "lipsync")])[0];
+    expect(adapt(sp, M("grok-imagine-video-1.5")).warnings.join()).toMatch(/同期/);
+  });
 });
 
 describe("shot-list critic", () => {
@@ -49,6 +59,23 @@ describe("per-model adapters", () => {
   it("Runway i2v writes motion only", () => { const r = adapt(sp, M("runway/gen4_turbo"), [A("start_frame", "S002")]); expect(r.prompt).not.toMatch(/color palette/); expect(r.refs.first).toBeTruthy(); });
   it("Grok inlines negatives and tags refs <IMAGE_n>", () => { const r = adapt(sp, M("grok-imagine-video-1.5"), [A("character_front"), A("outfit")]); expect(r.prompt).toMatch(/<IMAGE_0>/); expect(r.prompt).toMatch(/Avoid:/); });
   it("unverified models warn", () => expect(adapt(sp, M("seedance-2.0")).warnings.join()).toMatch(/未確認/));
+  it("manual profiles keep the actual starting image and write the selected model's shot draft", () => {
+    const frame = A("start_frame", "S002");
+    for (const id of ["manual/minimax-h3", "manual/seedance-2.5", "manual/wan-3.0", "manual/kling-4.0", "manual/grok-app"]) {
+      const r = adapt(sp, M(id), [frame]);
+      expect(r.refs.first).toEqual(frame); expect(r.prompt).toMatch(/opening image/);
+      expect(r.prompt).toContain(sp.action); expect(r.prompt).toContain(sp.move.en);
+      expect(r.seconds).toBe(sp.seconds); expect(r.warnings.join()).toMatch(/未確認/);
+    }
+    expect(adapt(sp, M("manual/wan-3.0"), [frame]).prompt).toMatch(/Shot 1 \(0–/);
+    expect(adapt(sp, M("manual/kling-4.0"), [frame]).prompt).toMatch(/Shot 1 \([\d.]+s\)/);
+    expect(adapt(sp, M("runway/gen4_turbo"), [frame]).prompt).not.toMatch(/color palette/);
+  });
+  it("refreshes generated prompts but never overwrites a user's edit", () => {
+    expect(promptForReplan("old automatic", "old automatic", "new model prompt")).toBe("new model prompt");
+    expect(promptForReplan("my edited prompt", "old automatic", "new model prompt")).toBe("my edited prompt");
+    expect(promptForReplan("existing without history", undefined, "new")).toBe("existing without history");
+  });
   it("snapDuration", () => { expect(snapDuration(7, { allowed_durations: [5, 8] })).toBe(8); expect(snapDuration(20, { durations: [2, 15] })).toBe(15); expect(snapDuration(0.3, { durations: [4, 15] })).toBe(4); });
 });
 
@@ -67,6 +94,7 @@ describe("recommender", () => {
   const specs = buildSpecs(SHOTS, { bpm: 120 });
   it("lip-sync close-up -> native lip-sync model with Japanese reasons", () => { const r = recommendModel(specs[4], MODELS, { verifiedOnly: true }); expect(r.model.audio).toMatch(/lipsync/); expect(r.why.join()).toMatch(/口パク/); });
   it("override wins", () => expect(recommendModel(specs[1], MODELS, { override: "kling-3.0" }).model.id).toBe("kling-3.0"));
+  it("rejects unknown model overrides instead of silently choosing another", () => expect(() => recommendModel(specs[1], MODELS, { override: "missing-model" })).toThrow(/未登録/));
   it("budget excludes expensive models", () => { const r = recommendModel(specs[1], MODELS, { verifiedOnly: true, budgetPerShot: 0.1 }); expect(r.cost!).toBeLessThanOrEqual(0.1); });
   it("never picks deprecated or unpriced when verifiedOnly", () => { for (const s of specs) { const r = recommendModel(s, MODELS, { verifiedOnly: true }); expect(r.model.deprecated).toBeFalsy(); expect(r.model.price_per_sec).toBeTruthy(); } });
 });
@@ -112,12 +140,13 @@ if (!PY) skipNote("動画クリップの品質チェック（Python）", "numpy 
 describe.skipIf(!PY || !FF)("clip QA (python)", () => {
   it("flags a flickering clip, passes a clean one", () => {
     const d = fs.mkdtempSync(path.join(os.tmpdir(), "qa-"));
-    execFileSync(PY!, ["-c", `from PIL import Image;import numpy as np
+    execFileSync(PY!, ["-c", `from PIL import Image;import numpy as np;import sys,os
+d=sys.argv[1]
 for i in range(32):
   a=np.zeros((240,320,3),np.uint8)+90; a[60:180,100+i:220+i]=200
-  Image.fromarray(a).save('${d}/c%03d.png'%i)
+  Image.fromarray(a).save(os.path.join(d,'c%03d.png'%i))
   if i%4==2: a=np.clip(a.astype(int)+90,0,255).astype(np.uint8)
-  Image.fromarray(a).save('${d}/f%03d.png'%i)`]);
+  Image.fromarray(a).save(os.path.join(d,'f%03d.png'%i))`, d]);
     for (const k of ["c", "f"]) execFileSync("ffmpeg", ["-v", "error", "-y", "-framerate", "8", "-i", `${d}/${k}%03d.png`, "-pix_fmt", "yuv420p", `${d}/${k}.mp4`]);
     const run = (f: string) => { try { return JSON.parse(execFileSync(PY!, [path.join(__dirname, "../scripts/clipqa.py"), f, "--json"], { encoding: "utf8" }))[0]; } catch (e: any) { return JSON.parse(e.stdout)[0]; } };
     expect(run(`${d}/c.mp4`).regenerate).toBe(false);

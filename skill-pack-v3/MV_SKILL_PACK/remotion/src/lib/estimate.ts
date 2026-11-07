@@ -34,7 +34,7 @@ export function estimate(shots: ShotIn[], models: any[], pf: PlansFile, user: Us
   let usd = 0;
   for (const s of shots) {
     const m = models.find((x) => x.id === s.model); if (!m) { unknown.push({ shot: s.shot, why: `指定された動画AIが登録されていません（npm run models で一覧を確認）` }); continue; }
-    const sec = snapDuration(s.seconds, m), snapped = sec !== s.seconds;
+    const sec = String(m.id).startsWith("manual/") ? s.seconds : snapDuration(s.seconds, m), snapped = sec !== s.seconds;
     const prov = providerOf(pf, m.id), pl = planOf(user, prov);
     if (pl && prov) {
       const P = pf.providers[prov], def = P.plans[pl.plan];

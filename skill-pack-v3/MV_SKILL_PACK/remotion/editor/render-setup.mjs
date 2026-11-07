@@ -27,7 +27,10 @@ for(const item of [...snapshot.data.assets.flatMap(a=>typeof a==='string'?[a]:a.
 /* data.comp.grade: exact LUT on the copied pictures/clips only (sources untouched); the preview uses an SVG approximation */
 const cube=gradeCube(snapshot.data,runtime);if(cube)gradeCopies(ff??bundledFF,cube,[...new Set(snapshot.data.assets.filter(a=>typeof a==='string'||a.kind!=='tachie').map(a=>path.resolve(publicDir,typeof a==='string'?a:a.src)))]);
 fs.cpSync(path.join(runtime,'editor-fonts'),path.join(publicDir,'editor-fonts'),{recursive:true});
-const serveUrl=await bundle({entryPoint:path.join(editor,'export-entry.tsx'),publicDir});
+// Windows app-container TEMP paths may contain "!", reserved by Webpack loaders.
+// Keep bundle output beside the immutable export snapshot instead of OS TEMP.
+const bundleDir=fs.mkdtempSync(path.join(runtime,'.render-bundle-'));
+const serveUrl=await bundle({entryPoint:path.join(editor,'export-entry.tsx'),publicDir,outDir:bundleDir});
 const gl=process.env.MVPACK_GL||(process.platform==='win32'?'angle':null);const chromiumOptions=gl?{gl}:{};
 const inputProps={data:cube?{...snapshot.data,_gradeBaked:true}:snapshot.data};const composition=await selectComposition({serveUrl,id:'EditableMV',inputProps,browserExecutable,chromiumOptions});
 return {snapshot,runtime,ff,binariesDirectory,browserExecutable,chromiumOptions,serveUrl,composition,inputProps};

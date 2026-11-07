@@ -11,6 +11,7 @@ import { applyInstruction } from "../src/lib/nl";
 import { reviewShotList, buildSpecs } from "../src/lib/shotprompt";
 import { videoMcps } from "../scripts/doctor_lib";
 import type { Section, Song } from "../src/lib/types";
+import { makePlan, readPromptEdits } from "../scripts/gen";
 
 /** 「突き刺していいよ」-like: 153 BPM rock, ~3 min, Verse1/Pre/Chorus/Verse2/Chorus/Bridge/Outro. */
 function rockSong(): Song {
@@ -23,6 +24,22 @@ function rockSong(): Song {
   return { title: "突き刺していいよ", duration: t, fps: 30, bpm: 153, phase: 0, beatsPerBar: 4, energy, energyHz: 10, sections, lines };
 }
 const models = YAML.parse(fs.readFileSync(path.join(__dirname, "../../gen/models.yaml"), "utf8")).models;
+
+it("replans the CSV for a selected manual model without discarding a user's edit", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mv-model-plan-"));
+  fs.writeFileSync(path.join(dir, "song.json"), JSON.stringify(rockSong()));
+  fs.writeFileSync(path.join(dir, "mv.config.json"), JSON.stringify({ gen: { scope: "all", autoMerge: false } }));
+  const first = makePlan(dir, { model: "manual/wan-3.0", dryAudio: true });
+  const id = first.plan.rows[0].shot;
+  expect(readPromptEdits(dir)[id].prompt).toMatch(/Shot 1 \(0–/);
+  makePlan(dir, { model: "manual/kling-4.0", dryAudio: true });
+  const kling = readPromptEdits(dir)[id].prompt;
+  expect(kling).toMatch(/Shot 1 \([\d.]+s\)/);
+  const csv = path.join(dir, "prompts.csv");
+  fs.writeFileSync(csv, fs.readFileSync(csv, "utf8").replace(kling.replace(/"/g, '""'), "MY CUSTOM PROMPT"));
+  makePlan(dir, { model: "manual/seedance-2.5", dryAudio: true });
+  expect(readPromptEdits(dir)[id].prompt).toBe("MY CUSTOM PROMPT");
+});
 
 describe("1. still-image generation plan (no input images)", () => {
   it("needs stills only for picture tastes without images", () => {
@@ -90,7 +107,7 @@ describe("3. gen plan without projects", () => {
   it("friendly Japanese message instead of ENOENT", async () => {
     const C = await import("../scripts/common"), real = C.PROJECTS_DIR;
     const { latestProject } = await import("../scripts/gen");
-    if (!fs.existsSync(real)) expect(() => latestProject()).toThrow(/npm run mv -- --stills-only/);
+    if (!fs.existsSync(real)) { try { latestProject(); throw new Error("expected a UserError"); } catch (e: any) { expect(e.message).toMatch(/プロジェクトがありません/); expect(e.fix).toMatch(/npm run mv -- --stills-only/); } }
     else expect(fs.readFileSync(path.join(__dirname, "../scripts/gen.ts"), "utf8")).toMatch(/!fs\.existsSync\(PROJECTS_DIR\)\) throw new UserError\("まだ曲のプロジェクトがありません", "先に npm run mv -- --stills-only/);
   });
 });

@@ -36,7 +36,6 @@ def is_caption(l,original):
 def check_caption_fields(l,caption):
     num=lambda x:isinstance(x,(int,float)) and not isinstance(x,bool) and math.isfinite(x)
     if caption:
-        if not str(l.get('motion','')).startswith('dvd_'):raise ValueError('追加テロップのモーションはライブDVD風（dvd_*）から選んでください')
         if not isinstance(l.get('text'),str) or not 0<len(l['text'])<=600 or 'sourceParts' in l:raise ValueError('追加テロップの文字（1〜600文字）を確認してください')
     for k in ['sub','pre']:
         if k in l and (not isinstance(l[k],str) or len(l[k])>120):raise ValueError('テロップのサブ行・上の行は120文字までです')

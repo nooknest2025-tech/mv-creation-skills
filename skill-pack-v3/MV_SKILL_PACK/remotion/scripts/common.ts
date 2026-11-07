@@ -137,7 +137,7 @@ export function wavToFloat(b: Buffer): Float32Array {
   return out;
 }
 export function analyzeAudio(file: string) {
-  const sr = 11025, x = decodeMono(file, sr), hop = Math.round(sr / 100); // 100 Hz frames
+  const sr = 10000, x = decodeMono(file, sr), hop = sr / 100; // exactly 100 Hz frames
   const n = Math.floor(x.length / hop), rms = new Float32Array(n), flux = new Float32Array(n);
   let prev = 0;
   for (let i = 0; i < n; i++) {
@@ -179,7 +179,7 @@ export function autoSections(an: { bpm: number; phase: number; energy: number[];
   const mean = (a: number, b: number) => { const s = an.energy.slice(Math.floor(a * 20), Math.floor(b * 20)); return s.length ? s.reduce((x, y) => x + y, 0) / s.length : 0; };
   const all = mean(0, an.duration) || 1e-6;
   let t = 0, k = 0;
-  while (t < an.duration - 1) {
+  while (t < an.duration) {
     const e = Math.min(an.duration, t + block), r = mean(t, e) / all;
     const type = k === 0 && r < 0.9 ? "intro" : e >= an.duration - 0.5 && r < 0.9 ? "outro" : r > 1.12 ? "chorus" : r > 0.97 ? "pre_chorus" : "verse";
     out.push({ label: `${{ intro: "イントロ", verse: "Aメロ", pre_chorus: "Bメロ", chorus: "サビ", outro: "アウトロ" }[type]}${k + 1}`, type, start: +t.toFixed(3), end: +e.toFixed(3) });

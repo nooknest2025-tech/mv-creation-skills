@@ -31,12 +31,13 @@ export function proLayout(c: Ctx, size: number, o: { mix?: boolean; heavy?: bool
   const anchor = o.anchor ?? (c.P.anchor === "bottom" ? "bottom" : c.P.anchor !== undefined ? Number(c.P.anchor) : flowAnchor(c.L.li, hash(c.L.section)));
   const [ax, ay] = anchor === "bottom" ? [0.5, c.textY] : gridAnchor(anchor);
   const align = anchor === "bottom" ? 0 : ax < 0.4 ? -1 : ax > 0.6 ? 1 : 0;
-  const maxw = (o.maxw ?? (align ? 0.62 : 0.86)) * c.W;
+  const maxw = (o.maxw ?? Number(c.P.maxWidth ?? (align ? 0.62 : 0.86))) * c.W;
+  const phraseBreak = c.P.phraseRows ? chars.indexOf("　") + 1 : 0;
   let k = 1, rows: number[][] = [], widths: number[] = [], advs: number[] = [];
   for (let it = 0; it < 8; it++) {
     advs = chars.map((ch, i) => { const px = base * k * tiers[i].scale; return advOf(ch, px) * (1 + (o.heavy ? trackingFor(tiers[i].weight) : 0.02)) + (/\s/.test(ch) ? px * 0.1 : 0); });
     rows = []; widths = []; let cur: number[] = [], w = 0;
-    chars.forEach((ch, i) => { if (cur.length && w + advs[i] > maxw && canBreak(chars, i)) { rows.push(cur); widths.push(w); cur = []; w = 0; } cur.push(i); w += advs[i]; });
+    chars.forEach((ch, i) => { if (cur.length && (i === phraseBreak || (!c.P.noWrap && w + advs[i] > maxw && canBreak(chars, i)))) { rows.push(cur); widths.push(w); cur = []; w = 0; } cur.push(i); w += advs[i]; });
     rows.push(cur); widths.push(w);
     if (rows.length <= 2 && Math.max(...widths) <= maxw * 1.001) break; k *= 0.88;
   }

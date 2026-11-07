@@ -17,14 +17,23 @@ export function dvdPanel(host: HTMLElement, ctx: Ctx) {
   const draw = () => {
     const data = ctx.data(), l = ctx.selected(); sec.replaceChildren(); if (!data || !l) return;
     const ids = originalIds(ctx.orig()), cap = isCaption(l, ids), dvd = isDvdMotion(l.motion);
-    sec.append(el("h3", { textContent: "ライブDVD風テロップ" }));
+    sec.append(el("h3", { textContent: "追加テキスト・テロップ" }));
     const kind = el("select"); kind.setAttribute("aria-label", "追加するテロップの種類");
     for (const k of DVD_KINDS) kind.append(el("option", { value: k, textContent: DVD_STYLES_INFO[k].short }));
+    kind.append(el("option", { value: "text_free", textContent: "自由テキスト" }));
     kind.value = "dvd_card";
     const add = el("button", { textContent: "赤い線の位置に追加" });
-    add.onclick = () => { const d = ctx.data(), line = newCaption(kind.value, ctx.now(), d.duration, new Set(d.lyrics.map((x: any) => x.id)), d.bpm); d.lyrics.push(line); ctx.error(""); ctx.redraw(line.id); };
+    add.onclick = () => { const d = ctx.data(), free = kind.value === "text_free", line = newCaption(free ? "dvd_sub" : kind.value, ctx.now(), d.duration, new Set(d.lyrics.map((x: any) => x.id)), d.bpm); if (free) { line.motion = "simple"; line.text = "テキスト"; } d.lyrics.push(line); ctx.error(""); ctx.redraw(line.id); };
     sec.append(el("div", { className: "lineNav" }, el("label", {}, "種類 ", kind), add));
-    if (!dvd) { sec.append(el("p", { className: "hint", textContent: "この行をライブDVD風にするには、モーションで「ライブDVD・字幕」などを選びます。会場カード・タイトル・カメラ表示・暗転・クレジットは上のボタンで別のテロップとして足せます（歌詞は変わりません）。" })); return; }
+    if (!dvd) {
+      if (cap) {
+        const tx = el("textarea", { value: l.text, rows: 3 }); tx.setAttribute("aria-label", "テロップの本文");
+        tx.oninput = () => { if (!tx.value.trim() || tx.value.length > 600) return; l.text = tx.value; const o = document.querySelector(`#lookLine option[value="${CSS.escape(l.id)}"]`); if (o) o.textContent = tx.value.split("\n")[0]; ctx.change(); };
+        const del = el("button", { textContent: "このテキストを削除" }); del.onclick = () => { const d = ctx.data(), i = d.lyrics.findIndex((x: any) => x.id === l.id); if (i < 0 || d.lyrics.length <= 1) return; d.lyrics.splice(i, 1); ctx.redraw(d.lyrics[Math.min(i, d.lyrics.length - 1)].id); };
+        sec.append(el("div", { className: "lookControls" }, el("label", { className: "wide" }, "本文 ", tx)), del);
+      } else sec.append(el("p", { className: "hint", textContent: "自由テキストやタイトルは上のボタンで追加できます。" }));
+      return;
+    }
     sec.append(el("p", { className: "hint", textContent: (cap ? "追加テロップ：" : "歌詞の行：") + (HINT[l.motion] ?? "") }));
     const box = el("div", { className: "lookControls" });
     const put = (k: string, v: any) => { if (v === undefined || v === "") delete l[k]; else l[k] = v; ctx.change(); };

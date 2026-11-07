@@ -24,6 +24,12 @@ All in Remotion (`src/lib/puppet.ts`, `src/render/Puppet.tsx`). No paid tools.
   - Whole-image puppet (this section) has no viseme shapes (あ/い/う) and no limb motion. For those, use parts animation below (needs parts: PSD / PNG layers / rough auto split).
   - For full-body dance, suggest a video model via MCP (see [mv-video-generation](../mv-video-generation/SKILL.md)). When attaching audio, cut the exact original-song interval to the selected generation duration, verify the actual duration and upload that cut file without time-stretching. Check the resulting motion against the original interval at normal speed before adoption.
 
+## 参照の動きを使う依頼
+
+「ミミック」の意味が特定できない場合は、参照動画の動き移植か、表情模倣などかを確認する。参照動画の動きの完全な転写・顔の向き変更・リップシンクを、目パチや拍ノリの機能だけでできると説明しない。利用可能な手段と権利を確認し、実現できる範囲・別手段・音付きでの確認状況を示す。
+
+[多様なMVと動作参照の調査](../mv-workflow/references/direction-diversity.md) で、顔・体・口の転写と2Dパーツアニメを区別し、参照入力とモデルごとの限界を確認する。
+
 ## パーツアニメ（Live2D風の切り絵。`src/lib/rig.ts`, `src/render/Rig.tsx`）
 上の目パチ・口パクは「1枚絵の一部を動かす」方式。パーツ（頭・体・腕・髪・目・口…）に分かれた素材があれば、パーツごとに支点で回転・移動する本当のパーツアニメができる。
 1. 取り込み（どれか）:

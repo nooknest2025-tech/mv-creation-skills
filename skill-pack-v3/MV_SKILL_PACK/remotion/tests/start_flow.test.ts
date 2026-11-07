@@ -249,10 +249,11 @@ describe("free loop: prompts with attachments, import of what the user made", ()
     expect(detectInput(d).images).toEqual([]);
   });
   it("video prompts: attachments with roles + paths; prompts.csv edits / skips are honoured", async () => {
-    const att = attachFor([{ role: "character_front", file: "ref/chara.png" }, { role: "location", file: "/abs/bg.png" }, { role: "style", file: "s.png" }, { role: "end_frame", file: "e.png" }], "/in/scene01.jpg", "/p");
+    const project = path.resolve("p"), scene = path.resolve("in", "scene01.jpg"), background = path.resolve("abs", "bg.png");
+    const att = attachFor([{ role: "character_front", file: "ref/chara.png" }, { role: "location", file: background }, { role: "style", file: "s.png" }, { role: "end_frame", file: "e.png" }], scene, project);
     expect(att.map((a) => a.role)).toEqual(["開始画（first frame）", "キャラ参照", "背景参照", "スタイル参照", "終了画"]);
-    expect(att[0].file).toBe("/in/scene01.jpg"); expect(att[1].file).toBe("/p/ref/chara.png");
-    expect(attachText(att)).toMatch(/^5枚: 開始画（first frame） = \/in\/scene01\.jpg/);
+    expect(att[0].file).toBe(scene); expect(att[1].file).toBe(path.join(project, "ref", "chara.png")); expect(att[2].file).toBe(background);
+    expect(attachText(att).startsWith(`5枚: 開始画（first frame） = ${scene}`)).toBe(true);
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pr-"));
     fs.writeFileSync(path.join(dir, "prompts.csv"), '\uFEFFshot,section,seconds,use,prompt,attach\nS001,サビ,5,使う,"new, ""quoted"" prompt","x"\nS002,サビ,5,スキップ,"p2","y"\n');
     expect(readPromptEdits(dir)).toEqual({ S001: { skip: false, prompt: 'new, "quoted" prompt' }, S002: { skip: true, prompt: "p2" } });

@@ -49,7 +49,7 @@ describe("unverified handling", () => {
   it("deprecated model flagged", () => expect(estimate([{ shot: "S1", model: "sora-2", seconds: 4, res: "720p", takes: 1 }], MODELS, PF).unknown[0].why).toMatch(/終了/));
   it("unpriced image model flagged", () => expect(estimate([], MODELS, PF, {}, [{ count: 2, model: "flux", usd_each: null }]).unknown[0].why).toMatch(/flux/));
   it("every plan table has a source + date; unverified plans marked", () => { for (const [k, p] of Object.entries(PF.providers)) { expect(p.source, k).toMatch(/^https/); expect(p.verified_at, k).toBeTruthy(); } expect(PF.providers.pollo.plans.lite.verified).toBe(false); });
-  it("plans.gen.json is in sync with plans.yaml", () => expect(fs.readFileSync(path.join(__dirname, "../src/lib/plans.gen.json"), "utf8")).toBe(plansJson()));
+  it("plans.gen.json is in sync with plans.yaml", () => expect(fs.readFileSync(path.join(__dirname, "../src/lib/plans.gen.json"), "utf8").replace(/\r\n/g, "\n")).toBe(plansJson().replace(/\r\n/g, "\n")));
 });
 
 describe("confirm / cancel", () => {

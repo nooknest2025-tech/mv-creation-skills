@@ -37,7 +37,7 @@ const SIZE_EN: Record<ShotSize, [string, string]> = {
 /** pack move id -> cinematic move (speed + motivation). Unknown moves fall back to a slow push. */
 export const MOVES: Record<string, Omit<Move, "id">> = {
   kb_in: { en: "slow push-in", speed: "slow", motivation: "draws us into the singer's feeling", mm: "push" },
-  slow_push: { en: "very slow push-in on a locked-off dolly", speed: "slow", motivation: "builds quiet tension", mm: "push" },
+  slow_push: { en: "very slow, steady dolly push-in", speed: "slow", motivation: "builds quiet tension", mm: "push" },
   face_push: { en: "gentle push-in toward the face", speed: "slow", motivation: "lands on the key lyric", mm: "push" },
   push: { en: "fast push-in", speed: "fast", motivation: "hits the downbeat", mm: "push" },
   kb_out: { en: "slow pull-back", speed: "slow", motivation: "reveals the space / loneliness", mm: "pull" },
@@ -51,11 +51,13 @@ export const MOVES: Record<string, Omit<Move, "id">> = {
   shake: { en: "handheld with energetic shake", speed: "fast", motivation: "live, raw energy", mm: "shake" },
   orbit: { en: "slow orbit around the subject", speed: "slow", motivation: "shows the subject from all sides at the peak", mm: "orbit" },
   static: { en: "locked-off static camera", speed: "static", motivation: "lets the performance breathe", mm: "static" },
+  none: { en: "locked-off static camera", speed: "static", motivation: "lets the scene breathe", mm: "static" },
 };
 
 export const NEGATIVES_BASE = ["morphing faces", "face distortion", "extra fingers", "deformed hands", "extra limbs", "text", "subtitles", "watermark", "logo", "garbled letters", "flicker", "jitter", "warping background", "low resolution", "blurry"];
 
 const ROLE_ACTION: Record<string, { action: string; perf: ShotSpec["performance"] }> = {
+  unspecified: { action: "subtle natural movement in the scene", perf: "none" },
   lipsync: { action: "{subject} sings the line directly to camera, clear natural mouth movement, emotional eyes", perf: "lipsync" },
   dance: { action: "{subject} dances with sharp, on-beat choreography, full body visible", perf: "dance" },
   live: { action: "{subject} performs with the band, hair moving, crowd lights behind", perf: "lipsync" },
@@ -89,7 +91,7 @@ export function buildSpecs(shots: Shot[], ctx: SpecCtx = {}): ShotSpec[] {
     const t = s.sectionType ?? "other", cs = COLOR_SCRIPT[t] ?? COLOR_SCRIPT.other;
     const size = sizeFor(s, i, shots), [sizeEn, lens] = SIZE_EN[size];
     const mv = MOVES[s.move] ?? MOVES.kb_in;
-    const r = ROLE_ACTION[s.role ?? ""] ?? (t === "chorus" ? ROLE_ACTION.lipsync : ROLE_ACTION.story);
+    const r = ROLE_ACTION[s.role ?? ""] ?? ROLE_ACTION.unspecified;
     const ty = s.textY ?? ctx.textY ?? 0.82;
     const safe: ShotSpec["safeSpace"] = ty < 0.4 ? "top" : "bottom";
     const comp = `${safe === "bottom" ? "subject framed in the upper two-thirds" : "subject framed in the lower two-thirds"}, rule of thirds, clean negative space at the ${safe} of frame for lyrics`;
@@ -98,7 +100,7 @@ export function buildSpecs(shots: Shot[], ctx: SpecCtx = {}): ShotSpec[] {
     if (r.perf === "dance") neg.push("broken limbs", "sliding feet", "duplicated body");
     const sec = s.end - s.start;
     return {
-      shot: s.id, section: s.section ?? "", sectionType: t, role: s.role ?? (r === ROLE_ACTION.lipsync ? "lipsync" : "story"),
+      shot: s.id, section: s.section ?? "", sectionType: t, role: s.role ?? "unspecified",
       seconds: +sec.toFixed(2), beatSec: +beatSnap(sec, ctx.bpm ?? 120).toFixed(2),
       size, sizeEn, lens, move: { id: s.move, ...mv }, action: r.action.replace("{subject}", subject), performance: r.perf,
       lighting: cs.light, timeOfDay: cs.time, palette: cs.palette, atmosphere: cs.atmos, composition: comp, safeSpace: safe,

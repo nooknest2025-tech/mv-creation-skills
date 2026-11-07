@@ -71,6 +71,10 @@ describe("editor preview / export draws them", () => {
     const h = html(base([lyric({ start: 15, end: 20, text: "最後の歌詞" }), roll]), 19.5);
     expect(h).toContain("END"); expect(h).not.toContain("最後の歌詞");
   });
+  it("ordinary editable extra text also appears during the last second", () => {
+    const c = { ...card, id: "TEXT-1", text: "FINISH", motion: "simple", start: 15, end: 20 };
+    expect(html(base([lyric({}), c]), 19.5)).toMatch(/F/);
+  });
   it("dim reads params.dim (older projects: scale ≤ 1)", () => {
     expect(dvdSpec({ motion: "dvd_dim", start: 0, end: 4, params: { dim: 0.3 } }).dim).toBe(0.3);
     expect(dvdSpec({ motion: "dvd_dim", start: 0, end: 4, scale: 0.7 }).dim).toBe(0.7);
@@ -128,7 +132,7 @@ describe.skipIf(!py)("server.py save accepts dvd captions and checks their field
       const save = async (mut: (d: any) => void) => { const d = structuredClone(st.data); mut(d); const res = await fetch(url + "/api/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ revision: st.revision, data: d }) }); return [res.status, await res.json()] as const; };
       const cap = (o: any = {}) => ({ id: "DVD-1", extra: true, text: "会場", sub: "HALL", start: 0.5, end: D, motion: "dvd_card", scale: 1, y: 0.5, motionDuration: 0.8, ...o });
       for (const bad of [
-        (d: any) => d.lyrics.push(cap({ motion: "reveal" })),
+        (d: any) => d.lyrics.push(cap({ motion: "not_a_style" })),
         (d: any) => d.lyrics.push(cap({ text: "" })),
         (d: any) => d.lyrics.push(cap({ sub: 5 })),
         (d: any) => d.lyrics.push(cap({ motion: "dvd_title", beat: 9 })),
@@ -136,10 +140,10 @@ describe.skipIf(!py)("server.py save accepts dvd captions and checks their field
         (d: any) => { d.lyrics[0].boxX = 1.5; },
         (d: any) => { d.lyrics[0].end = D; }, // normal lyrics still end 1 s before the song
       ]) { const [code, body] = await save(bad); expect(code).toBe(400); expect(body.error).toMatch(/[ぁ-んァ-ン一-龥]/); }
-      const [ok, res] = await save((d) => { d.lyrics[0].motion = "dvd_sub"; d.lyrics[0].boxX = 0.1; d.lyrics.push(cap(), cap({ id: "DVD-2", motion: "dvd_roll", text: "#END\n-\nA|B", start: 1, end: D })); });
+      const [ok, res] = await save((d) => { d.lyrics[0].motion = "dvd_sub"; d.lyrics[0].boxX = 0.1; d.lyrics.push(cap(), cap({ id: "DVD-2", motion: "dvd_roll", text: "#END\n-\nA|B", start: 1, end: D }), cap({ id: "TEXT-1", motion: "simple", text: "自由テキスト" })); });
       expect(ok, JSON.stringify(res)).toBe(200);
       st = await (await fetch(url + "/api/state")).json();
-      expect(st.data.lyrics.filter((l: any) => l.extra).length).toBe(2); expect(st.data.lyrics[0].edited).toContain("boxX");
+      expect(st.data.lyrics.filter((l: any) => l.extra).length).toBe(3); expect(st.data.lyrics.find((l: any) => l.id === "TEXT-1").text).toBe("自由テキスト"); expect(st.data.lyrics[0].edited).toContain("boxX");
     } finally { srv.kill(); }
   }, 20000);
 });

@@ -65,8 +65,9 @@ export async function buildSong(det: ReturnType<typeof detectInput>, dir: string
     an = analyzeAudio(audio);
     const keepBpm = det.lyricsKind === "json" && (() => { try { const j = JSON.parse(fs.readFileSync(det.lyrics!, "utf8").replace(/^\uFEFF/, "")); return Number(j.analysis?.bpm ?? j.bpm ?? j.audio?.bpm) > 0; } catch { return false; } })(); // the lyric JSON's BPM is the author's truth
     if (!keepBpm) { song.bpm = an.bpm; song.phase = an.phase; } song.energy = (() => { const e = an!.energy; const s = [...e].sort((a, b) => a - b); const hi = s[Math.floor(s.length * 0.98)] || 1; return e.map((v) => Math.min(1, v / hi)); })(); song.energyHz = 20;
-    if (song.sections.length <= 1) song.sections = autoSections({ ...an, energy: song.energy }).map((s) => ({ ...s, type: sectionTypeOf(s.label, s.type) }));
-    notes.push(keepBpm ? `音の強さを解析（BPM ${song.bpm}・セクション ${song.sections.length} 個は歌詞JSONの値を使用）` : `音声解析: BPM ${an.bpm} / セクション ${song.sections.length} 個（自動）`);
+    const autoSectioned = song.sections.length <= 1;
+    if (autoSectioned) song.sections = autoSections({ ...an, bpm: song.bpm, phase: song.phase, energy: song.energy }).map((s) => ({ ...s, type: sectionTypeOf(s.label, s.type) }));
+    notes.push(`音声解析: BPM ${song.bpm}（${keepBpm ? "歌詞JSON" : "自動推定"}） / セクション ${song.sections.length} 個（${autoSectioned ? "音量に基づく仮推定" : "入力データ"}）`);
   }
   // manual locks survive re-analysis (timing edits live in mv.config.json -> never overwritten here)
   if (prev && prev.title === song.title) { /* nothing to merge: edits are in config.timing */ }

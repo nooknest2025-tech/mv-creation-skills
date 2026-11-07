@@ -3,6 +3,34 @@
 # verified: false = 未確認（price_per_sec は null。勝手に推測しない）。
 # 更新方法: 値を書き換えて verified_at を今日に → `npm run models` で一覧確認。
 models:
+- id: manual/minimax-h3
+  provider: 手動（MiniMax H3）
+  kind: video
+  price_per_sec: null
+  max_sec: null
+  verified: false
+  source: https://www.minimax.io/news/minimax-h3-open-source
+- id: manual/seedance-2.5
+  provider: 手動（Seedance 2.5）
+  kind: video
+  price_per_sec: null
+  max_sec: null
+  verified: false
+  source: https://seed.bytedance.com/en/blog/one-take-creation-flexible-referencing-introducing-seedance-2-5
+- id: manual/wan-3.0
+  provider: 手動（Wan 3.0）
+  kind: video
+  price_per_sec: null
+  max_sec: null
+  verified: false
+  source: https://www.alibabacloud.com/help/en/model-studio/wan3-video-generation-prompt-guide
+- id: manual/kling-4.0
+  provider: 手動（Kling 4.0）
+  kind: video
+  price_per_sec: null
+  max_sec: null
+  verified: false
+  source: https://kling.ai/quickstart/kling-4-model-user-guide
 - id: grok-imagine-video-1.5-lite
   provider: xAI API
   kind: video

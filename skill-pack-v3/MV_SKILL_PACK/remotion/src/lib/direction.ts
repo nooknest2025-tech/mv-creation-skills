@@ -127,11 +127,19 @@ export function planLyrics(song: Song, ranks: number[], o: LyricPlanOpts = {}): 
       if (heroCand && !heroUsed && (n === 0 || isAccent(L.text))) { st = heroCand.style; hero = true; heroUsed = true; }
       else if (isAccent(L.text) && o.accent) { const a = o.accent[sec.type] ?? o.accent.other; if (a && fit.some((f) => f.style === a)) st = a; }
       if (st === lastStyle && rot.length > 1) { st = rot.find((x) => x !== lastStyle)!; hero = false; }
-      // fast line -> most legible of the chosen set
+      // A section average can hide a single fast phrase. Score that phrase with
+      // its own density and search beyond the section's small rotation if needed.
       const lcps = [...L.text.replace(/\s/g, "")].length / Math.max(0.2, L.end - L.start);
-      if (lcps > 10 && (trait(st).readable ?? 0.8) < 0.75) st = [...rot].sort((a, b) => (trait(b).readable ?? 0.8) - (trait(a).readable ?? 0.8))[0];
-      const f = fit.find((x) => x.style === st) ?? fitSet(ctx, 30).find((x) => x.style === st);
-      lines[i] = { style: st, hero, why: `${hero ? "見せ場" : sec.type}:${(f?.why ?? []).join("・") || "適合"}` };
+      const lineCtx = { ...ctx, cps: lcps, text: L.text };
+      let lineFit: Scored[] | undefined;
+      let fastFallback = false;
+      if (lcps > 10 && (trait(st).readable ?? 0.8) < 0.75) {
+        lineFit = fitSet(lineCtx, Object.keys(TRAITS).length);
+        const safe = lineFit.find((x) => (trait(x.style).readable ?? 0.8) >= 0.75 && !trait(x.style).hero);
+        if (safe) { st = safe.style; hero = false; fastFallback = true; }
+      }
+      const f = lineFit?.find((x) => x.style === st) ?? fit.find((x) => x.style === st) ?? fitSet(ctx, 30).find((x) => x.style === st);
+      lines[i] = { style: st, hero, why: `${hero ? "見せ場" : sec.type}:${fastFallback ? "早口の行→読みやすさ優先・" : ""}${(f?.why ?? []).join("・") || "適合"}` };
       lastStyle = st;
     });
     const f0 = fit.find((f) => f.style === chosen[0]);

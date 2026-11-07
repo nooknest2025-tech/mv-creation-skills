@@ -23,6 +23,7 @@ const GEN_DIR = path.join(PACK_DIR, "gen");
 export const resJa = (r: string) => (r === "720p" ? "標準(720p)" : r === "1080p" ? "高画質(1080p)" : r === "480p" ? "軽量(480p)" : r);
 /** user-facing model name: brand + grade (no raw ids). */
 export function modelJa(id: string) {
+  if (String(id).toLowerCase() === "manual/minimax-h3") return "MiniMax H3（手動）";
   const s = String(id).toLowerCase(), b = /grok|xai/.test(s) ? "Grok" : /kling/.test(s) ? "Kling" : /runway|gen4/.test(s) ? "Runway" : /hailuo|minimax/.test(s) ? "Hailuo" : /luma|ray/.test(s) ? "Luma" : /wan/.test(s) ? "Wan" : /veo/.test(s) ? "Veo" : /seedance/.test(s) ? "Seedance" : /pollo/.test(s) ? "Pollo" : /gemini/.test(s) ? "Gemini" : /flux/.test(s) ? "Flux" : /manual|local/.test(s) ? "手動・ローカル" : "その他のAI";
   return `${b}${/lite|fast|turbo|mini/.test(s) ? "（軽量版）" : /pro|master|2\.0|1\.5/.test(s) ? "（上位版）" : ""}`;
 }
@@ -75,7 +76,10 @@ export function attachFor(refs: { role: string; file: string }[], sceneImage: st
   return out.slice(0, 7);
 }
 export const attachText = (att: { role: string; file: string }[] = []) => att.length ? `${att.length}枚: ` + att.map((a) => `${a.role} = ${a.file}`).join(" / ") : "なし（プロンプトだけ）";
+/** Only replace a CSV prompt if it still matches the previous automatically generated one. */
+export const promptForReplan = (edited: string | undefined, previous: string | undefined, next: string) => edited && (previous === undefined || edited !== previous) ? edited : next;
 export function makePlan(dir: string, o: Record<string, any>) {
+  const previousPlan = readJson<any>(path.join(dir, "gen_plan.json"), null);
   const song = readJson<Song>(path.join(dir, "song.json"), null as any), cfg = loadConfig(dir);
   const props = buildProps(song, cfg, readJson(path.join(dir, "media.json"), []) as any);
   const models = loadModels(), res = String(o.res ?? cfg.gen?.resolution ?? "720p"), takes = Number(o.takes ?? cfg.gen?.takes ?? 1);
@@ -113,13 +117,14 @@ export function makePlan(dir: string, o: Record<string, any>) {
   const rows = shots.map((s) => {
     const sp = specOf(s.id);
     const refs = selectRefs(lib, { shot: s.id, role: sp.role, size: sp.size, performance: sp.performance });
+    if (s.kind === "image" && s.src && !refs.some((a) => a.role === "start_frame")) refs.unshift({ id: `scene_${s.id}`, role: "start_frame", file: path.join(PUBLIC_PROJECT, "..", s.src), shot: s.id, approved: true });
     const ov = o.model ?? cfg.gen?.perShot?.[s.id] ?? cfg.gen?.model;
     let model: Model, why: string;
     if (legacy) ({ model, why } = recommend(s, preset.id, models, ov, o.provider ?? cfg.gen?.provider));
     else { const pk = recommendModel(sp, models, { res, refs, override: ov, verifiedOnly: true, budgetPerShot: cfg.gen?.budgetPerShot }); model = pk.model; why = pk.why.slice(0, 3).join("・"); }
     const req = adapt(sp, model, refs, { res, aspect });
     let audioCut: any = null;
-    if (needsAudio(sp.performance)) {
+    if (needsAudio(sp.performance) && !model.id.startsWith("manual/")) {
       const c = planCut(s, model, song.duration, props.fps), songF = findSong(dir, o, cfg);
       audioCut = { ...c, file: null as string | null, error: null as string | null };
       if (!songF) audioCut.error = "元の曲ファイルが見つかりません（--song で指定）";
@@ -160,7 +165,7 @@ export function makePlan(dir: string, o: Record<string, any>) {
   writeJson(path.join(dir, "gen_tasks.json"), tasks);
   { // keep the user's prompt edits / skips (use=スキップ) when the plan is rebuilt
     const prev = readPromptEdits(dir);
-    fs.writeFileSync(path.join(dir, "prompts.csv"), "\uFEFFshot,section,seconds,use,prompt,attach\n" + rows.map((r: any) => { const e = prev[r.shot]; return [r.shot, r.section, r.sec, e?.skip ? "スキップ" : "使う", `"${(e?.prompt ?? r.prompt).replace(/"/g, '""')}"`, `"${attachText(r.attach).replace(/"/g, '""')}"`].join(","); }).join("\n")); }
+    fs.writeFileSync(path.join(dir, "prompts.csv"), "\uFEFFshot,section,seconds,use,prompt,attach\n" + rows.map((r: any) => { const e = prev[r.shot], old = previousPlan?.rows?.find((x: any) => x.shot === r.shot); const prompt = promptForReplan(e?.prompt, old?.prompt, r.prompt); return [r.shot, r.section, r.sec, e?.skip ? "スキップ" : "使う", `"${prompt.replace(/"/g, '""')}"`, `"${attachText(r.attach).replace(/"/g, '""')}"`].join(","); }).join("\n")); }
   return { plan, md };
 }
 

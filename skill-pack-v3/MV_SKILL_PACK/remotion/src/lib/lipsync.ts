@@ -51,6 +51,7 @@ export function shortShotAdvice(shots: ShortIn[], model: (id: string) => any, mo
   shots.forEach((s, i) => {
     if (!isPerf(s.performance)) return;
     const len = s.end - s.start, m = model(s.id); if (!m) return;
+    if (!m.allowed_durations?.length && !m.durations?.length && m.min_sec == null && m.max_sec == null) return;
     const snapped = snapDuration(len, m), stretch = snapped - len;
     if (stretch <= thresh) return;
     const nb = [shots[i - 1], shots[i + 1]].filter((n) => n && isPerf(n.performance) && (n.singer ?? "") === (s.singer ?? "")) as ShortIn[];
