@@ -8,6 +8,7 @@ export const CUSTOM_CATALOG: Record<string, StyleInfo> = {
   join_top_bottom: { short: "上下から合流", ja: "文字列の前半と後半が上下から寄って一つになる", energy: "mid", defaults: { enter: 0.25 } },
   leave_left_right: { short: "左右へ分かれる", ja: "文字列が読める状態から左右へ離れて消える", energy: "mid", defaults: { enter: 0.25 } },
   leave_top_bottom: { short: "上下へ分かれる", ja: "文字列が読める状態から上下へ離れて消える", energy: "mid", defaults: { enter: 0.25 } },
+  echo_layers: { short: "文字の輪郭レイヤー", ja: "輪郭文字が上下に広がり、主役の文字が中央に現れる", energy: "mid", defaults: { enter: 0.32, echo_gap: 1.12, echo_opacity: 0.3, travel: 0.35 } },
   // @style:new catalog (do not remove this line)
 };
 import { MOOD_STYLES } from "./moods";

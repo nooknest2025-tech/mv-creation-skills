@@ -101,6 +101,7 @@ def align(text_lines, segs):
             times[blk.a + k] = (asr[blk.b + k][1], asr[blk.b + k][2])
     # interpolate gaps between known neighbours
     known = [i for i, t in enumerate(times) if t]
+    matched = set(known)
     if not known:
         raise SystemExit("❌ 歌詞と音声がほとんど一致しませんでした。\n💡 対処: 歌詞テキストが曲と同じか確認するか、ボーカルだけの音源を --vocals で渡してください。")
     for i in range(len(times)):
@@ -128,7 +129,8 @@ def align(text_lines, segs):
             seg = ks[k:k + n]; k += n
             if seg:
                 words.append({"text": tok, "startSeconds": round(times[seg[0]][0], 3), "endSeconds": round(times[seg[-1]][1], 3)})
-        lines.append({"text": line, "start": round(times[ks[0]][0], 3), "end": round(times[ks[-1]][1], 3), "words": words})
+        lines.append({"text": line, "start": round(times[ks[0]][0], 3), "end": round(times[ks[-1]][1], 3), "words": words,
+                      "matchedChars": sum(k in matched for k in ks), "totalChars": len(ks)})
     for i in range(1, len(lines)):  # monotone
         lines[i]["start"] = max(lines[i]["start"], lines[i - 1]["start"] + 0.05)
     return lines
@@ -145,6 +147,8 @@ def timing_issues(lines, duration):
         count = len([c for c in line['text'] if not SKIP.match(c)])
         if end - start < .45 or count / max(.01, end - start) > 10:
             reasons.append('表示時間が短すぎる可能性')
+        if line.get('totalChars', 0) and line.get('matchedChars', 0) / line['totalChars'] < .6:
+            reasons.append('歌声認識との文字一致が少ない（補間を含む）')
         if i and start < lines[i-1]['end'] - .02:
             reasons.append('前の行と重複')
         if reasons:
@@ -153,6 +157,10 @@ def timing_issues(lines, duration):
 
 
 def main():
+    # Windows consoles often default to CP932, which cannot encode status icons.
+    # Do not turn a successful analysis into a failure while printing its result.
+    if hasattr(sys.stdout, 'reconfigure'):
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
     ap = argparse.ArgumentParser()
     ap.add_argument("audio"); ap.add_argument("--text"); ap.add_argument("--out", required=True)
     ap.add_argument("--model", default="small"); ap.add_argument("--lang", default="ja"); ap.add_argument("--vocals")

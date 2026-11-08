@@ -36,7 +36,7 @@ def cmd_layers(a):
         while p is not None and getattr(p, "name", None) and p is not psd: names.insert(0, p.name); p = p.parent
         fn = save(canvas, a.out, f"{i:02d}.png")
         out.append({"name": "/".join(names), "file": fn, "bbox": bbox_of(canvas)})
-    json.dump({"size": [W, H], "layers": out}, open(os.path.join(a.out, "layers.json"), "w"), ensure_ascii=False, indent=1)
+    json.dump({"size": [W, H], "layers": out}, open(os.path.join(a.out, "layers.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     print(json.dumps({"ok": True, "n": len(out)}))
 
 def cmd_bbox(a):
@@ -118,7 +118,7 @@ def cmd_split(a):
     order = {"体": 0, "左腕": 1, "右腕": 2, "頭": 3}
     layers.sort(key=lambda l: order.get(l["name"], 9))
     note = f"自動分解（{how}で切り抜き・頭={face_how}・隠れた所={inp}）。髪・目・口は分かれていません。目パチ口パクは既存の顔リグ（npm run faces）か、口と目のレイヤーを追加してください。"
-    json.dump({"size": [W, H], "layers": layers, "note": note, "plate": "background_plate.png"}, open(os.path.join(a.out, "layers.json"), "w"), ensure_ascii=False, indent=1)
+    json.dump({"size": [W, H], "layers": layers, "note": note, "plate": "background_plate.png"}, open(os.path.join(a.out, "layers.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     print(json.dumps({"ok": True, "n": len(layers), "note": note}, ensure_ascii=False))
 
 def font(sz):
@@ -127,7 +127,7 @@ def font(sz):
     return ImageFont.load_default()
 
 def cmd_sheet(a):
-    rig = json.load(open(a.rig)); base = os.path.dirname(a.rig); W, H = rig["size"]
+    rig = json.load(open(a.rig, encoding="utf-8")); base = os.path.dirname(a.rig); W, H = rig["size"]
     comp = Image.new("RGBA", (W, H), (40, 40, 48, 255))
     for p in sorted(rig["parts"], key=lambda p: p["z"]):
         f = os.path.join(base, os.path.basename(p["src"]))
@@ -168,7 +168,7 @@ def cmd_demo(a):
     im, d = canvas(); d.polygon(s(270, 330, 300, 200, 400, 165, 500, 200, 530, 330, 480, 290, 440, 320, 400, 280, 360, 320, 320, 290), fill=HAIR2); L.append(("前髪", done(im, "hair_front.png")))
     im, d = canvas(); d.polygon(s(470, 205, 540, 170, 530, 240), fill=ACC); d.polygon(s(470, 205, 420, 160, 430, 235), fill=ACC); d.ellipse(s(458, 192, 482, 218), fill=CLOTH2); L.append(("リボン", done(im, "ribbon.png")))
     layers = [{"name": n, "file": f, "bbox": bbox_of(Image.open(os.path.join(a.out, f)))} for n, f in L]
-    json.dump({"size": [W, H], "layers": layers, "note": "デモ用のオリジナル簡易キャラ（既存作品の模写ではありません）"}, open(os.path.join(a.out, "layers.json"), "w"), ensure_ascii=False, indent=1)
+    json.dump({"size": [W, H], "layers": layers, "note": "デモ用のオリジナル簡易キャラ（既存作品の模写ではありません）"}, open(os.path.join(a.out, "layers.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     print(json.dumps({"ok": True, "n": len(layers)}))
 
 if __name__ == "__main__":

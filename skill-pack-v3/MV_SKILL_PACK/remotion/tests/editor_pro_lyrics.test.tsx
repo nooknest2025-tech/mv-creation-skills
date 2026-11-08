@@ -18,10 +18,10 @@ describe("editor preview renders stills-mode pro_* lyrics", () => {
     const d:any=data('pro_slide');
     const initial=renderToString(<Scene data={JSON.parse(JSON.stringify(d))} t={1.5}/>);
     expect(initial).toContain('--lyric-fill:#ffffff');
-    d.lyrics[0].fill='#12ab34';d.lyrics[0].font='klee';
+    d.lyrics[0].fill='#12ab34';d.lyrics[0].font='dela';
     const saved=renderToString(<Scene data={JSON.parse(JSON.stringify(d))} t={1.5}/>);
     expect(saved).toContain('--lyric-fill:#12ab34');
-    expect(saved).toContain('Klee One');
+    expect(saved).toContain('Dela Gothic One');
   });
   for (const motion of ["pro_slide", "pro_diag", "pro_box", "pro_stretch", "pro_smash"])
     for (const sections of [undefined, [{ type: "verse", label: "Aメロ", start: 0, end: 30 }]])

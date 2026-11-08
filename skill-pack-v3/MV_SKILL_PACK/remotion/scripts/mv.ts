@@ -6,7 +6,7 @@ import { needsStills, TASTE_JA } from "../src/lib/stills";
 import { spawnSync } from "node:child_process";
 import readline from "node:readline/promises";
 import { parseLyricJson, parseLyricsFile, sectionTypeOf } from "../src/lib/song";
-import { buildProps } from "../src/lib/pipeline";
+import { applyTiming, buildProps } from "../src/lib/pipeline";
 import { styleSummary } from "../src/lib/resolve";
 import { thumbnailTimes } from "../src/lib/cuts";
 import { applyInstruction } from "../src/lib/nl";
@@ -16,9 +16,16 @@ import type { Song } from "../src/lib/types";
 import { GENRES } from "../src/lib/genres";
 import { FONT_REG } from "../src/lib/fonts";
 import { fetchMissing, syncRegistry } from "./fonts";
-import { imageSize, INPUT_DIR, PACK_DIR, PUBLIC_PROJECT, REMOTION_DIR, UserError, analyzeAudio, autoSections, detectInput, detectScenes, durationOf, fail, focusPoint, fs, log, npx, parseArgs, path, safeName } from "./common";
+import { imageSize, INPUT_DIR, PACK_DIR, PUBLIC_PROJECT, REMOTION_DIR, UserError, analyzeAudio, autoSections, decodeMono, detectInput, detectScenes, durationOf, fail, focusPoint, fs, log, npx, parseArgs, path, safeName } from "./common";
 import { addVersion, loadConfig, loadManifest, nextVersion, projectDir, publish, readJson, saveConfig, writeJson } from "./project";
 import { driveVariant, finalMux, qaChecks, qaMarkdown, writeFcpxml, MANUAL_QA } from "./exporters";
+import { syncAudit } from "../src/lib/syncAudit";
+import { vocalSyncEstimate } from "./vocalSync";
+import { lyricTimeline } from "../src/lib/lyricTimeline";
+import { separateVocals } from "./separateVocals";
+import { beatEvidence } from "../src/lib/beatEvidence";
+import { trackAudioBeats } from "../src/lib/beatTrack";
+import { parseSongBrief,SONG_MOOD_JA } from "../src/lib/songBrief";
 
 const KIND_JA: Record<string, string> = { json: "歌詞同期JSON（そのまま使用）", srt: "SRT字幕（そのまま使用）", lrc: "LRC（そのまま使用）", vtt: "VTT字幕（そのまま使用）", ass: "ASS字幕（そのまま使用）", txt: "歌詞テキスト（音声に自動で位置合わせ）" };
 
@@ -53,8 +60,7 @@ export async function buildSong(det: ReturnType<typeof detectInput>, dir: string
     const outJson = path.join(dir, "lyrics_auto.json");
     if (!fs.existsSync(outJson) || o.reanalyze) {
       log(det.lyricsKind === "txt" ? "🎤 歌詞テキストを音声に位置合わせ中（faster-whisper・無料）…" : "🎤 歌詞を自動で書き起こし中（faster-whisper・無料）…");
-      const vocals = det.stems.find((s) => /vocal|ボーカル/i.test(path.basename(s)) && !/inst|off/i.test(path.basename(s)));
-      const args = [path.join(REMOTION_DIR, "scripts", "transcribe.py"), audio, "--out", outJson, "--model", String(o.whisper ?? "small"), ...(det.lyricsKind === "txt" ? ["--text", det.lyrics!] : []), ...(vocals ? ["--vocals", vocals] : [])];
+      const args = [path.join(REMOTION_DIR, "scripts", "transcribe.py"), audio, "--out", outJson, "--model", String(o.whisper ?? "small"), ...(det.lyricsKind === "txt" ? ["--text", det.lyrics!] : [])];
       const r = spawnSync(py, args, { stdio: "inherit", shell: false });
       if (r.status !== 0) throw new UserError("歌詞の自動処理に失敗しました", "直前のPythonエラーで、依存不足・音声読み込み・モデル取得のどこで失敗したか確認してください。npm run doctor と同じPythonを使用し、導入済みなら再インストールせず原因を調べます。同期済みSRT/LRC/JSONがあれば代わりに使えます。");
     } else notes.push("歌詞の自動処理結果を再利用（やり直すなら --reanalyze）");
@@ -99,6 +105,16 @@ export async function run(argv: string[]) {
   const title = String(o.title ?? path.basename(det.audio).replace(/\.[^.]+$/, ""));
   const dir = projectDir(title);
   let cfg: MVConfig = loadConfig(dir, det.config);
+  if(o['song-brief']) {
+    const brief=parseSongBrief(String(o['song-brief']));
+    cfg.songBrief=brief.text;
+    if(brief.genre)cfg.genre=brief.genre;
+    if(brief.mood)cfg.songMood=brief.mood;else delete cfg.songMood;
+    saveConfig(dir,cfg);
+    const label=brief.genre==='acoustic'&&!/弾き語り|first\s*take|ファーストテイク|一発撮り/i.test(brief.text)?'アコースティック':brief.genre?GENRES[brief.genre]?.ja??brief.genre:undefined;
+    log(`🎵 曲について: ${brief.text}${label?` / ジャンル: ${label}`:''}${brief.mood?` / 曲調: ${SONG_MOOD_JA[brief.mood]}`:''}`);
+    brief.unresolved.forEach(x=>log(`  ⚠️ ${x}。申告文は保存し、解釈できない部分は自動演出に反映していません。`));
+  }
   for (const k of ["preset", "aspect"] as const) if (o[k]) (cfg as any)[k] = o[k];
   if (o.range) { const [a, b] = String(o.range).split("-").map(Number); cfg.range = { start: a, end: b }; }
   if (o["video-scope"]) { // start: 画像を動画にする (persisted so the plan is rebuilt after stills / clips are imported)
@@ -124,6 +140,18 @@ export async function run(argv: string[]) {
   const { song, notes } = await buildSong(det, dir, o);
   if (o["no-lyrics"]) song.lines = [];
   notes.forEach((n) => log(`  ℹ️ ${n}`));
+  // Default to measured onset positions when a usable audio beat path exists.
+  // A user-provided beat map or locked constant BPM always takes precedence.
+  let beatSamples:Float32Array|undefined;
+  try {
+    beatSamples=decodeMono(det.audio,10000);
+    const tracked=trackAudioBeats(beatSamples,10000,song.bpm);
+    const manual=!!song.beats?.length||!!cfg.timing?.beats?.length||!!cfg.timing?.bpm||!!cfg.timing?.locked?.includes('bpm');
+    const used=tracked.status==='estimated'&&!manual;
+    if(used){song.beats=tracked.beats;writeJson(path.join(dir,'song.json'),song);}
+    writeJson(path.join(dir,'out','beat-track.json'),{...tracked,used,manualOverride:manual,note:'音の立ち上がりからの拍候補。聴取未確認。範囲外は端の拍間隔で補間します。'});
+    log(`🥁 拍: ${used?`音声から ${tracked.beats.length} 拍を推定（聴取未確認）`:manual?'手動指定を優先':'音声から十分に推定できず、従来のBPMを使用（要確認）'}`);
+  } catch(e){log(`⚠️ 音声からの拍推定は未実施、BPMを使用: ${e instanceof Error?e.message:String(e)}`);}
   if (!tachie && !det.images.length && !det.videos.length && needsStills(cfg.taste, 0)) {
     const { writeStillsPlan, stillsSummary } = await import("./stills");
     const { stillsPromptList } = await import("../src/lib/stills");
@@ -182,6 +210,31 @@ export async function run(argv: string[]) {
   if (cfg.range?.start !== undefined && cfg.range.start >= song.duration - 0.5) throw new UserError(`範囲の開始 ${cfg.range.start}秒 が曲の長さ（${song.duration.toFixed(1)}秒）を超えています`, `--range 0-${Math.floor(song.duration)} のように曲の中に収まる範囲を指定してください`);
   const aspects: Aspect[] = (o.aspects ? String(o.aspects).split(",") : cfg.aspects ?? [cfg.aspect ?? "16:9"]) as Aspect[];
   const first = buildProps(song, cfg, media, { audio: `project/${pub[0].name}`, aspect: aspects[0] });
+  const engine=first.lyricEngine as {engine:string;why:string};
+  log(`🔤 歌詞エンジン: ${engine.engine==='jizura'?'JIZURA':'通常モーション'}（${engine.why}・自動判断は要確認）`);
+  // Compare vocals against the effective timings, but keep user locks unchanged.
+  const effective = applyTiming(song, cfg);
+  let vocals = det.stems.find((s) => /vocal|ボーカル/i.test(path.basename(s)) && !/inst|off/i.test(path.basename(s)));
+  const separation = !vocals && effective.lines.length ? separateVocals(python(),det.audio,path.join(dir,'out','vocal-separation'),path.join(REMOTION_DIR,'scripts','separate_vocals.py')) : undefined;
+  if(separation?.status==='separated') vocals=separation.path;
+  log('🎤 歌声と歌詞をローカルで照合中（モデルが未導入なら未確認として続行）…');
+  const estimateOptions = {python:python(),script:path.join(REMOTION_DIR,'scripts','transcribe.py'),model:String(o.whisper ?? 'small'),lines:effective.lines};
+  const vocal = vocalSyncEstimate({...estimateOptions,audio:det.audio,outDir:path.join(dir,'out','sync-sources','mix')});
+  const stemEstimate = vocals ? vocalSyncEstimate({...estimateOptions,audio:vocals,outDir:path.join(dir,'out','sync-sources','vocals')}) : undefined;
+  let stemDuration:number|undefined;
+  if(vocals) try {stemDuration=durationOf(vocals);} catch { /* report unverified */ }
+  const timeline = lyricTimeline(effective.lines,song.duration,vocal,stemEstimate,stemDuration,separation?.status==='unavailable'?separation.reason:undefined);
+  writeJson(path.join(dir,'out','lyric-timeline.json'),timeline);
+  if(!vocals) log(`  ℹ️ 歌声分離できず原曲のみで推定: ${separation?.status==='unavailable'?separation.reason:'歌声素材なし'}`);
+  else log(`  ℹ️ 原曲と歌声素材を別々に照合。歌声素材の開始位置は未検証。`);
+  let beatWindows:ReturnType<typeof beatEvidence>=[],beatReason:string|undefined;
+  try {beatWindows=beatEvidence(beatSamples??decodeMono(det.audio,10000),10000,first.beat.bpm,first.beat.phase);}
+  catch(e){beatReason=e instanceof Error?e.message:String(e);log(`  ⚠️ 拍の確認用解析は未実施: ${beatReason}`);}
+  const sync = syncAudit(effective.lines, song.duration, first.beat, vocal.status==='estimated'?vocal.lyrics:undefined,beatWindows);
+  const syncFile = path.join(dir, "out", "sync-audit.json"); writeJson(syncFile, {...sync,lyric:{...sync.lyric,analysisStatus:vocal.status,...(vocal.status==='unavailable'?{reason:vocal.reason}:{})},beat:{...sync.beat,...(beatReason?{reason:beatReason}:{})}});
+  if(vocal.status==='unavailable')log(`  ⚠️ 歌声の自動照合は未実施: ${vocal.reason}`);
+  log(`🎧 歌声と拍: 聴取未確認。歌声照合: ${vocal.status==='estimated'?'自動推定（要確認）':vocal.status==='no-lyrics'?'歌詞なし':'未実施'}。歌詞 ${sync.lyric.issues.length} 行・拍 ${beatWindows.filter(w=>w.needsReview).length} 区間に確認候補。倍半分も確認。`);
+  log(`   確認候補: ${syncFile} / 音付きで確認・修正: npm run timing（自動判定は聴取の代わりになりません）`);
   { const { fontsOfLines } = await import("../src/render/fontsUsed"); await fetchMissing({ ids: fontsOfLines(first.lines) }); }
   // A per-project manifest lets the shared editor (npm run editor -- --project <name>) reopen the exact source files.
   // 画像を動画にする: adopted takes (timing.perShot.src = project/gen/...) are extra video assets, so a mixed MV
@@ -195,8 +248,9 @@ export async function run(argv: string[]) {
       asset: assetOf(s.src), transition: i ? Math.min(0.7, s.end - s.start) : 0,
       label: s.section ?? `シーン ${i + 1}` })), song.duration),
     sections: song.sections.map((x) => ({ type: x.type, label: x.label, start: x.start, end: x.end })),
-    lyricStyles: first.lines.map((l) => ({ motion: l.style, params: l.params })),
-    width: first.width, height: first.height, fps: first.fps,
+    lyricStyles: first.lines.map((l) => ({ motion: l.style, params: l.params,...(first.jizura?{start:l.tOn,end:l.tEnd,x:.5,y:.5,scale:.72,font:l.params.font}: {}) })),
+    ...(first.jizura?{jizura:first.jizura}:{}),
+    width: first.width, height: first.height, fps: first.fps, bpm:first.beat.bpm, phase:first.beat.phase, beats:first.beat.beats??[],
   });
   else if (!tachie) writeTextEditorProject(dir, { title, audio: det.audio, song, first });
   if (tachie) {
@@ -204,7 +258,7 @@ export async function run(argv: string[]) {
     const { moodOf, SHOW_MODES } = await import("../src/lib/mograph");
     const bySrc = new Map(media.map((m: any, i: number) => [m.src, [...det.images, ...det.videos][i]]));
     const r = createTachieProject({ dir, inputDir, mood: moodOf(first.genre, song.bpm), song, shots: first.shots as any, images: det.images, videos: det.videos ?? [], mediaSrc: (s) => bySrc.get(s), lyricStyles: first.lines.map((l) => ({ motion: l.style, params: l.params })), title, width: first.width, height: first.height, fps: first.fps });
-    writeJson(path.join(dir, "out", "editor-input.json"), { ...r.manifest, audio: det.audio });
+    writeJson(path.join(dir, "out", "editor-input.json"), { ...r.manifest, audio: det.audio, bpm:first.beat.bpm,phase:first.beat.phase,beats:first.beat.beats??[],...(first.jizura?{jizura:first.jizura}:{}) });
     log(`\n🧍 立ち絵モーションMV: ${(cfg.combo ?? []).map((m) => SHOW_MODES[m]?.ja ?? m).join("＋")}`);
     log(`   キャラ ${r.rigs.map((x) => x.name).join("・")} / ステージ ${r.stageFile}`);
     log(`   シーン ${r.manifest.scenes.length} 個（立ち絵 ${r.manifest.scenes.filter((s) => s.asset === r.manifest.images.length - 1).length}・画像/動画 ${r.manifest.scenes.filter((s) => s.asset !== r.manifest.images.length - 1).length}）`);
@@ -213,13 +267,13 @@ export async function run(argv: string[]) {
     await offerEditor(dir, o);
     return;
   }
-  if (first.genre) { const g = GENRES[first.genre]; log(`🎼 ジャンル: ${g.ja}（${first.genreWhy}）→ 書体 ${[g.fonts.base, g.fonts.chorus].map((i) => FONT_REG.find((f) => f.id === i)?.family ?? i).join(" / ")}　違えば「ジャンルはロックで」など`); }
+  if (first.genre) { const g = GENRES[first.genre],label=first.genre==='acoustic'&&cfg.songBrief&&!/弾き語り|first\s*take|ファーストテイク|一発撮り/i.test(cfg.songBrief)?'アコースティック':g.ja,origin=cfg.genre&&cfg.genre!=='auto'?'指定':'自動推定・未確認'; log(`🎼 ジャンル: ${label}（${origin}：${first.genreWhy}）→ 書体 ${[g.fonts.base, g.fonts.chorus].map((i) => FONT_REG.find((f) => f.id === i)?.family ?? i).join(" / ")}　違えば「ジャンルはロックで」など`); }
   log(`\n🎬 演出: ${PRESETS[first.preset!].ja}（${first.presetWhy}）　画面: ${aspects.map((a) => ASPECTS[a]?.ja ?? a).join(" / ")}`);
   log(`🎞  構成: ${first.structureWhy}　変えるなら「ストーリー＋リップシンクで」「サビだけ歌うシーン」など`);
-  for (const n of first.sectionNotes ?? []) log(`   ・${n}`);
+  if(!first.jizura) for (const n of first.sectionNotes ?? []) log(`   ・${n}`);
   if ((first as any).mographNotes?.length) { log("🎨 プロ演出（図形・色・転換・拍アクセント）: 消すなら「モーショングラフィックスなし」、昔の見た目は「プロ演出オフ」"); for (const n of (first as any).mographNotes) log(`   ・${n}`); }
-  if (first.review) { log(`\n${first.review.note}\n  （プロチェック ${first.review.score}/100）`); fs.writeFileSync(path.join(dir, "director_note.md"), `${first.review.note}\n\n## セクションごとの選択理由\n${(first.sectionNotes ?? []).map((n) => `- ${n}`).join("\n")}\n\n## 構成\n- ${first.structureWhy}\n`); }
-  log(`  カット 約${first.shots.length} 個${cfg.density ? `（シーンの細かさ: ${({ slow: "ゆったり", fast: "テンポよく", normal: "標準" } as any)[cfg.density]}）` : ""} / 歌詞 ${first.lines.length} 行 / 文字スタイル: ${styleSummary(first.lines) || "（歌詞なし）"}`);
+  if (first.review) { const note=first.jizura?'JIZURAを選択。通常モーション向けの自動修正とスコアは、JIZURAの仕上がりを評価したものではありません。':first.review.note; log(`\n${note}${first.jizura?'':`\n  （プロチェック ${first.review.score}/100）`}`); fs.writeFileSync(path.join(dir, "director_note.md"), `${note}\n\n## セクションごとの選択理由\n${first.jizura?'JIZURAの字組みは再生して確認。':(first.sectionNotes ?? []).map((n) => `- ${n}`).join("\n")}\n\n## 構成\n- ${first.structureWhy}\n`); }
+  log(`  カット 約${first.shots.length} 個${cfg.density ? `（シーンの細かさ: ${({ slow: "ゆったり", fast: "テンポよく", normal: "標準" } as any)[cfg.density]}）` : ""} / 歌詞 ${first.lines.length} 行 / 文字スタイル: ${first.jizura?'JIZURA':styleSummary(first.lines) || "（歌詞なし）"}`);
   const m = loadManifest(dir, title);
   const v = nextVersion(m);
   const base = `${safeName(title)}_v${v}`;
@@ -348,8 +402,9 @@ export function writeTextEditorProject(dir: string, o: { title: string; audio: s
     ...(o.first.mograph ? { mograph: o.first.mograph, mographShots: (o.first.shots ?? []).map((s: any) => ({ role: s.role, src: s.src, start: s.start, end: s.end })), mographBeat: o.first.beat } : {}),
     scenes: secs.map((s: any, i: number) => ({ id: `S${String(i + 1).padStart(3, "0")}`, start: s.start, end: s.end, asset: 0, transition: i ? Math.min(0.7, s.end - s.start) : 0, label: s.label ?? s.type })),
     sections: secs.map((x: any) => ({ type: x.type, label: x.label, start: x.start, end: x.end })),
-    lyricStyles: o.first.lines.map((l: any) => ({ motion: l.style, params: l.params })),
-    width: o.first.width, height: o.first.height, fps: o.first.fps,
+    lyricStyles: o.first.lines.map((l: any) => ({ motion: l.style, params: l.params,...(o.first.jizura?{start:l.tOn,end:l.tEnd,x:.5,y:.5,scale:.72,font:l.params.font}:{}) })),
+    ...(o.first.jizura?{jizura:o.first.jizura}:{}),
+    width: o.first.width, height: o.first.height, fps: o.first.fps, bpm:o.first.beat?.bpm,phase:o.first.beat?.phase,beats:o.first.beat?.beats??[],
   });
 }
 

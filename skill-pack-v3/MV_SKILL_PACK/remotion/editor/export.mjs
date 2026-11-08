@@ -1,5 +1,6 @@
 import {renderMedia} from '@remotion/renderer';
 import {prepareRender} from './render-setup.mjs';
+import {muxArgs} from './export-mux.mjs';
 import fs from 'node:fs';import path from 'node:path';import {spawnSync} from 'node:child_process';
 const output=path.resolve(process.argv[3]);
 const {snapshot,runtime,ff,binariesDirectory,browserExecutable,chromiumOptions,serveUrl,composition,inputProps}=await prepareRender(process.argv[2]);
@@ -7,6 +8,6 @@ const silent=output.replace(/\.mp4$/,'.silent.mp4'),qa=snapshot.qaFrames;
 await renderMedia({serveUrl,composition,inputProps,browserExecutable,chromiumOptions,binariesDirectory,outputLocation:silent,muted:true,codec:'h264',pixelFormat:'yuv420p',crf:20,concurrency:Number(process.env.MVPACK_CONCURRENCY||2),frameRange:qa?[0,qa-1]:undefined,scale:Number(process.env.MVPACK_SCALE||1),onProgress:p=>console.log(Math.min(98,Math.round(p.progress*98))),logLevel:'error'});
 const audio=path.resolve(runtime,snapshot.data.audioFile);
 if(!audio.startsWith(runtime+path.sep))throw Error('Audio must be inside project editor output');
-const args=['-y','-v','error','-i',silent,'-i',audio,'-map','0:v','-map','1:a','-vf','scale=out_range=tv,format=yuv420p','-c:v','libx264','-preset','fast','-crf','20','-color_range','tv','-c:a','aac','-b:a','256k','-t',String(qa?Math.min(snapshot.data.duration,qa/snapshot.data.fps):snapshot.data.duration),'-movflags','+faststart',output];
-const result=spawnSync(ff,args,{encoding:'utf8',windowsHide:true});if(result.status!==0)throw Error(result.stderr||'FFmpeg failed. Install FFmpeg or set MVPACK_FFMPEG.');
+const args=muxArgs(silent,audio,qa?Math.min(snapshot.data.duration,qa/snapshot.data.fps):snapshot.data.duration,output);
+const result=spawnSync(ff,args,{encoding:'utf8',windowsHide:true});if(result.status!==0)throw Error('音声を無変換でMP4に収められませんでした。FFmpegと音声形式を確認してください。 '+(result.stderr||''));
 fs.rmSync(silent,{force:true});console.log('DONE');

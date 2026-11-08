@@ -6,6 +6,7 @@ import { joinLeftRight } from "./join_left_right";
 import { joinTopBottom } from "./join_top_bottom";
 import { leaveLeftRight } from "./leave_left_right";
 import { leaveTopBottom } from "./leave_top_bottom";
+import { echoLayers } from "./echo_layers";
 // @style:new import (do not remove this line)
 export const CUSTOM_STYLES: Record<string, StyleFn> = {
   sakura_fall: sakuraFall,
@@ -14,6 +15,7 @@ export const CUSTOM_STYLES: Record<string, StyleFn> = {
   join_top_bottom: joinTopBottom,
   leave_left_right: leaveLeftRight,
   leave_top_bottom: leaveTopBottom,
+  echo_layers: echoLayers,
   // @style:new entry (do not remove this line)
 };
 import { MOOD_STYLES } from "../../lib/moods";

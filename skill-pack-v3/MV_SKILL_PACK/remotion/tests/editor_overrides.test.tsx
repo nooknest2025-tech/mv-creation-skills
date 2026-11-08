@@ -10,19 +10,20 @@ import { markEdited, wantsEditorMotion } from "../src/lib/lyricEdits";
 import { prepareProject } from "../scripts/editor";
 import { mergePatch, stageFor, setPatch } from "../src/lib/stagePatch";
 const R = path.resolve(__dirname, "..");
-const TACHIE = path.join(R, "../projects/パーツアニメ試作/out/editor");
+import {tachieFixture} from "./fixtures/tachie-fixture";
+const TACHIE = tachieFixture();
 const py = ["python3", "python"].find((c) => spawnSync(c, ["--version"]).status === 0);
 const load = (dir: string) => ({ data: JSON.parse(fs.readFileSync(path.join(dir, "editor-state.json"), "utf8")).data, orig: JSON.parse(fs.readFileSync(path.join(dir, "original-source.json"), "utf8")) });
 const html = (data: any, t: number) => renderToStaticMarkup(<Scene data={data} t={t} />);
 const mid = (l: any) => (l.start + l.end) / 2;
 const demoDir = () => { const d = fs.mkdtempSync(path.join(os.tmpdir(), "mv-ov-")); fs.writeFileSync(path.join(d, "mv.config.json"), "{}"); return prepareProject({ demo: true, project: d }).runtime; };
-const FIXTURES: [string, () => string][] = [["立ち絵ステージ (パーツアニメ試作)", () => TACHIE], ["画像MV (demo)", demoDir]];
+const FIXTURES: [string, () => string][] = [["立ち絵ステージ (synthetic)", () => TACHIE], ["画像MV (demo)", demoDir]];
 
 describe("editor edits always win over built-in looks", () => {
   it("markEdited: editor defaults / untouched lines are not edits; real changes are", () => {
     const { data, orig } = load(TACHIE); markEdited(data, orig);
     expect(data.lyrics.filter((l: any) => l.edited)).toEqual([]);
-    const l = data.lyrics[4]; l.fill = orig.lyrics[4].fill; l.font = l.font === "mochiy" ? "rocknroll" : "mochiy"; l.stageStyle = "auto"; markEdited(data, orig);
+    const l = data.lyrics[4]; l.fill = orig.lyrics[4].fill; l.font = l.font === "dela" ? "rocknroll" : "dela"; l.stageStyle = "auto"; markEdited(data, orig);
     expect(l.edited).toEqual(["font"]);
     l.motion = "typewriter"; markEdited(data, orig); expect(wantsEditorMotion(l)).toBe(true);
     data.scenes[1].zoom = 1.4; markEdited(data, orig); expect(data.scenes[1].edited).toEqual(["zoom"]);
@@ -31,7 +32,7 @@ describe("editor edits always win over built-in looks", () => {
     const { data, orig } = load(dir()); markEdited(data, orig);
     const l = data.lyrics[Math.min(4, data.lyrics.length - 1)], t = mid(l), before = html(data, t);
     expect(html(structuredClone(data), t)).toBe(before); // untouched -> identical
-    for (const edit of [{ fill: "#00e0ff" }, { angle: -12 }, { position: "tc" }, { font: l.font === "mochiy" ? "rocknroll" : "mochiy" }, { effect: "glow" }, { motion: "typewriter" }]) {
+    for (const edit of [{ fill: "#00e0ff" }, { angle: -12 }, { position: "tc" }, { font: l.font === "dela" ? "rocknroll" : "dela" }, { effect: "glow" }, { motion: "typewriter" }]) {
       const d = structuredClone(data); Object.assign(d.lyrics[data.lyrics.indexOf(l)], edit); markEdited(d, orig);
       expect(html(d, t), JSON.stringify(edit)).not.toBe(before);
     }

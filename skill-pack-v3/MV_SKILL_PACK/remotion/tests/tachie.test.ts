@@ -53,10 +53,10 @@ describe("tachie v5.2 stop time", () => {
   });
 });
 import { visibleLines } from "../src/render/Tachie";
-import fsx from "fs";
+import {lyrics as fixtureLyrics, stage as fixtureStage, rig as fixtureRig} from "./fixtures/tachie-fixture";
 describe("tachie v5.3 lyrics", () => {
   it("each line has one style regardless of cut, and lines never overlap", () => {
-    const L = JSON.parse(fsx.readFileSync("../projects/パーツアニメ試作/lyrics.json", "utf8")).lyrics.map((l: any, i: number) => ({ id: "L" + i, ...l }));
+    const L = fixtureLyrics.map((l: any, i: number) => ({ id: "L" + i, ...l }));
     const modes = new Map<string, Set<string>>();
     for (let t = 0; t < 31; t += 1 / 30) { const v = visibleLines(L, t); expect(v.length).toBeLessThanOrEqual(1);
       for (const l of v) for (let b = 0; b < 16; b++) { const s = modes.get(l.id) ?? new Set<string>(); s.add(lyricModeOf(L.indexOf(l), layoutAt(b, true, false))); modes.set(l.id, s); } }
@@ -67,19 +67,19 @@ import { tateBox } from "../src/render/Tachie";
 import { singersOf } from "../src/lib/tachie";
 describe("tachie v5.6 tate balloon", () => {
   it("content fits the inner safe box and the balloon stays on screen-size", () => {
-    const L = JSON.parse(fsx.readFileSync("../projects/パーツアニメ試作/lyrics.json", "utf8")).lyrics;
+    const L = fixtureLyrics;
     for (const l of L) { const cols = l.text.replace(/（.*?）|\(.*?\)/g, "").split(/[　\s、]/).filter(Boolean); const b = tateBox(cols.length, Math.max(...cols.map((c: string) => Array.from(c).length)), 64.8, 1920, 1080);
       expect(b.contentW).toBeLessThanOrEqual(b.w * 0.61); expect(b.contentH).toBeLessThanOrEqual(b.h * 0.61); expect(b.w).toBeLessThanOrEqual(1920 * 0.34 + 1); expect(b.h).toBeLessThanOrEqual(1080 * 0.86 + 1); }
   });
 });
 describe("tachie v5.7 third dancer", () => {
-  it("cafe rig is complete, dances choppy, sings its own lines and every chorus call", () => {
-    const st = JSON.parse(fsx.readFileSync("../projects/パーツアニメ試作/tachie/chorus.tachie.json", "utf8"));
-    const rig = JSON.parse(fsx.readFileSync("../projects/パーツアニメ試作/tachie/rig_cafe/rig.json", "utf8"));
+  it("synthetic three-character stage assigns solos and chorus to the correct singers", () => {
+    const st = fixtureStage;
+    const rig = fixtureRig;
     expect(st.chars.map((c: any) => c.id)).toEqual(["black", "gothic", "cafe"]);
-    for (const p of rig.parts) { expect(fsx.existsSync("../projects/パーツアニメ試作/tachie/rig_cafe/" + p.src)).toBe(true); for (const s of Object.values(p.states ?? {})) expect(fsx.existsSync("../projects/パーツアニメ試作/tachie/rig_cafe/" + s)).toBe(true); }
+    for (const p of rig.parts) { expect(p.src).toMatch(/\.png$/); for (const s of Object.values(p.states ?? {})) expect(s).toMatch(/\.png$/); }
     expect(rig.parts.filter((p: any) => /ear|hair_back/.test(p.id))).toEqual([]); // cap + ears live only in the head part
-    const L = JSON.parse(fsx.readFileSync("../projects/パーツアニメ試作/lyrics.json", "utf8")).lyrics.map((l: any, i: number) => ({ ...l, id: "L" + i }));
+    const L = fixtureLyrics.map((l: any, i: number) => ({ ...l, id: "L" + i }));
     expect(singersOf(st, L, L[2])).toEqual(["cafe"]); expect(singersOf(st, L, L[0])).toEqual(["black"]); expect(singersOf(st, L, L[6]).length).toBe(3);
     expect(ROUTINES.dance.chorus.every(([m]) => m in MOVES)).toBe(true);
   });
@@ -106,6 +106,6 @@ describe("v6.0 two loops", () => {
 // v6.2 vertical lyric columns never break mid-word
 import { vertCols } from "../src/render/Tachie";
 describe("v6.2 vertical columns", () => {
-  it("ミスター・ヘンドレ！ splits after ・", () => { expect(vertCols("ミスター・ヘンドレ！")).toEqual(["ミスター・", "ヘンドレ！"]); });
+  it("ミスター・サンプル！ splits after ・", () => { expect(vertCols("ミスター・サンプル！")).toEqual(["ミスター・", "サンプル！"]); });
   it("spaces split, short words stay whole", () => { expect(vertCols("誰も知らない　なぜか歌える")).toEqual(["誰も知らない", "なぜか歌える"]); expect(vertCols("偽物だって？")).toEqual(["偽物だって？"]); });
 });

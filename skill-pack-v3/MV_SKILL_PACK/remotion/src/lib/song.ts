@@ -150,11 +150,13 @@ export function parseLyricJson(d: any, fallbackTitle = "song"): Song {
   const markers: any[] = a.markers ?? [];
   const downbeats = markers.filter((m) => m.type === "downbeat").map((m) => +m.time);
   const bpm = Number(a.bpm ?? d.bpm ?? d.audio?.bpm) || 120;
+  const rawBeats=d.beats??a.beats;
+  const beats=Array.isArray(rawBeats)&&rawBeats.length>=2&&rawBeats.every((t:any,i:number)=>typeof t==='number'&&Number.isFinite(t)&&t>=0&&t<=duration&&(i===0||t>rawBeats[i-1]))?rawBeats:undefined;
   return {
     title: String(d.projectName ?? fallbackTitle), duration, fps: Number(d.fps) || 30, bpm,
     phase: downbeats[0] ?? 0, beatsPerBar: Number(a.beatsPerBar) || 4,
     sections: secs.length ? secs : defaultSections(duration), energy: normEnergy(energyRaw, srcHz), energyHz: energyRaw.length ? 20 : 0,
-    lines, downbeats,
+    lines, downbeats,...(beats?{beats}:{}),
   };
 }
 

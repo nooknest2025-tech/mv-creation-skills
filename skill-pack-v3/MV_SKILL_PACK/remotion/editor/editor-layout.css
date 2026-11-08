@@ -36,6 +36,11 @@ body{height:100vh;overflow:hidden;font-size:13px}main{max-width:none;margin:0;pa
 .clipBox .result{font-weight:600;color:#f4efdf;background:#1d2a22;border-radius:5px;padding:6px 8px}button.primary{background:#7b5a2a;border-color:#f1c84b;margin-top:8px}
 /* 全画面 */
 #screen:fullscreen{background:#000;width:100vw;height:100vh!important;max-width:none!important;border-radius:0}
+#previewTransformPanel{position:absolute;top:8px;right:8px;z-index:8;width:min(245px,65%);padding:8px 10px;background:rgba(14,24,20,.92);border:1px solid #839889;border-radius:8px;display:grid;gap:5px;font-size:12px}
+#previewTransformPanel[hidden]{display:none}
+#previewTransformPanel label{display:flex;align-items:center;gap:6px}
+#previewTransformPanel input[type=range]{min-width:0;flex:1;padding:0}
+#previewTransformPanel output{min-width:42px;text-align:right}
 #fsBar{position:absolute;left:0;right:0;bottom:0;display:flex;gap:10px;align-items:center;padding:12px 18px;background:linear-gradient(transparent,#000c);transition:opacity .4s;z-index:10}
 #fsBar.idle{opacity:0}#fsBar #fsSeek{flex:1}#fsBar span{color:#fff;font-size:14px;min-width:120px}
 @media(max-height:899px){#screen{max-width:min(100%,calc(38vh * 16 / 9))!important}#stickyTop .bar{margin-top:4px}}

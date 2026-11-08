@@ -1,5 +1,5 @@
 // Beat-synced shot planning (1 bar / 2 / 1 / 1/2 / 1/4 beat or a single long take) with direction recipes.
-import { beatLen, rng } from "./core";
+import { beatLen, beatX, beatTime, rng } from "./core";
 import type { Preset, Beats } from "./presets";
 import type { Section, Shot, Song } from "./types";
 import { sectionEnergyRanks } from "./song";
@@ -9,12 +9,16 @@ export interface PlanOpts { start?: number; end?: number; cutOverride?: Partial<
 
 /** snap t to the nearest grid point of `div` beats. */
 export function snapToBeat(song: Song, t: number, div = 0.25): number {
-  const B = beatLen(song) * div;
-  return song.phase + Math.round((t - song.phase) / B) * B;
+  return beatTime(song,Math.round(beatX(song,t)/div)*div);
 }
 
 export function cutTimes(song: Song, a: number, b: number, beats: number): number[] {
   if (beats <= 0) return [a];
+  if(song.beats&&song.beats.length>=2){
+    const out=[a],unit=Math.min(1,beats);let x=Math.round(beatX(song,a)/unit)*unit+beats;
+    for(let guard=0;guard<100000;guard++,x+=beats){const t=beatTime(song,x),next=beatTime(song,x+beats);if(t>=b-(next-t)*.5)break;if(t>a+.05)out.push(t)}
+    return out;
+  }
   const B = beatLen(song) * beats;
   const out = [a];
   let t = snapToBeat(song, a, Math.min(1, beats)) + B;

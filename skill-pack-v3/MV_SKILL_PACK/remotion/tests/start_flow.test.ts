@@ -119,6 +119,12 @@ describe("wizard paths (dry run)", () => {
     expect(args).toContain("--text-only"); expect(args).toContain("16:9");
     expect(applyInstruction({}, say(args)).cfg.combo).toEqual(["typography", "mograph"]);
   });
+  it("おまかせでも曲の申告を受け取り、演出に渡す", () => {
+    const {args,out}=wiz("\n\n\nアコースティックで切ない\n"+ENTER,song);
+    expect(out).toContain('曲のジャンルや雰囲気');
+    expect(args[args.indexOf('--song-brief')+1]).toBe('アコースティックで切ない');
+    expect(out).toContain('曲の申告: アコースティックで切ない');
+  });
   it("曲と歌詞だけ × 画像を作る -> anime stills plan, cost shown, no paid call flags", () => {
     const { args, out } = wiz("\n2\n" + ENTER, song);
     expect(out).toMatch(/2\) 画像を作る（無料：Grokアプリ等で手作業） … .*約\d+枚/);
@@ -154,7 +160,7 @@ describe("wizard paths (dry run)", () => {
     expect(out).toContain("素材が見つかりません"); expect(args).toContain("--text-only");
   });
   it("n at the confirmation stops", () => {
-    const r = spawnSync(process.execPath, [path.join(R, "node_modules", "tsx", "dist", "cli.mjs"), path.join(R, "scripts", "wizard.ts")], { cwd: R, input: "\n\n\n\nn\n", encoding: "utf8", env: { ...process.env, MVPACK_INPUT: song, MVPACK_WIZARD_DRYRUN: "1" } });
+    const r = spawnSync(process.execPath, [path.join(R, "node_modules", "tsx", "dist", "cli.mjs"), path.join(R, "scripts", "wizard.ts")], { cwd: R, input: "\n\n\n\n\nn\n", encoding: "utf8", env: { ...process.env, MVPACK_INPUT: song, MVPACK_WIZARD_DRYRUN: "1" } });
     expect(r.stdout).toContain("やめました"); expect(r.stdout).not.toContain("WIZARD_ARGS");
   });
 }, 600000);

@@ -9,6 +9,7 @@ export interface Song {
   fps: number;
   bpm: number;
   phase: number; // seconds of the first beat
+  beats?: number[]; // audio-derived or manually edited beat positions in seconds
   beatsPerBar: number;
   sections: Section[];
   energy: number[]; // normalized 0..1
@@ -114,7 +115,7 @@ export interface RenderProps {
   audio?: string;
   lines: ResolvedLine[];
   shots: Shot[];
-  beat: { bpm: number; phase: number; beatsPerBar: number };
+  beat: { bpm: number; phase: number; beatsPerBar: number; beats?: number[] };
   grade: Grade;
   shake: number; leaks: number; particles: number;
   overlayOnly: boolean;

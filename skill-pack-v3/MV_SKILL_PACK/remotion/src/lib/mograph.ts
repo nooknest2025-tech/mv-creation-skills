@@ -124,12 +124,13 @@ export interface MoSection { label: string; type: string; start: number; end: nu
 export interface MoGraphPlan { mood: Mood; sections: MoSection[]; accents: Accent[]; combo?: { id: string; modes: string[]; notes: string[]; textMode: Combo["textMode"] }; solo: boolean /* no media: graphics paint the background */ }
 export interface DirectOpts {
   genre?: string | null; combo?: string[] | null; nMedia?: number; faceRatio?: number;
+  mood?: Mood;
   density?: "slow" | "normal" | "fast"; // シーンの細かさ
   look?: Look | Record<string, Look>; palette?: string; transition?: Transition; seed?: number; accents?: boolean;
 }
 /** the pro auto director: mood x section -> look, palette, transition, accents, preferred lyric styles, cut length (with reasons). */
 export function directPro(song: Song, o: DirectOpts = {}): MoGraphPlan {
-  const mood = moodOf(o.genre, song.bpm), R = RECIPES[mood], seed = o.seed ?? 1;
+  const mood = o.mood ?? moodOf(o.genre, song.bpm), R = RECIPES[mood], seed = o.seed ?? 1;
   const secs = song.sections.length ? song.sections : [{ label: "全体", type: "other" as const, start: 0, end: song.duration }];
   const combo = o.combo?.length ? composeCombo(o.combo) : null;
   const dens = o.density === "slow" ? 2 : o.density === "fast" ? 0.5 : 1;

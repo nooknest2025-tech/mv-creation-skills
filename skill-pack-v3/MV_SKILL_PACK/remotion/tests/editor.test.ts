@@ -38,6 +38,23 @@ describe("shared editor: state preparation", () => {
     expect(st.data.assets.map((a: any) => a.src)).toEqual(["assets/image-0.svg", "assets/image-1.svg"]);
     fs.rmSync(tmp, { recursive: true, force: true });
   });
+  it("passes an automatically chosen JIZURA setting to a new editor without replacing later edits", () => {
+    const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'mv-editor-auto-'));
+    try {
+      const demo=prepareProject({demo:true,project:path.join(tmp,'source')});
+      const sample=path.join(__dirname,'..','editor','sample'),manifest=path.join(tmp,'manifest.json');
+      const jizura={enabled:true,style:'mono',background:'transparent',motion:.22,decor:.05,seed:20260922,fit:true};
+      fs.writeFileSync(manifest,JSON.stringify({audio:path.join(demo.runtime,'assets','demo.wav'),lyrics:path.join(sample,'lyrics.json'),images:[path.join(sample,'scene1.svg')],jizura,lyricStyles:[{start:.2,end:1.8,x:.5,y:.5,scale:.72,font:'noto_sans'}]}));
+      const project=path.join(tmp,'chosen'),created=prepareProject({project,manifest});
+      const file=path.join(created.runtime,'editor-state.json'),state=JSON.parse(fs.readFileSync(file,'utf8'));
+      expect(state.data.jizura).toEqual(jizura);
+      expect(state.data.lyrics[0]).toMatchObject({start:.2,end:1.8,y:.5,font:'noto_sans'});
+      state.data.jizura.enabled=false;state.data.lyrics[0].start=.3;fs.writeFileSync(file,JSON.stringify(state));
+      expect(prepareProject({project,manifest}).reused).toBe(true);
+      const saved=JSON.parse(fs.readFileSync(file,'utf8')).data;
+      expect(saved.jizura.enabled).toBe(false);expect(saved.lyrics[0].start).toBe(.3);
+    } finally {fs.rmSync(tmp,{recursive:true,force:true});}
+  });
   it("rejects missing inputs with a Japanese hint", () => {
     expect(() => prepareProject({ project: fs.mkdtempSync(path.join(os.tmpdir(), "mv-editor-")) })).toThrow(/見つかりません/);
   });

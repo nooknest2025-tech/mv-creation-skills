@@ -44,18 +44,25 @@ export function rng(...parts: (string | number)[]) {
   };
 }
 
-export interface Beat { bpm: number; phase: number; beatsPerBar: number }
+export interface Beat { bpm: number; phase: number; beatsPerBar: number; beats?: number[] }
 export const beatLen = (b: Beat) => 60 / b.bpm;
-export const beatX = (b: Beat, t: number) => (t - b.phase) / beatLen(b);
+export function beatX(b:Beat,t:number) {
+ const a=b.beats;if(!a||a.length<2)return (t-b.phase)/beatLen(b);
+ let lo=0,hi=a.length-1;while(lo<hi){const m=Math.ceil((lo+hi)/2);if(a[m]<=t)lo=m;else hi=m-1;}
+ const i=Math.max(0,Math.min(a.length-2,lo)),d=a[i+1]-a[i];return i+(t-a[i])/d;
+}
+export function beatTime(b:Beat,x:number) {
+ const a=b.beats;if(!a||a.length<2)return b.phase+x*beatLen(b);
+ const i=Math.max(0,Math.min(a.length-2,Math.floor(x)));return a[i]+(x-i)*(a[i+1]-a[i]);
+}
 /** exponential pulse right after each beat (1 at the beat, decays with `decay` seconds). */
 export function beatPulse(b: Beat, t: number, decay = 0.09, div = 1) {
-  const B = beatLen(b) * div;
-  const x = (t - b.phase) / B;
-  return Math.exp((-(x - Math.floor(x)) * B) / decay);
+  const x = beatX(b,t)/div, before=beatTime(b,Math.floor(x)*div);
+  return Math.exp(-Math.max(0,t-before)/decay);
 }
 /** beat-stepped counter: jumps forward one unit per beat with an ease-out. */
 export function beatStep(b: Beat, t: number, t0: number, ease = 0.35) {
-  const x = (t - t0) / beatLen(b);
+  const x = beatX(b,t)-beatX(b,t0);
   const k = Math.floor(x);
   return k + (1 - Math.pow(1 - Math.min(1, (x - k) / ease), 3));
 }

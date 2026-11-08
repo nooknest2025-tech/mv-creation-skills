@@ -11,7 +11,7 @@ DESTINATIONS = [PACK / '.agents' / 'skills', PACK / 'skills']
 
 def distributable(text):
     # Personal installation paths belong only to the installed workspace sources.
-    text = text.split('## この環境でのパックの場所')[0].rstrip()
+    text = re.sub(r'^## この環境でのパックの場所\s*\n(?:(?!^## ).*\n?)*', '', text, flags=re.M).rstrip()
     return text + '\n\n## パック内での実行\n\nこのファイルは配布用コピー。編集原本は管理用ワークスペースの `.agents/skills/`。制作時は、この配布パックのルートにある `AGENTS.md` を読み、コマンドは `remotion/` で実行する。本文の `input/`、`projects/`、`docs/`、`gen/` はパックのルートを基準に解決する。\n'
 
 def skill_files(folder):

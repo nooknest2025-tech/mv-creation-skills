@@ -14,6 +14,7 @@ export interface Timing {
   lyricIn?: number; // seconds added to every lyric line start (negative = earlier)
   lyricOut?: number; // seconds added to every line end
   bpm?: number; // BPM fix
+  beats?: number[]; // manually reviewed beat positions (seconds)
   beatShift?: number; // shift the beat grid (seconds)
   beatShiftBeats?: number; // shift the beat grid in beats (e.g. 0.5 = half a beat)
   sections?: Section[]; // manual section boundaries (locked)
@@ -24,6 +25,9 @@ export interface Timing {
 }
 
 export interface MVConfig {
+  lyricEngine?: 'auto' | 'standard' | 'jizura'; // explicit choice overrides auto
+  songBrief?: string; // user description, preserved even if no automatic mapping exists
+  songMood?: import('./songBrief').SongMood;
   structure?: string; // hybrid MV structure id | "auto" | "none"
   critic?: boolean; // false = skip the pro QA pass
   title?: string;

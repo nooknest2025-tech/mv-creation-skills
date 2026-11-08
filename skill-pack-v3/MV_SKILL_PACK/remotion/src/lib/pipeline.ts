@@ -9,13 +9,17 @@ import { placeText } from "./visual";
 import { review, type Review } from "./critic";
 import type { RenderProps, Song } from "./types";
 import { applyLipsync } from "./lipsync";
+import { chooseLyricEngine, AUTO_JIZURA } from "./lyricEngine";
 
 export function applyTiming(song: Song, cfg: MVConfig): Song {
   const T = cfg.timing ?? {};
   const s: Song = JSON.parse(JSON.stringify(song));
+  if(T.beats?.length&&T.beats.every((t,i,a)=>Number.isFinite(t)&&t>=0&&(i===0||t>a[i-1])))s.beats=[...T.beats];
+  else if(T.bpm || T.locked?.includes('bpm'))delete s.beats; // explicit constant BPM takes precedence
   if (T.bpm) s.bpm = T.bpm;
   if (T.beatShift) s.phase += T.beatShift;
   if (T.beatShiftBeats) s.phase += T.beatShiftBeats * (60 / s.bpm);
+  if(s.beats?.length&&(T.beatShift||T.beatShiftBeats)){const shift=(T.beatShift??0)+(T.beatShiftBeats??0)*60/s.bpm;s.beats=s.beats.map(t=>t+shift).filter(t=>t>=0);}
   if (T.sections?.length) s.sections = T.sections;
   s.lines = s.lines.map((L, i) => {
     const sec = s.sections.find((x) => L.start >= x.start && L.start < x.end);
@@ -56,7 +60,8 @@ export function analysisSummary(song: Song) {
 export function pickPreset(song: Song, cfg: MVConfig, hasVideo: boolean) {
   if (cfg.preset && cfg.preset !== "auto" && PRESETS[cfg.preset]) return { preset: PRESETS[cfg.preset], why: "指定" };
   const g = cfg.genre && GENRES[cfg.genre];
-  if (g && g.preset && PRESETS[g.preset]) return { preset: PRESETS[g.preset], why: `ジャンル「${g.ja}」から` };
+  const acousticArrangementOnly=cfg.genre==='acoustic' && !!cfg.songBrief && !/弾き語り|first\s*take|ファーストテイク|一発撮り/i.test(cfg.songBrief);
+  if (g && g.preset && PRESETS[g.preset] && !acousticArrangementOnly) return { preset: PRESETS[g.preset], why: `ジャンル「${g.ja}」から` };
   // the chosen show mode (見せ方) wins over the BPM-based guess, and the wording matches it
   if (cfg.combo?.length) {
     const pic = cfg.combo.find((m) => ["story", "dance", "lipsync", "live"].includes(m));
@@ -64,6 +69,7 @@ export function pickPreset(song: Song, cfg: MVConfig, hasVideo: boolean) {
     const id = pic ?? (cfg.combo.includes("typography") || cfg.combo.includes("lyric_motion") ? "vocaloid" : "story");
     if (PRESETS[id]) return { preset: PRESETS[id], why: `見せ方「${names}」に合わせて` };
   }
+  if(acousticArrangementOnly) return {preset:PRESETS.story,why:'アコースティックの編成を基調にする（実写の一発撮りとは未指定）'};
   const a = autoPreset({ ...analysisSummary(song), hasVideo });
   return { preset: PRESETS[a.id], why: a.why };
 }
@@ -94,8 +100,9 @@ export function buildProps(song0: Song, cfg: MVConfig, media: MediaItem[], o: { 
   const faceRatio0 = media.length ? media.filter((m) => m.face?.eyes?.length).length / media.length : 0;
   const proOn = cfg.pro !== false;
   const autoStruct = !cfg.structure || cfg.structure === "auto";
-  const comboModes = cfg.combo?.length ? cfg.combo : proOn && autoStruct && !cfg.preset?.match(/^(story|dance|lipsync|live|firsttake|vocaloid)$/) ? proposeCombo(moodOf(genre0.id, song.bpm), faceRatio0, media.length) : null;
-  const mog = proOn && !cfg.mograph?.off ? directPro(song, { genre: genre0.id, combo: comboModes, nMedia: media.length, faceRatio: faceRatio0, density: cfg.density, look: cfg.mograph?.look, palette: cfg.mograph?.palette, transition: cfg.mograph?.transition, seed: cfg.lyrics?.seed, accents: cfg.mograph?.accents }) : undefined;
+  const confirmedMood = cfg.songMood==='calm'||cfg.songMood==='melancholy' ? 'ballad' : cfg.songMood==='bright' ? 'pop' : cfg.songMood==='intense' ? 'rock' : undefined;
+  const comboModes = cfg.combo?.length ? cfg.combo : proOn && autoStruct && !cfg.preset?.match(/^(story|dance|lipsync|live|firsttake|vocaloid)$/) ? proposeCombo(confirmedMood??moodOf(genre0.id, song.bpm), faceRatio0, media.length) : null;
+  const mog = proOn && !cfg.mograph?.off ? directPro(song, { genre: genre0.id, mood:confirmedMood, combo: comboModes, nMedia: media.length, faceRatio: faceRatio0, density: cfg.density, look: cfg.mograph?.look, palette: cfg.mograph?.palette, transition: cfg.mograph?.transition, seed: cfg.lyrics?.seed, accents: cfg.mograph?.accents }) : undefined;
   const cutOverride = cfg.cutBeats ?? (mog ? Object.fromEntries(mog.sections.map((s) => [s.label, s.cutBeats])) : undefined);
   let shots = planShots(song, preset, media, { start, end, cutOverride });
   // timing: cut lead (global / per section) + per-shot manual edits
@@ -152,7 +159,7 @@ export function buildProps(song0: Song, cfg: MVConfig, media: MediaItem[], o: { 
   if (preset.recipes.loopEnding && end >= song.duration - 0.05) for (const L of lines) if (L.tEnd > end - 1) { L.tOff = Math.max(L.tOn + 0.2, end - 1 - L.exit); L.tEnd = L.tOff + L.exit; }
   const props: RenderProps & { presetWhy: string; genre?: string; genreWhy?: string; structure?: string; structureWhy?: string; sectionNotes?: string[]; review?: Review } = {
     width: asp.w * sc, height: asp.h * sc, fps, durationInFrames: Math.max(1, Math.round((end - start) * fps)), startAt: start,
-    audio: o.audio, lines, shots, beat: { bpm: song.bpm, phase: song.phase, beatsPerBar: song.beatsPerBar },
+    audio: o.audio, lines, shots, beat: { bpm: song.bpm, phase: song.phase, beatsPerBar: song.beatsPerBar, ...(song.beats?.length?{beats:song.beats}:{}) },
     grade: preset.grades.verse, shake: cfg.shake ?? preset.shake, leaks: cfg.leaks ?? preset.leaks, particles: cfg.particles ?? preset.particles,
     overlayOnly: !!o.overlayOnly, textSize: lyricCfg.size ?? preset.textSize ?? 1, textY: defY,
     safeBottom: asp.safeBottom, preset: preset.id, presetWhy: why, genre: genre.id ?? undefined, genreWhy: genre.why,
@@ -160,6 +167,10 @@ export function buildProps(song0: Song, cfg: MVConfig, media: MediaItem[], o: { 
     effectRanges: (cfg as any).camfx?.ranges, accents: (cfg as any).mograph?.accents?.length && typeof (cfg as any).mograph.accents[0] === "number" ? (cfg as any).mograph.accents : undefined,
     visuals: { ...preset.visuals, ...(cfg.visuals ?? {}) }, ...(mog ? { mograph: mog } : {}), finish: { ...preset.finish, ...(cfg.finish ?? {}) },
   };
+  const engine=chooseLyricEngine(song,cfg,media.length>0);
+  props.lyricEngine=engine;
+  props.songDuration=song.duration;
+  if(engine.engine==='jizura')props.jizura={...AUTO_JIZURA,...(cfg.songMood==='calm'||cfg.songMood==='melancholy'?{motion:.12,decor:0}:{})};
   const lb = letterboxPx(props.finish, props.width, props.height);
   if (lb > 0 && (lyricCfg as any).textY === undefined) props.textY = 1 - (lb / props.height) * 0.42; // subtitles live in the lower bar
   props.structure = st?.id; props.structureWhy = st?.why ?? "構成なし（素材を順に使う）";

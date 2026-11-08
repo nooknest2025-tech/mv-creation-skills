@@ -47,7 +47,9 @@ describe("音の安全（曲は伸びない・ずれない／動画は無音）"
     expect(entry.match(/<OffthreadVideo[^>]*>/g)!.every((t) => /\bmuted\b/.test(t) && /volume=\{0\}/.test(t))).toBe(true);
     expect(entry).not.toMatch(/playbackRate=|<Audio[^>]*(playbackRate|startFrom|trimBefore)/);
     const exp = fs.readFileSync(path.join(R, "editor/export.mjs"), "utf8");
-    expect(exp).toMatch(/muted:true/); expect(exp).toMatch(/'-map','1:a'/); expect(exp).toMatch(/String\(qa\?Math\.min\(snapshot\.data\.duration.*:snapshot\.data\.duration\)/);
+    expect(exp).toMatch(/muted:true/); expect(exp).toMatch(/muxArgs\(silent,audio/);
+    const mux = fs.readFileSync(path.join(R, "editor/export-mux.mjs"), "utf8");
+    expect(mux).toMatch(/'-map','1:a'/); expect(mux).toMatch(/'-c','copy'/);
     expect(exp).not.toMatch(/atempo|asetrate|rubberband|-af/);
     const vis = fs.readFileSync(path.join(R, "src/render/Visuals.tsx"), "utf8");
     expect(vis.match(/<OffthreadVideo[^>]*>/g)!.every((t) => /\bmuted\b/.test(t))).toBe(true);

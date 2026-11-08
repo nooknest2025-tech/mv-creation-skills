@@ -9,6 +9,6 @@ export function directional(axis:'x'|'y',leaving:boolean):StyleFn{return c=>{
  const outDuration=Math.min(.8,Math.max(.15,(c.L.end-c.L.start)*.3));
  const exit=clamp((c.t-(c.L.end-outDuration))/outDuration);
  const offset=leaving?easeOut(exit,2):1-easeOut(enter,3);
- const distance=(axis==='x'?c.W:c.H)*.42;
+ const distance=(axis==='x'?c.W:c.H)*Math.max(0,Math.min(.42,Number(c.P.distance??.42)));
  return drawH(c,lay,i=>({a:leaving?1-exit:clamp(enter*4),dx:axis==='x'?(i<c.L.chars.length/2?-1:1)*distance*offset:0,dy:axis==='y'?(i<c.L.chars.length/2?-1:1)*distance*offset:0}),{font:'lyrics',sw:.05,exit:'none'});
 }}

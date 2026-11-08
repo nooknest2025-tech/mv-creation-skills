@@ -1,5 +1,5 @@
 """Export destination helpers (folder picker, name rules, validation). Pure parts are unit-tested."""
-import os,re,sys,json,subprocess,tempfile
+import os,re,sys,json,subprocess,tempfile,posixpath
 from pathlib import Path
 BAD=re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 RESERVED={'CON','PRN','AUX','NUL',*(f'COM{i}' for i in range(1,10)),*(f'LPT{i}' for i in range(1,10))}
@@ -7,7 +7,7 @@ def safe_name(name,title='MV',n=1):
     """file name only (no folders), Windows-safe, always .mp4. Empty -> <title>_v<n>.mp4"""
     s=str(name or '').strip()
     if not s:s=f'{title or "MV"}_v{n}'
-    s=BAD.sub('_',Path(s.replace('\\','/')).name).strip(' .')
+    s=BAD.sub('_',posixpath.basename(s.replace('\\','/'))).strip(' .')
     if s.lower().endswith('.mp4'):s=s[:-4].rstrip(' .')
     if not s or s.upper() in RESERVED:s='_'+s if s else 'MV'
     return s[:120]+'.mp4'

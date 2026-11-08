@@ -27,7 +27,7 @@ def export_info():
     title=(read()['data'].get('title') or 'MV')
     return {'folder':folder,'default':str(ROOT),'suggestedName':safe_name('',title,next_version(folder,title))}
 def read():return json.loads(STATE.read_text(encoding='utf-8'))
-LYRIC_EDIT_KEYS=['motion','params','font','fill','stroke','accent','scale','x','y','position','angle','effect','effectOffset','motionDuration','entrance','departure','transitionDuration','stageStyle','boxX','boxY']
+LYRIC_EDIT_KEYS=['motion','params','font','fill','stroke','accent','opacity','scale','x','y','position','angle','effect','effectOffset','motionDuration','entrance','departure','transitionDuration','stageStyle','jizura','boxX','boxY']
 # 「ライブDVD風」 captions (mirror of src/lib/dvd.ts). dvd_sub is a lyric look; the others carry their own text (venue card, title, camera label, credits).
 DVD_FREE_TEXT=['dvd_card','dvd_title','dvd_cam','dvd_dim','dvd_roll']
 def is_caption(l,original):
@@ -183,6 +183,18 @@ def mark_edited(d):
     return d
 def validate(d):
     orig=json.loads((ROOT/'original-source.json').read_text(encoding='utf-8'))
+    bs=d.get('beats')
+    if bs is not None:
+        if not isinstance(bs,list) or len(bs)>10000 or len(bs)==1:raise ValueError('拍は２点以上か空欄にしてください')
+        if any(not isinstance(x,(int,float)) or isinstance(x,bool) or not math.isfinite(x) or x<0 or x>d.get('duration',0) for x in bs) or any(b<=a for a,b in zip(bs,bs[1:])):raise ValueError('拍の時刻は曲の範囲内で小さい順に指定してください')
+    num=lambda x:isinstance(x,(int,float)) and not isinstance(x,bool) and math.isfinite(x)
+    j=d.get('jizura')
+    if j is not None:
+        if not isinstance(j,dict) or any(k not in ['enabled','style','background','motion','decor','seed','fit'] for k in j):raise ValueError('JIZURAの設定を確認してください')
+        if not isinstance(j.get('fit',True),bool):raise ValueError('JIZURAの画面内表示設定を確認してください')
+        if not isinstance(j.get('enabled',False),bool) or j.get('style','mono') not in ['noir','crimson','caution','magenta','paper','hud','mint','specimen','transit','blueprint','rouge','mono','hrRuin','hrNightRec','hrCurse','sakura','ocean','sunset','forest','vapor','newsprint','synth80','kraft','candy','acid','sumi','gold'] or j.get('background','transparent') not in ['transparent','jizura']:raise ValueError('JIZURAの表示設定を確認してください')
+        if any(not num(j.get(k,v)) or not 0<=j.get(k,v)<=1 for k,v in [('motion',.45),('decor',.3)]):raise ValueError('JIZURAの動きと装飾は0〜1です')
+        if not isinstance(j.get('seed',20260922),int) or isinstance(j.get('seed',20260922),bool) or not 0<=j.get('seed',20260922)<=2147483647:raise ValueError('JIZURAの構成番号を確認してください')
     if any(d.get(k)!=orig.get(k) for k in ['width','height','fps']):raise ValueError('画面サイズとfpsは元の設定を保持してください')
     if d.get('audioFile')!=orig['audioFile'] or d.get('assets')!=orig['assets']:raise ValueError('元素材の指定は保持してください')
     if d.get('duration')!=orig['duration'] or not 1<=len(d['lyrics'])<=200 or not 1<=len(d['scenes'])<=300:raise ValueError('曲尺・場面数（1〜300）または歌詞グループ数を確認してください')
@@ -245,6 +257,24 @@ def validate(d):
     expected=[(key,i) for key,text in original.items() for i in range(len(text))]
     coverage=[];ids=set()
     for i,l in enumerate(d['lyrics']):
+        lj=l.get('jizura')
+        if lj is not None:
+            if not isinstance(lj,dict) or any(k not in ['layout','enter','hold','exit','treat','cam','decor','bg','trans','lineTrans','lineTransDuration','fx','fxScope','fxTime','fxStrength','screenFx','screenFxTime','screenFxDuration','screenFxStrength','recap','parts','seed','colorMode','engine'] for k in lj):raise ValueError('JIZURAの歌詞ごとの設定を確認してください')
+            if 'fxScope' in lj and (lj['fxScope']!='screen' or lj.get('fx') not in ['flash','invert','shake','defocus']):raise ValueError('この文字演出の効果は画面全体には使えません')
+            if 'lineTransDuration' in lj and (not num(lj['lineTransDuration']) or not .1<=lj['lineTransDuration']<=2):raise ValueError('歌詞間の切り替え時間は0.1〜2秒です')
+            if 'engine' in lj and lj['engine']!='standard':raise ValueError('歌詞の演出方式を確認してください')
+            if 'seed' in lj and (not isinstance(lj['seed'],int) or isinstance(lj['seed'],bool) or not 0<=lj['seed']<=4294967295):raise ValueError('JIZURAの行ごとの構成番号を確認してください')
+            if 'colorMode' in lj and lj['colorMode'] not in ['editor','style']:raise ValueError('JIZURAの色設定を確認してください')
+            for k in ['layout','enter','hold','exit','treat','cam','bg','trans','lineTrans','fx']:
+                if k in lj and (not isinstance(lj[k],str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,64}',lj[k])):raise ValueError('JIZURAの歌詞ごとの設定を確認してください')
+            if 'fxTime' in lj and (not num(lj['fxTime']) or not 0<=lj['fxTime']<=l.get('end',0)-l.get('start',0)):raise ValueError('JIZURAの効果時刻を確認してください')
+            if 'fxStrength' in lj and (not num(lj['fxStrength']) or not .1<=lj['fxStrength']<=2):raise ValueError('JIZURAの効果の強さを確認してください')
+            if 'screenFx' in lj and lj['screenFx'] not in ['flash','invert','blur','shake']:raise ValueError('画面効果を確認してください')
+            if 'screenFxTime' in lj and (not num(lj['screenFxTime']) or not 0<=lj['screenFxTime']<l.get('end',0)-l.get('start',0)):raise ValueError('画面効果の開始を確認してください')
+            if 'screenFxDuration' in lj and (not num(lj['screenFxDuration']) or not .05<=lj['screenFxDuration']<=3):raise ValueError('画面効果の長さを確認してください')
+            if 'screenFxStrength' in lj and (not num(lj['screenFxStrength']) or not .1<=lj['screenFxStrength']<=2):raise ValueError('画面効果の強さを確認してください')
+            if 'decor' in lj and (not isinstance(lj['decor'],list) or len(lj['decor'])>1 or any(not isinstance(v,str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,64}',v) for v in lj['decor'])):raise ValueError('JIZURAの装飾を確認してください')
+            if 'recap' in lj and lj['recap'] not in ['auto','on','off']:raise ValueError('全文再掲の設定を確認してください')
         if not re.fullmatch(r'[A-Za-z0-9_-]{1,64}',l['id']) or l['id'] in ids:raise ValueError('歌詞IDを確認してください')
         ids.add(l['id']);caption=is_caption(l,original);check_caption_fields(l,caption)
         source=[] if caption else l.get('sourceParts',[{'line':l['id'],'start':0,'end':len(l['text'])}]);text=l['text'] if caption else ''
@@ -256,11 +286,22 @@ def validate(d):
         for k in ['start','end','scale','y','motionDuration']:
             if not finite(l[k]):raise ValueError('数値を確認してください')
         if not 0<=l['start']<l['end']<=d['duration']-(0 if caption else 1):raise ValueError('歌詞の開始・終了を曲内に収めてください（最後の1秒は文字なし）')
+        if lj is not None and 'parts' in lj:
+            parts=lj['parts'];last=0
+            if not isinstance(parts,list) or not 1<=len(parts)<=24:raise ValueError('JIZURAの表示パートは1〜24個です')
+            for part in parts:
+                if not isinstance(part,dict) or any(k not in ['text','start','end','layout','enter','hold','exit'] for k in part):raise ValueError('JIZURAの表示パートを確認してください')
+                if not isinstance(part.get('text'),str) or not part['text'].strip() or len(part['text'])>500:raise ValueError('表示パートの文字を確認してください')
+                if not finite(part.get('start')) or not finite(part.get('end')) or part['start']<0 or part['start']<last-.001 or part['end']<=part['start'] or part['end']>l['end']-l['start']+.001:raise ValueError('表示パートは行の範囲内で、重ならない順に入力してください')
+                for k in ['layout','enter','hold','exit']:
+                    if k in part and (not isinstance(part[k],str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,64}',part[k])):raise ValueError('表示パートの演出設定を確認してください')
+                last=part['end']
         # Overlapping lines are supported by the shared scene renderer.
         if l['motion'] not in catalog or not .3<=l['scale']<=3 or not .05<=l['y']<=.95 or not (finite(l.get('x',.5)) and .02<=l.get('x',.5)<=.98) or not .1<=l['motionDuration']<=3:raise ValueError('文字設定の範囲を確認してください')
         fonts=json.loads((EDITOR/'font-options.json').read_text(encoding='utf-8'))
         if l.get('font','noto_serif') not in [f['id'] for f in fonts]:raise ValueError('利用できる書体を選択してください')
         if not finite(l.get('angle',0)) or not -180<=l.get('angle',0)<=180:raise ValueError('角度は-180〜180度です')
+        if not num(l.get('opacity',1)) or not 0<=l.get('opacity',1)<=1:raise ValueError('文字の不透明度は0〜1です')
         if l.get('position','manual') not in ['manual','tl','tc','tr','ml','mc','mr','bl','bc','br']:raise ValueError('配置を確認してください')
         if l.get('effect','none') not in ['none','double','shadow','glow','rgb','outline'] or not finite(l.get('effectOffset',6)) or not 1<=l.get('effectOffset',6)<=24:raise ValueError('文字効果を確認してください')
         for key in ['entrance','departure']:
@@ -408,5 +449,3 @@ for port in range(args.port,args.port+30):
 if server is None:raise SystemExit(f'空きポートがありません（{args.port}〜{args.port+29}）。--port で別の番号を指定してください')
 print(f'http://127.0.0.1:{server.server_address[1]}/editor.html',flush=True)
 server.serve_forever()
-
-

@@ -15,6 +15,8 @@ import { TACHIE_MATERIAL_HELP, parsePick, semiQuestions, semiToPlan, type SemiCt
 import { SHOW_MODES, composeCombo } from "../src/lib/mograph";
 import { planStills } from "../src/lib/stills";
 import { animEstimate, estimateCutsFor } from "./wizard_lib";
+import { parseSongBrief,SONG_MOOD_JA } from "../src/lib/songBrief";
+import { GENRES,autoGenre } from "../src/lib/genres";
 import { ANIM_METHODS, ANIM_SCOPES, animArgs, type AnimMethod, type AnimScope } from "../src/lib/startFlow";
 import { Q1_OPTS, Q3_DEFAULT, Q3_OPTS, TEXT_STRUCTURES, allowedModes, allowedPresets, checkQ1, confirmLines, detectQ1, hasPictures, materialLine, q2Options, q2Plan, type Material, type Q1Key, type Q2Key, type Q3Key } from "../src/lib/startFlow";
 
@@ -113,6 +115,20 @@ async function main() {
   let say: string[] = [...base.say], why = base.why;
   const extra: string[] = [];
   const flowCtx = { q2, m };
+
+  if(q3==='auto') {
+    log('\n🎵 曲のジャンルや雰囲気を教えてください。例: アコースティックで切ない、明るいポップ、静かなバラード');
+    if(song) { const candidate=autoGenre(song);log(`  仮の解析: BPM ${Math.round(song.bpm)}${candidate.id?` / ジャンル候補 ${GENRES[candidate.id].ja}`:''}（未確認。歌詞・感情を聴いて判断した結果ではありません）`); }
+    const brief=await q('  曲について [Enter=分からない・未確認で進む]: ');
+    if(brief) {
+      const parsed=parseSongBrief(brief);
+      args.push('--song-brief',brief);
+      extra.push(`曲の申告: ${brief}`);
+      if(parsed.genre)extra.push(`ジャンルの演出候補: ${parsed.genre==='acoustic'&&!/弾き語り|first\s*take|ファーストテイク|一発撮り/i.test(brief)?'アコースティック':GENRES[parsed.genre].ja}`);
+      if(parsed.mood)extra.push(`曲調に基づく演出候補: ${SONG_MOOD_JA[parsed.mood]}`);
+      for(const w of parsed.unresolved)extra.push(`未確認: ${w}`);
+    } else extra.push('ジャンル・曲調: 未確認（音からの推定は仮）');
+  }
 
   if (q3 === "semi") {
     let ctx: SemiCtx = { nImages: hasPictures(q2) ? m.nImages + m.nVideos : 0, hasChar: chars.length > 0, flow: flowCtx };

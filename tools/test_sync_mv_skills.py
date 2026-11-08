@@ -41,6 +41,15 @@ class SyncTests(unittest.TestCase):
         self.assertEqual(self.run_sync('--write'), 0)
         self.assertEqual(self.run_sync('--check'), 0)
 
+    def test_preserves_sections_after_local_paths(self):
+        skill = self.skill/'SKILL.md'
+        skill.write_text(skill.read_text(encoding='utf8') + '\n## 演出の設定\nKeep this section.\n', encoding='utf8')
+        self.assertEqual(self.run_sync('--write'), 0)
+        for dest in self.dest:
+            content = (dest/'mv-demo/SKILL.md').read_text(encoding='utf8')
+            self.assertIn('Keep this section.', content)
+            self.assertNotIn('C:/Users/private', content)
+
     def test_missing_relative_reference_is_rejected(self):
         (self.skill/'references/demo.md').write_text('[missing](missing.md)')
         self.assertEqual(self.run_sync('--check'), 1)

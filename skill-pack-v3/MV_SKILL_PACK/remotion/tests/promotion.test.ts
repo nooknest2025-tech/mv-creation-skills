@@ -175,7 +175,8 @@ describe("parts animation (パーツアニメ)", () => {
     const L = JSON.parse(fs.readFileSync(path.join(d, "demo", "layers.json"), "utf8")); expect(L.layers.length).toBeGreaterThanOrEqual(10);
     // flatten on white, then split
     const flat = path.join(d, "flat.png");
-    expect(spawnSync(py!, ["-c", `from PIL import Image\nimport json,os\nd='${path.join(d, "demo")}'\nL=json.load(open(os.path.join(d,'layers.json')))\nim=Image.new('RGBA',tuple(L['size']),(255,255,255,255))\nfor l in L['layers']:\n  n=l['name']\n  if '_' in n: continue\n  im.alpha_composite(Image.open(os.path.join(d,l['file'])))\nim.convert('RGB').save('${flat}')`]).status).toBe(0);
+    const flatten = spawnSync(py!, ["-c", `from PIL import Image\nimport json,os\nd=${JSON.stringify(path.join(d, "demo"))}\nL=json.load(open(os.path.join(d,'layers.json'),encoding='utf-8'))\nim=Image.new('RGBA',tuple(L['size']),(255,255,255,255))\nfor l in L['layers']:\n  n=l['name']\n  if '_' in n: continue\n  im.alpha_composite(Image.open(os.path.join(d,l['file'])))\nim.convert('RGB').save(${JSON.stringify(flat)})`], {encoding:"utf8"});
+    expect(flatten.status, flatten.stderr).toBe(0);
     const r = spawnSync(py!, [script, "split", flat, "--out", path.join(d, "split"), "--no-rembg"], { encoding: "utf8" });
     expect(r.status, r.stderr).toBe(0);
     const S = JSON.parse(fs.readFileSync(path.join(d, "split", "layers.json"), "utf8"));

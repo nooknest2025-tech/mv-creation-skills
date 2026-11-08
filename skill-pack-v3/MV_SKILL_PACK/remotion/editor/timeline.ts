@@ -2,7 +2,8 @@ import { clipPlan, clipSourceTime, segmentsOf } from "../src/lib/clipspeed";
 // Mouse timeline helpers for the editor (pure, unit-tested). All edits go to editor-state data only.
 export const MIN_SCENE = 0.1, MIN_LYRIC = 0.1;
 /** nearest beat (or bar with bars=true) when within `tol` seconds; else t. */
-export function snapTime(t: number, bpm: number, phase = 0, tol = 0.12, bars = false): number {
+export function snapTime(t: number, bpm: number, phase = 0, tol = 0.12, bars = false, beats?:number[]): number {
+  if(beats&&beats.length>=2){let lo=0,hi=beats.length-1;while(lo<hi){const m=(lo+hi)>>1;if(beats[m]<t)lo=m+1;else hi=m;}const candidates=(bars?[Math.ceil(lo/4)*4,Math.floor(lo/4)*4,Math.floor((lo-1)/4)*4]:[lo,lo-1]).filter(i=>i>=0&&i<beats.length);let best=t,dist=tol;for(const i of candidates){const d=Math.abs(beats[i]-t);if(d<=dist){dist=d;best=beats[i];}}return +best.toFixed(3);}
   const B = (60 / (bpm || 120)) * (bars ? 4 : 1); const k = Math.round((t - phase) / B), s = phase + k * B;
   return Math.abs(s - t) <= tol ? +s.toFixed(3) : t;
 }

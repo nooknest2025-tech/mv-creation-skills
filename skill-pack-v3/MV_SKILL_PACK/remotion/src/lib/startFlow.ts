@@ -49,7 +49,7 @@ export function q2Options(q1: Q1Key, m: Material, stillsCost?: string, animateCo
   return keys.map((k) => o[k]);
 }
 export const Q3_OPTS: Opt<Q3Key>[] = [
-  { key: "auto", label: "おまかせ", why: "ここまでの答えで、構成・歌詞の動き・書体・色をプロの組み合わせで自動で決める（追加の質問なし）" },
+  { key: "auto", label: "おまかせ", why: "ジャンルや曲調を確認し、構成・歌詞の動き・書体・色を自動で決める（未確認でも進める）" },
   { key: "semi", label: "半自動", why: "見せ方・ジャンル・シーンの細かさ・歌詞の雰囲気などを、おすすめつきで数問だけ" },
   { key: "kodawari", label: "こだわり", why: "決めることごとに、おすすめ2〜3案を理由つきで比べて選ぶ" },
 ];
