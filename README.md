@@ -1,6 +1,6 @@
 # MV制作パック（Codex など AI エージェント用・日本語）
 
-バージョン: 2.7.1（変更点は [CHANGELOG.md](CHANGELOG.md)）
+バージョン: 2.7.2（変更点は [CHANGELOG.md](CHANGELOG.md)）
 
 v2.6.2〜2.7.1の改善を公開用スキルへ反映済みです。曲固有の演出を発想・比較・推敲する手順、JIZURAの時刻・分割・一括適用の連動、動画の部分速度変更と素材IN追従、上段映像の直接移動・比率固定・差替えを案内します。詳しくは [編集画面の使い方](skill-pack-v3/MV_SKILL_PACK/docs/EDITOR_ja.md)。
 
