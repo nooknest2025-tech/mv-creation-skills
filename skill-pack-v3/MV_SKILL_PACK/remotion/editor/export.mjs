@@ -5,7 +5,8 @@ import fs from 'node:fs';import path from 'node:path';import {spawnSync} from 'n
 const output=path.resolve(process.argv[3]);
 const {snapshot,runtime,ff,binariesDirectory,browserExecutable,chromiumOptions,serveUrl,composition,inputProps}=await prepareRender(process.argv[2]);
 const silent=output.replace(/\.mp4$/,'.silent.mp4'),qa=snapshot.qaFrames;
-await renderMedia({serveUrl,composition,inputProps,browserExecutable,chromiumOptions,binariesDirectory,outputLocation:silent,muted:true,codec:'h264',pixelFormat:'yuv420p',crf:20,concurrency:Number(process.env.MVPACK_CONCURRENCY||2),frameRange:qa?[0,qa-1]:undefined,scale:Number(process.env.MVPACK_SCALE||1),onProgress:p=>console.log(Math.min(98,Math.round(p.progress*98))),logLevel:'error'});
+let lastProgress=-1;
+await renderMedia({serveUrl,composition,inputProps,browserExecutable,chromiumOptions,binariesDirectory,outputLocation:silent,muted:true,codec:'h264',pixelFormat:'yuv420p',crf:20,concurrency:Number(process.env.MVPACK_CONCURRENCY||2),offthreadVideoCacheSizeInBytes:256*1024**2,frameRange:qa?[0,qa-1]:undefined,scale:Number(process.env.MVPACK_SCALE||1),onProgress:p=>{const n=Math.min(98,Math.round(p.progress*98));if(n!==lastProgress){console.log(n);lastProgress=n}},logLevel:'error'});
 const audio=path.resolve(runtime,snapshot.data.audioFile);
 if(!audio.startsWith(runtime+path.sep))throw Error('Audio must be inside project editor output');
 const args=muxArgs(silent,audio,qa?Math.min(snapshot.data.duration,qa/snapshot.data.fps):snapshot.data.duration,output);

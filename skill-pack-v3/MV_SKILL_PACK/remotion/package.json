@@ -1,6 +1,6 @@
 {
   "name": "mvpack-remotion",
-  "version": "2.7.1",
+  "version": "2.7.2",
   "private": true,
   "description": "MV skill pack - Remotion lyric motion system (32 styles)",
   "type": "module",
@@ -56,6 +56,7 @@
   "dependencies": {
     "@remotion/bundler": "4.0.538",
     "@remotion/cli": "4.0.538",
+    "@remotion/media": "4.0.538",
     "@remotion/media-utils": "4.0.538",
     "@remotion/renderer": "4.0.538",
     "esbuild": "0.28.1",
