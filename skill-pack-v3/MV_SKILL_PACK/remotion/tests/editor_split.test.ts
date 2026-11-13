@@ -31,9 +31,9 @@ describe("ここで切る（シーン）", () => {
     expect(mergeSceneWithNext(sc, 0, dur, V)).toBeNull(); expect(sc.length).toBe(2);
     expect(sc[0].segments).toEqual([{ at: 0, speed: 0.5 }, { at: 4, speed: 1 }]); same(before, sc);
   });
-  it("merge of different materials just extends the first; last scene cannot merge", () => {
+  it("merge refuses different materials without deleting either; last scene cannot merge", () => {
     const sc: any[] = [{ id: "A", start: 0, asset: 0 }, { id: "B", start: 3, asset: 1 }];
-    expect(mergeSceneWithNext(sc, 1, D)).toMatch(/最後/); mergeSceneWithNext(sc, 0, D); expect(sc).toEqual([{ id: "A", start: 0, asset: 0 }]);
+    const before=structuredClone(sc);expect(mergeSceneWithNext(sc, 1, D)).toMatch(/最後/);expect(mergeSceneWithNext(sc, 0, D)).toMatch(/素材/);expect(sc).toEqual(before);
   });
 });
 

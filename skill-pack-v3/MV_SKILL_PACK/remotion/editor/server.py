@@ -197,7 +197,7 @@ def validate(d):
         if not isinstance(j.get('seed',20260922),int) or isinstance(j.get('seed',20260922),bool) or not 0<=j.get('seed',20260922)<=2147483647:raise ValueError('JIZURAの構成番号を確認してください')
     if any(d.get(k)!=orig.get(k) for k in ['width','height','fps']):raise ValueError('画面サイズとfpsは元の設定を保持してください')
     if d.get('audioFile')!=orig['audioFile'] or d.get('assets')!=orig['assets']:raise ValueError('元素材の指定は保持してください')
-    if d.get('duration')!=orig['duration'] or not 1<=len(d['lyrics'])<=200 or not 1<=len(d['scenes'])<=300:raise ValueError('曲尺・場面数（1〜300）または歌詞グループ数を確認してください')
+    if d.get('duration')!=orig['duration'] or not 0<=len(d['lyrics'])<=200 or not 1<=len(d['scenes'])<=300:raise ValueError('曲尺・場面数（1〜300）または歌詞グループ数を確認してください')
     if d.get('mograph')!=orig.get('mograph') or d.get('mographShots')!=orig.get('mographShots'):raise ValueError('元の図形レイヤーの設計は保持してください（変更は mographEdit / 場面の mograph に）')
     check_mo(d.get('mographEdit'))
     for s in d['scenes']:check_mo(s.get('mograph'))
@@ -210,7 +210,7 @@ def validate(d):
     if not isinstance(overlays,list) or len(overlays)>100:raise ValueError('重ねる映像は100個までです')
     overlay_ids=set()
     for o in overlays:
-        if not isinstance(o,dict) or set(o)!={'id','asset','start','end','from','x','y','w','h','opacity'}:raise ValueError('重ねる映像の設定を確認してください')
+        if not isinstance(o,dict) or (not {'id','asset','start','end','from','x','y','w','h','opacity'}.issubset(o) or set(o)-{'id','asset','start','end','from','x','y','w','h','opacity','rate'}):raise ValueError('重ねる映像の設定を確認してください')
         oid=o.get('id');ai=o.get('asset')
         if not isinstance(oid,str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,64}',oid) or oid in overlay_ids:raise ValueError('重ねる映像のIDを確認してください')
         overlay_ids.add(oid)
@@ -220,10 +220,20 @@ def validate(d):
         num=lambda v:isinstance(v,(int,float)) and not isinstance(v,bool) and math.isfinite(v)
         if any(not num(o.get(k)) for k in ['start','end','from','x','y','w','h','opacity']):raise ValueError('重ねる映像の数値を確認してください')
         if not (0<=o['start']<o['end']<=d['duration'] and o['end']-o['start']>=.049 and o['from']>=0):raise ValueError('重ねる映像の開始・終了を確認してください')
-        if not (0<=o['x']<=1 and 0<=o['y']<=1 and .05<=o['w']<=1 and .05<=o['h']<=1 and o['x']+o['w']<=1.000001 and o['y']+o['h']<=1.000001 and 0<=o['opacity']<=1):raise ValueError('重ねる映像の位置・大きさ・透明度を確認してください')
+        if not (-1<=o['x']<=1 and -1<=o['y']<=1 and .05<=o['w']<=2 and .05<=o['h']<=2 and 0<=o['opacity']<=1):raise ValueError('重ねる映像の位置・大きさ・透明度を確認してください')
+        if 'rate' in o and (not num(o['rate']) or not .1<=o['rate']<=4):raise ValueError('上段の速さは0.1〜4倍です')
         clip=a.get('duration') if isinstance(a,dict) else None
         if num(clip) and clip>0 and o['from']>=clip:raise ValueError('重ねる動画の開始位置は動画の長さ未満です')
     for i,s in enumerate(d['scenes']):
+        clock=s.get('motionClock')
+        if clock is not None:
+            if not isinstance(clock,dict) or set(clock)!={'offset','duration','index','id'} or not finite(clock['offset']) or abs(clock['offset'])>36000 or not finite(clock['duration']) or not .001<=clock['duration']<=36000 or not isinstance(clock['index'],int) or not 0<=clock['index']<=10000 or not isinstance(clock['id'],str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,64}',clock['id']):raise ValueError('保持した映像の動きを確認してください')
+        playback=s.get('playback')
+        if playback is not None:
+            if not isinstance(playback,dict) or set(playback)!={'knots','inPoint','span','mode','scale','offset','signature'}:raise ValueError('保持した速度カーブを確認してください')
+            knots=playback['knots']
+            if not isinstance(knots,list) or not 2<=len(knots)<=64 or any(not isinstance(k,list) or len(k)!=2 or not all(finite(v) for v in k) or not 0<=k[0]<=36000 or not .1<=k[1]<=4 for k in knots) or knots[0][0]!=0 or any(knots[k][0]<knots[k-1][0] for k in range(1,len(knots))):raise ValueError('速度カーブの点を確認してください')
+            if playback['mode'] not in ['play','hold','loop'] or not finite(playback['inPoint']) or abs(playback['inPoint'])>36000 or not finite(playback['offset']) or abs(playback['offset'])>36000 or not finite(playback['scale']) or not .00001<=playback['scale']<=100 or (playback['span'] is not None and (not finite(playback['span']) or playback['span']<=0)) or not isinstance(playback['signature'],str) or len(playback['signature'])>4096:raise ValueError('速度カーブの範囲を確認してください')
         if not finite(s['start']) or not 0<=s['start']<d['duration'] or s['asset'] not in range(len(orig['assets'])):raise ValueError('場面の設定を確認してください')
         if i==0 and s['start']!=0:raise ValueError('最初の場面は0秒からです')
         if i and s['start']<=d['scenes'][i-1]['start']+.05:raise ValueError('切替秒は前の場面より後にしてください')

@@ -38,7 +38,7 @@ export interface LyricStyleConfig {
   variety?: number; // 0 = 統一感重視 .. 1 = 変化多め (default 0.5)
   vertOk?: boolean; // false = no room for vertical text
   fitVisual?: boolean; // false = ignore picture analysis for colour
-  pro?: boolean; // pro director: prefer pro_* styles, avoid cheap defaults (default true via pipeline)
+  pro?: boolean; // enables the pro motion plan; does not add a style-family quality bonus
   prefer?: Record<string, string[]>; // section label/type -> preferred styles (from the motion-graphics plan)
 }
 export interface ResolvedLine extends LyricLine {

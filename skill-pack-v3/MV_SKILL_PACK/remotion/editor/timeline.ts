@@ -1,4 +1,6 @@
-import { clipPlan, clipSourceTime, segmentsOf } from "../src/lib/clipspeed";
+import { clipPlan, clipSourceTime, segmentsOf, keepPlayback, hasPlayback, localKnots, type ClipPlan } from "../src/lib/clipspeed";
+import {retimeJizura} from './jizura-parts';
+import {keepSceneClocks} from '../src/lib/sceneClock';
 // Mouse timeline helpers for the editor (pure, unit-tested). All edits go to editor-state data only.
 export const MIN_SCENE = 0.1, MIN_LYRIC = 0.1;
 /** nearest beat (or bar with bars=true) when within `tol` seconds; else t. */
@@ -26,9 +28,12 @@ export function pinDefault(saved: string | null, viewportH: number): boolean {
   void viewportH; return saved === "1";
 }
 /** drag a lyric's start or end edge (stays inside 0..duration-1 and keeps >= MIN_LYRIC). */
-export function moveLyricEdge(l: { start: number; end: number }, edge: "start" | "end", t: number, duration: number): number {
+export function moveLyricEdge(l: { start: number; end: number; jizura?: any }, edge: "start" | "end", t: number, duration: number): number {
+  if(!Number.isFinite(t))return l[edge];
+  const previousDuration=l.end-l.start;
   if (edge === "start") l.start = +Math.max(0, Math.min(l.end - MIN_LYRIC, t)).toFixed(3);
   else l.end = +Math.min(duration - 1, Math.max(l.start + MIN_LYRIC, t)).toFixed(3);
+  retimeJizura(l,previousDuration);
   return l[edge];
 }
 /** drag a whole lyric block (keeps its length). */
@@ -45,7 +50,7 @@ export const fmt = (t: number) => `${Math.floor(t / 60)}:${(t % 60).toFixed(2).p
 
 /** when a scene's material is swapped: drop the old clip trim/speed. A video starts in 「自動で合わせる」(fit) mode. */
 export function resetClipForAsset(s: any, isVideo: boolean) {
-  for (const k of ["clipFrom", "clipTo", "speed", "segments", "solve", "ease", "tail", "fit", "clipChain"]) delete s[k];
+  for (const k of ["clipFrom", "clipTo", "speed", "segments", "solve", "ease", "tail", "fit", "clipChain", "playback", "motionClock"]) delete s[k];
   if (isVideo) s.fit = true; return s;
 }
 export const ADD_ASSET_EXT = /\.(png|jpe?g|webp|gif|svg|mp4|mov|m4v|webm)$/i;
@@ -79,7 +84,7 @@ function bakedSegs(s: any, dur: number, clipDur?: number) {
   return { p, segs };
 }
 const applySegs = (o: any, segs: { at: number; speed: number }[]) => {
-  for (const k of ["fit", "solve", "segments", "speed", "ease"]) delete o[k];
+  for (const k of ["fit", "solve", "segments", "speed", "ease", "playback"]) delete o[k];
   if (segs.length > 1) { o.segments = segs.map((g) => ({ at: r3(g.at), speed: g.speed })); o.speed = segs[0].speed; } else o.speed = segs[0].speed;
 };
 /** where the clip is when this scene ends (= the next half's IN when chained). */
@@ -89,19 +94,23 @@ let splitSeq = 0;
  *  the 2nd half continues exactly where the 1st ends (clipChain) so the cut is seamless. */
 export function splitSceneAt(sc: any[], i: number, t: number, duration: number, opt: { video?: boolean; clipDur?: number } = {}, min = MIN_SPLIT): string | null {
   const s = sc[i]; if (!s) return "切るシーンがありません";
+  t=r3(t);
   const s0 = s.start, e = sceneEnd(sc, i, duration), d1 = t - s0, d2 = e - t;
   if (d1 < min || d2 < min) return `短すぎるため切れません（切ったあと両方が${min}秒以上必要です）`;
-  const a = s, b: any = structuredClone(s);
+  if(i>0&&d1<(s.transition??0))return '切り替えの途中は映像を保って分割できません。フェード終了後で切ってください';
+  keepSceneClocks(sc,duration);
+  const a = s, b: any = structuredClone(s);b.motionClock.offset+=d1;
   const ids = new Set(sc.map((x) => x.id)); let id; do id = `${s.id}-${++splitSeq}`; while (ids.has(id)); b.id = id; b.start = r3(t); b.transition = 0;
   if (opt.video) {
     const D = e - s0, { p, segs } = bakedSegs(s, D, opt.clipDur);
     if (p.mode === "play") {
       const at = r3(clipSourceTime(p, d1)), active = [...segs].reverse().find((g) => g.at <= d1)!.speed;
-      applySegs(a, segs.filter((g) => g.at < d1)); a.clipFrom = r3(p.inPoint); delete a.clipTo;
+      applySegs(a, segs.filter((g) => g.at < d1)); a.clipFrom = r3(clipSourceTime(p,0)); delete a.clipTo;
       applySegs(b, [{ at: 0, speed: active }, ...segs.filter((g) => g.at > d1).map((g) => ({ at: g.at - d1, speed: g.speed }))]);
       b.clipFrom = at; b.clipChain = true; if (s.clipTo === undefined) delete b.clipTo;
       if (b.clipTo !== undefined && b.clipTo <= at + 0.05) delete b.clipTo;
-    } else { const L = opt.clipDur ?? Infinity; b.clipFrom = r3(Math.min(clipSourceTime(p, d1), L - 0.06)); delete b.clipChain; }
+      keepPlayback(a,p);keepPlayback(b,p,d1);
+    } else { const L = opt.clipDur ?? Infinity; b.clipFrom = r3(Math.min(clipSourceTime(p, d1), L - 0.06)); delete b.clipChain;delete a.segments;delete b.segments;delete a.solve;delete b.solve;keepPlayback(a,p);keepPlayback(b,p,d1); }
   }
   sc.splice(i + 1, 0, b); return null;
 }
@@ -110,24 +119,36 @@ export function resolveClipChains(sc: any[], duration: number, isVideo: (s: any)
   for (let i = 1; i < sc.length; i++) {
     const s = sc[i], prev = sc[i - 1]; if (!s.clipChain) continue;
     if (prev.asset !== s.asset || !isVideo(s)) { delete s.clipChain; continue; }
-    const L = clipDurOf(s), at = clipEndTime(prev, s.start - prev.start, L);
+    const L = clipDurOf(s),exactAt=clipSourceTime(clipPlan(prev,s.start-prev.start,L),s.start-prev.start),at=r3(exactAt);
+    const retained=hasPlayback(s)?clipPlan(s,(sc[i+1]?.start??duration)-s.start,L):null;
     s.clipFrom = L !== undefined ? Math.min(at, r3(L - 0.06)) : at;
     if (s.clipTo !== undefined && s.clipTo <= s.clipFrom + 0.05) delete s.clipTo;
+    if(retained){const shift=exactAt-clipSourceTime(retained,0);retained.inPoint+=shift;keepPlayback(s,retained)}
   }
 }
 /** merge scene i with i+1. Two halves of the same clip become ONE scene with speed segments (looks identical). */
 export function mergeSceneWithNext(sc: any[], i: number, duration: number, opt: { video?: boolean; clipDur?: number } = {}): string | null {
-  const a = sc[i], b = sc[i + 1]; if (!a || !b) return "最後のシーンは次とつなげられません";
-  if (opt.video && a.asset === b.asset) {
-    const da = b.start - a.start, db = sceneEnd(sc, i + 1, duration) - b.start;
-    const A = bakedSegs(a, da, opt.clipDur), B = bakedSegs(b, db, opt.clipDur), end = clipEndTime(a, da, opt.clipDur);
-    const seamless = A.p.mode === "play" && B.p.mode === "play" && Math.abs(B.p.inPoint - end) < 0.06;
-    const segs = [...A.segs, ...B.segs.map((g) => ({ at: g.at + da, speed: g.speed }))].filter((g, k, arr) => k === 0 || g.speed !== arr[k - 1].speed);
-    if (seamless && segs.length <= 8) {
-      applySegs(a, segs); a.clipFrom = r3(A.p.inPoint); if (b.clipTo !== undefined) a.clipTo = b.clipTo; else delete a.clipTo; delete a.clipChain;
-    }
+  const original=sc[i],next=sc[i+1];if(!original||!next)return '最後のシーンは次とつなげられません';
+  if(original.asset!==next.asset)return '素材が異なるため結合できません。後半の映像を残したまま編集してください';
+  const keys=['zoom','x','y','camera','cameraMove','cameraStrength','cameraSync','effects','comp','stage','mograph'];
+  if(keys.some(k=>JSON.stringify(original[k])!==JSON.stringify(next[k]))||(next.transition??0)>0)return '見た目や切り替えが異なるため、映像を保って結合できません';
+  const work=structuredClone(sc);keepSceneClocks(work,duration);const a=work[i],b=work[i+1],da=b.start-a.start,db=sceneEnd(work,i+1,duration)-b.start;
+  const ca=a.motionClock,cb=b.motionClock,staticMotion=(a.cameraMove==='none'||a.camera===false)&&!a.comp&&!a.stage&&!a.effects?.length;
+  if(!staticMotion&&(ca.id!==cb.id||ca.index!==cb.index||Math.abs(ca.duration-cb.duration)>1e-6||Math.abs(cb.offset-ca.offset-da)>1e-6))return '動きの進行が異なるため結合できません。二つのシーンを保持します';
+  if(opt.video){
+    const A=bakedSegs(a,da,opt.clipDur),B=bakedSegs(b,db,opt.clipDur),start=clipSourceTime(A.p,0),end=clipSourceTime(A.p,da);
+    if(A.p.mode!=='play'||B.p.mode!=='play'||Math.abs(clipSourceTime(B.p,0)-end)>.001)return '動画の使用区間が連続していないため結合できません。後半の映像を保持します';
+    const segs=[...A.segs,...B.segs.map(g=>({at:g.at+da,speed:g.speed}))].filter((g,k,arr)=>k===0||g.speed!==arr[k-1].speed);
+    if(segs.length>8)return '速度の区間が8個を超えるため結合できません';
+    const knots=[...localKnots(A.p,da),...localKnots(B.p,db).map(([t,v])=>[t+da,v] as [number,number])];
+    // Remove redundant points without erasing a step (two different speeds at the same time).
+    for(let k=knots.length-1;k>0;k--)if(knots[k][0]===knots[k-1][0]&&knots[k][1]===knots[k-1][1])knots.splice(k,1);
+    for(let k=knots.length-2;k>0;k--){const a=knots[k-1],b=knots[k],c=knots[k+1];if(b[0]>a[0]&&c[0]>b[0]&&Math.abs((b[1]-a[1])*(c[0]-b[0])-(c[1]-b[1])*(b[0]-a[0]))<1e-10)knots.splice(k,1)}
+    if(knots.length>64)return '速度変化が複雑なため結合できません。二つのシーンを保持します';
+    applySegs(a,segs);a.clipFrom=start;if(b.clipTo===undefined)delete a.clipTo;else a.clipTo=b.clipTo;delete a.clipChain;
+    const p:ClipPlan={inPoint:start,span:Number.isFinite(opt.clipDur)?opt.clipDur!-start:Infinity,mode:'play',knots,scale:1,speeds:segs.map(g=>g.speed),rate:0};keepPlayback(a,p);
   }
-  sc.splice(i + 1, 1); if (sc[i + 1]?.clipChain && sc[i + 1].asset !== a.asset) delete sc[i + 1].clipChain; return null;
+  work.splice(i+1,1);sc.splice(0,sc.length,...work);return null;
 }
 
 /* ---- one-step trims / delete / add (v6.5) ---- */
@@ -136,12 +157,14 @@ type ClipInfo = (s: any) => { video: boolean; clipDur?: number };
 export function bakeClip(sc: any[], i: number, duration: number, info: ClipInfo) {
   const s = sc[i]; if (!s) return; const { video, clipDur } = info(s); if (!video) return;
   const d = sceneEnd(sc, i, duration) - s.start, { p, segs } = bakedSegs(s, d, clipDur);
-  if (p.mode !== "play") return; applySegs(s, segs); s.clipFrom = r3(p.inPoint);
+  if (p.mode !== "play") return; applySegs(s, segs); s.clipFrom = r3(clipSourceTime(p,0));keepPlayback(s,p);
 }
 /** call once when an edge drag starts: bake both scenes around boundary b; the left scene's OUT is freed so its tail can grow. */
 export function prepareTrim(sc: any[], b: number, duration: number, info: ClipInfo) {
-  if (b <= 0 || b >= sc.length) return; bakeClip(sc, b - 1, duration, info); bakeClip(sc, b, duration, info);
-  delete sc[b - 1].clipTo; delete sc[b].clipChain;
+  if (b <= 0 || b >= sc.length) return;keepSceneClocks(sc,duration); bakeClip(sc, b - 1, duration, info); bakeClip(sc, b, duration, info);
+  const a=sc[b-1],p=hasPlayback(a)?clipPlan(a,sc[b].start-a.start,info(a).clipDur):null;
+  delete a.clipTo; delete sc[b].clipChain;
+  if(p){const L=info(a).clipDur;if(L!==undefined)p.span=L-p.inPoint;keepPlayback(a,p)}
 }
 const firstSpeed = (s: any) => (s.segments?.length ? s.segments[0].speed : s.speed ?? 1) || 1;
 const lastSpeed = (s: any) => (s.segments?.length ? s.segments[s.segments.length - 1].speed : s.speed ?? 1) || 1;
@@ -161,7 +184,8 @@ export function trimBoundary(sc: any[], b: number, t: number, duration: number, 
     if (p.mode === "play") { const endNow = clipSourceTime(p, dA); hi = Math.min(hi, t0 + Math.max(0, ia.clipDur - endNow) / lastSpeed(A)); }
   }
   const v = r3(Math.max(lo, Math.min(Math.max(lo, hi), t))), delta = v - t0; if (Math.abs(delta) < 1e-6) return t0;
-  B.start = v;
+  const retained=ib.video?clipPlan(B,sceneEnd(sc,b,duration)-t0,ib.clipDur):null;
+  B.start = v;if(B.motionClock)B.motionClock.offset+=delta;
   if (ib.video) {
     /* footage stays in place: cutting the head = the old plan's source time at delta (follows speed changes inside the clip);
        extending the head = earlier footage at the first speed. */
@@ -174,6 +198,7 @@ export function trimBoundary(sc: any[], b: number, t: number, duration: number, 
       const rest = segs.filter((g: any) => g.at > MIN_SCENE && g.at < sceneEnd(sc, b, duration) - v - MIN_SCENE);
       applySegs(B, [{ at: 0, speed: act.speed }, ...rest]);
     }
+    if(retained)keepPlayback(B,retained,delta);
   }
   return v;
 }
@@ -211,4 +236,12 @@ export function insertAssetAt(sc: any[], t: number, asset: number, duration: num
 /** Ctrl+V: paste a copied scene (look, asset, IN, speed…) at t. Keeps its length where the landing scene has room. fit scenes are pasted with their baked speed. */
 export function pasteSceneAt(sc: any[], t: number, copied: { scene: any; len: number }, duration: number, info: ClipInfo) {
   return insertAssetAt(sc, t, copied.scene.asset, duration, info, info(copied.scene), MIN_SPLIT, copied.scene, copied.len);
+}
+
+/** Numeric fields and pointer handles share the same explicit boundary-edit mode. */
+export function editSceneBoundary(sc:any[],b:number,t:number,duration:number,info:ClipInfo,mode:'trim'|'cut'='trim'){
+ if(!Number.isFinite(t)||b<=0||b>=sc.length)return sc[b]?.start??0;
+ if(Math.abs(sc[b].start-t)<1e-6)return sc[b].start;
+ if(mode==='cut')return resizeBoundary(sc,b,t,duration);
+ prepareTrim(sc,b,duration,info);return trimBoundary(sc,b,t,duration,info);
 }

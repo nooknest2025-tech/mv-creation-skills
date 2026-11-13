@@ -1,5 +1,5 @@
-// Fit-first lyric direction: every auto choice is scored against the song (genre/mood, BPM, energy, word speed, lyric meaning)
-// and the picture behind it; variety happens only inside the fit set. Pro rules encoded here (see docs/PRO_DIRECTION_ja.md):
+// Heuristic lyric selection from genre, BPM, energy and text density.
+// This does not interpret lyric meaning or measure aesthetic quality. See docs/PRO_DIRECTION_ja.md.
 //  - intensity follows the energy arc (verse < pre < chorus, last chorus = peak), restraint before the drop
 //  - one hero (big) move per section, never on consecutive lines
 //  - motif/callback: repeated choruses reuse their main style (escalate, don't reinvent)
@@ -59,8 +59,8 @@ export function scoreStyle(style: string, c: LineCtx): Scored {
   if (c.cps > 6.5) { s += t.wordUnit ? 0.8 : 0; s += ((t.readable ?? 0.8) - 0.8) * 3; if (t.wordUnit) why.push("言葉数が多い→語単位"); }
   if (c.cps < 3 && (t.readable ?? 0.8) >= 0.9) { s += 0.4; why.push("ゆっくり読ませる"); }
   if (c.genre === "wa" && t.vertical) { s += 0.6; why.push("和→縦書き"); }
-  // pro director: prefer styles built on the pro motion core, avoid the cheapest defaults (plain fades / centred static subtitles)
-  if (c.pro) { if (t.pro) { s += 1.2; why.push("プロの動き（マスク・イージング）"); } if (style === "simple" || style === "karaoke") s -= 1.5; }
+  // A motion's implementation family is not evidence of fit. Keep pro for config compatibility;
+  // explicit direction preferences below can favour either restrained or elaborate styles.
   if (c.prefer?.includes(style)) { s += 1.6 - c.prefer.indexOf(style) * 0.2; why.push("演出プランの推奨"); }
   return { style, score: s, why };
 }

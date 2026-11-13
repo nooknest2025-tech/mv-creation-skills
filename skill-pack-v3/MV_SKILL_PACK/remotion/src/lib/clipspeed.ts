@@ -3,15 +3,34 @@
 // by integrating the speed curve. It never touches the song audio or the scene length (audio safety by construction).
 export type ClipTail = "auto" | "hold" | "loop";
 export interface Seg { at: number; speed: number } // from scene time `at` on, play at `speed`
-export interface ClipOpts { speed?: number; fit?: boolean; clipFrom?: number; clipTo?: number; tail?: ClipTail; segments?: Seg[]; ease?: number; solve?: number }
+export interface Playback { knots:Knot[];inPoint:number;span:number|null;mode:'play'|'hold'|'loop';scale:number;offset:number;signature:string }
+export interface ClipOpts { speed?: number; fit?: boolean; clipFrom?: number; clipTo?: number; tail?: ClipTail; segments?: Seg[]; ease?: number; solve?: number; playback?:Playback }
 export type Knot = [number, number]; // (scene time, speed) — speed is piecewise linear between knots
-export interface ClipPlan { rate: number; inPoint: number; mode: "play" | "hold" | "loop"; span: number; knots: Knot[]; scale: number; speeds: number[] }
+export interface ClipPlan { rate: number; inPoint: number; mode: "play" | "hold" | "loop"; span: number; knots: Knot[]; scale: number; speeds: number[];offset?:number }
 export const SPEED_MIN = 0.1, SPEED_MAX = 4, EASE_MAX = 2;
 export const SPEED_PRESETS: [string, number][] = [["スロー 0.5倍", 0.5], ["普通 1倍", 1], ["速く 2倍", 2]];
 export const TAILS: Record<ClipTail, string> = { auto: "自動でゆっくりにして合わせる（おすすめ）", hold: "最後の画で止める", loop: "最初からくり返す" };
 const clamp = (x: number, a: number, b: number) => Math.max(a, Math.min(b, x));
 const fin = (x: any, d: number) => (typeof x === "number" && Number.isFinite(x) ? x : d);
 export const r2 = (x: number) => Math.round(x * 100) / 100;
+export const playbackSignature=(o:ClipOpts)=>JSON.stringify([o.speed,o.fit,o.clipFrom,o.clipTo,o.tail,o.segments,o.ease,o.solve]);
+export const hasPlayback=(o:ClipOpts)=>!!o.playback&&o.playback.signature===playbackSignature(o);
+/** An explicit speed edit replaces only this cut's inherited curve and preserves the chosen rate. */
+export function setClipSpeed(o:ClipOpts,value:number){
+ if(!Number.isFinite(value))return;
+ if(hasPlayback(o)){delete o.segments;delete o.solve;delete o.ease}
+ delete o.playback;delete o.fit;o.speed=Math.round(Math.max(SPEED_MIN,Math.min(SPEED_MAX,value))*100)/100;
+ if(o.segments)o.segments[0].speed=o.speed;
+ if(!o.tail||o.tail==='auto')o.tail='hold';
+}
+const travel=(p:ClipPlan,t:number)=>(t<0?t*p.knots[0][1]:integrate(p.knots,t))*p.scale;
+export function keepPlayback(o:ClipOpts,p:ClipPlan,delta=0){o.playback={knots:p.knots.map(k=>[...k] as Knot),inPoint:p.inPoint,span:Number.isFinite(p.span)?p.span:null,mode:p.mode,scale:p.scale,offset:(p.offset??0)+delta,signature:playbackSignature(o)}}
+/** Exact local speed curve, including ramps and steps at a split point. */
+export function localKnots(p:ClipPlan,duration:number):Knot[]{
+ const offset=p.offset??0;
+ const speed=(t:number)=>{let v=p.knots[0][1];for(let i=0;i<p.knots.length;i++){const a=p.knots[i],b=p.knots[i+1];if(t<a[0])break;v=a[1];if(b&&t<b[0]&&b[0]>a[0]){v=a[1]+(b[1]-a[1])*(t-a[0])/(b[0]-a[0]);break}}return v*p.scale};
+ return [[0,speed(offset)],...p.knots.filter(k=>k[0]>offset&&k[0]<offset+duration).map(([t,v])=>[t-offset,v*p.scale] as Knot),[duration,speed(offset+duration)]];
+}
 
 /** segment list (always starts at 0, sorted, inside the scene). Without segments: one constant speed. */
 export function segmentsOf(o: ClipOpts, dur: number): Seg[] {
@@ -54,6 +73,12 @@ export function solveSpeed(segs: Seg[], idx: number, dur: number, span: number, 
 }
 /** sceneDur: seconds on screen; clipDur: clip length (unknown -> Infinity). */
 export function clipPlan(o: ClipOpts, sceneDur: number, clipDur?: number): ClipPlan {
+  if(hasPlayback(o)){
+    const m=o.playback!,duration=Math.max(.01,sceneDur),p:ClipPlan={...m,span:m.span??Infinity,rate:0,speeds:[]};
+    if(Number.isFinite(clipDur))p.span=Math.min(p.span,Math.max(0,clipDur!-p.inPoint));
+    p.rate=(travel(p,m.offset+duration)-travel(p,m.offset))/duration;
+    p.speeds=localKnots(p,duration).map(k=>k[1]).filter((v,i,a)=>i===0||Math.abs(v-a[i-1])>1e-9);return p;
+  }
   const dur = Math.max(0.01, sceneDur), { inPoint, span, known } = trimSpan(o, clipDur), ease = clamp(fin(o.ease, 0), 0, EASE_MAX);
   let segs = segmentsOf(o, dur).map((s) => ({ ...s, speed: clamp(s.speed, SPEED_MIN, SPEED_MAX) }));
   const plain = segs.length === 1;
@@ -69,10 +94,10 @@ export function clipPlan(o: ClipOpts, sceneDur: number, clipDur?: number): ClipP
 }
 /** time inside the clip (seconds) for `local` seconds after the scene starts. */
 export function clipSourceTime(p: ClipPlan, local: number): number {
-  let u = integrate(p.knots, Math.max(0, local)) * p.scale;
+  let u = travel(p,(p.offset??0)+Math.max(0,local));
   if (p.mode === "loop" && Number.isFinite(p.span) && p.span > 0) u = u % p.span;
   if (Number.isFinite(p.span)) u = Math.min(u, Math.max(0, p.span - 0.04));
-  return p.inPoint + u;
+  return Math.max(0,p.inPoint + u);
 }
 /** plain-Japanese one-liner for the UI. */
 export function clipSummary(p: ClipPlan, sceneDur: number): string {

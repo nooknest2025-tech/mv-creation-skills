@@ -1,5 +1,9 @@
 # Third-party notices / 第三者ライセンス
 
+## JIZURA 字面
+
+The editor includes the JIZURA lyric motion engine, version 0.10.1, commit `fc16bfe43ea4a6c25a21f1caf04d17326de14f00`, copyright (c) 2026 hakoniwa. It is licensed under the MIT License. The complete license and upstream third-party notices are in `skill-pack-v3/MV_SKILL_PACK/remotion/vendor/jizura/`. Source: https://github.com/852wa/JIZURA
+
 ## Fonts（`skill-pack-v3/MV_SKILL_PACK/remotion/public/fonts/`）
 同梱フォントはすべて Google Fonts で配布されている再配布可能なフォントです（SIL Open Font License 1.1 または Apache License 2.0）。各ライセンス全文は同じフォルダの `OFL_*.txt` / `LICENSE_*.txt` にあります。OFL フォントは単体での販売はできません。フォント名の変更を伴う改変には Reserved Font Name の制限があります。
 

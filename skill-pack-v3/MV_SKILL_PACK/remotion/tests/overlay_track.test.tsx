@@ -52,7 +52,7 @@ describe.skipIf(!py)('upper track save validation', () => {
       const save = async (o: any) => { const data = structuredClone(state.data); data.overlays = [o]; return fetch(url + '/api/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ revision: state.revision, data }) }); };
       expect((await save({ ...clip, asset: 999 })).status).toBe(400);
       expect((await save({ ...clip, end: state.data.duration + 1 })).status).toBe(400);
-      expect((await save({ ...clip, x: .8, w: .5 })).status).toBe(400);
+      expect((await save({ ...clip, x: 1.8, w: .5 })).status).toBe(400);
       expect((await save(clip)).status).toBe(200);
       state = await (await fetch(url + '/api/state')).json(); expect(state.data.overlays).toEqual([clip]);
     } finally { srv.kill(); }
