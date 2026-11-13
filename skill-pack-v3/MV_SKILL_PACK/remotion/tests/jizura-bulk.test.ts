@@ -6,7 +6,7 @@ describe('copying a JIZURA look',()=>{
   const source={engine:'standard',layout:'center',enter:'fade',decor:['rings'],lineTrans:'shared_wipe',lineTransDuration:.8,seed:4,parts:[{text:'source',start:0,end:1}],fxTime:.2};
   const target={layout:'mixed',exit:'fade',seed:9,parts:[{text:'target',start:0,end:3}],fxTime:2};
   const result=copyJizuraLook(source,target)!;
-  expect(result).toEqual({engine:'standard',layout:'center',enter:'fade',decor:['rings'],lineTrans:'shared_wipe',lineTransDuration:.8,seed:9,parts:target.parts,fxTime:2});
+  expect(result).toEqual({engine:'standard',layout:'center',enter:'fade',decor:['rings'],lineTrans:'shared_wipe',lineTransDuration:.8,seed:9,parts:[{...target.parts[0],layout:'center',enter:'fade'}],fxTime:.2});
   expect(result.decor).not.toBe(source.decor);
   expect(target.layout).toBe('mixed');
  });

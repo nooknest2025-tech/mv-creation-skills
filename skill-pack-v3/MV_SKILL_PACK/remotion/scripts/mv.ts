@@ -272,7 +272,7 @@ export async function run(argv: string[]) {
   log(`🎞  構成: ${first.structureWhy}　変えるなら「ストーリー＋リップシンクで」「サビだけ歌うシーン」など`);
   if(!first.jizura) for (const n of first.sectionNotes ?? []) log(`   ・${n}`);
   if ((first as any).mographNotes?.length) { log("🎨 プロ演出（図形・色・転換・拍アクセント）: 消すなら「モーショングラフィックスなし」、昔の見た目は「プロ演出オフ」"); for (const n of (first as any).mographNotes) log(`   ・${n}`); }
-  if (first.review) { const note=first.jizura?'JIZURAを選択。通常モーション向けの自動修正とスコアは、JIZURAの仕上がりを評価したものではありません。':first.review.note; log(`\n${note}${first.jizura?'':`\n  （プロチェック ${first.review.score}/100）`}`); fs.writeFileSync(path.join(dir, "director_note.md"), `${note}\n\n## セクションごとの選択理由\n${first.jizura?'JIZURAの字組みは再生して確認。':(first.sectionNotes ?? []).map((n) => `- ${n}`).join("\n")}\n\n## 構成\n- ${first.structureWhy}\n`); }
+  if (first.review) { const note=first.jizura?'JIZURAを選択。通常モーション向けの自動修正とスコアは、JIZURAの仕上がりを評価したものではありません。':first.review.note; log(`\n${note}${first.jizura?'':`\n  （表示チェック ${first.review.score}/100・演出評価は別途）`}`); fs.writeFileSync(path.join(dir, "director_note.md"), `${note}\n\n## セクションごとの選択理由\n${first.jizura?'JIZURAの字組みは再生して確認。':(first.sectionNotes ?? []).map((n) => `- ${n}`).join("\n")}\n\n## 構成\n- ${first.structureWhy}\n`); }
   log(`  カット 約${first.shots.length} 個${cfg.density ? `（シーンの細かさ: ${({ slow: "ゆったり", fast: "テンポよく", normal: "標準" } as any)[cfg.density]}）` : ""} / 歌詞 ${first.lines.length} 行 / 文字スタイル: ${first.jizura?'JIZURA':styleSummary(first.lines) || "（歌詞なし）"}`);
   const m = loadManifest(dir, title);
   const v = nextVersion(m);

@@ -108,11 +108,13 @@ describe("pro auto director", () => {
     const p = directPro(song(70), { genre: "ballad" }); const v = p.sections.find((s) => s.type === "verse")!;
     expect(v.look).toBe("tanzaku"); expect(v.cutBeats).toBeGreaterThanOrEqual(8); expect(v.accentDensity).toBe(0); expect(RECIPES.ballad.tr).toContain("slow_wipe");
   });
-  it("full auto avoids cheap defaults: pro styles dominate, no simple/karaoke", () => {
-    const p: any = buildProps(song(128), {} as any, [...Array(10)].map((_, i) => ({ src: `m${i}.jpg`, kind: "image" as const })));
-    const pro = p.lines.filter((L: any) => TRAITS[L.style]?.pro).length; expect(pro / p.lines.length).toBeGreaterThan(0.6);
-    expect(p.lines.some((L: any) => L.style === "simple" || L.style === "karaoke")).toBe(false);
-    expect(p.mograph).toBeTruthy(); expect(p.structureWhy).toMatch(/自動提案/);
+  it("keeps restrained or elaborate explicit direction while the pro plan is enabled", () => {
+    const media = [...Array(10)].map((_, i) => ({ src: `m${i}.jpg`, kind: "image" as const }));
+    for (const style of ["simple", "karaoke", "pro_smash"]) {
+      const p: any = buildProps(song(128), { lyrics: { default: style } } as any, media);
+      expect(p.lines.every((L: any) => L.style === style)).toBe(true);
+      expect(p.mograph).toBeTruthy(); expect(p.structureWhy).toMatch(/自動提案/);
+    }
   });
   it("pro can be switched off (classic look, existing behaviour)", () => { const p: any = buildProps(song(), { pro: false } as any, []); expect(p.mograph).toBeUndefined(); });
   it("lyric colour words recolour the accent", () => { const p = directPro(song(), {}); expect(p.sections.some((s) => s.palette.accent === "#d7192a")).toBe(true); });

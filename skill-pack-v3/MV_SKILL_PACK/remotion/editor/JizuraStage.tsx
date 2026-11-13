@@ -114,8 +114,18 @@ export function drawPlacedJizura(ctx:CanvasRenderingContext2D,temp:HTMLCanvasEle
   const amount=progress<1&&line.entrance&&line.entrance!=='none'?Math.pow(1-progress,3):leaving*leaving;
   const tint=(color:string)=>{const c=document.createElement('canvas');c.width=temp.width;c.height=temp.height;const x=c.getContext('2d');if(!x)return temp;x.drawImage(temp,0,0);x.globalCompositeOperation='source-in';x.fillStyle=color;x.fillRect(0,0,c.width,c.height);return c};
   const cyan=effect==='rgb'?tint('#58dce6'):null,magenta=effect==='rgb'?tint('#ff75ad'):null;
+  const lineOpacity=Math.max(0,Math.min(1,Number.isFinite(line.opacity)?line.opacity:1));
+  // MV fix: fade the finished look (fill + outline filter) as one layer; globalAlpha before ctx.filter lets the dark outline show through the fill.
+  const layerCanvas=lineOpacity<1&&typeof document!=='undefined'?document.createElement('canvas'):null;
+  if(layerCanvas){layerCanvas.width=ctx.canvas.width;layerCanvas.height=ctx.canvas.height}
   const draw=(dx:number,dy:number,alpha:number,split:number)=>{
-    ctx.save();ctx.translate(dx,dy);ctx.globalAlpha*=alpha*Math.max(0,Math.min(1,Number.isFinite(line.opacity)?line.opacity:1));
+    const target=ctx;let ctx2=target;
+    if(layerCanvas){const l=layerCanvas.getContext('2d');if(l){l.setTransform(1,0,0,1,0,0);l.clearRect(0,0,layerCanvas.width,layerCanvas.height);l.setTransform(target.getTransform());ctx2=l}}
+    drawOne(ctx2,dx,dy,ctx2===target?alpha*lineOpacity:alpha,split);
+    if(ctx2!==target){target.save();target.setTransform(1,0,0,1,0,0);target.globalAlpha*=lineOpacity;target.drawImage(layerCanvas as HTMLCanvasElement,0,0);target.restore()}
+  };
+  const drawOne=(ctx:CanvasRenderingContext2D,dx:number,dy:number,alpha:number,split:number)=>{
+    ctx.save();ctx.translate(dx,dy);ctx.globalAlpha*=alpha;
     if(split){ctx.beginPath();if(kind==='lr')ctx.rect(split<0?0:p.pivotX,0,split<0?p.pivotX:W-p.pivotX,H);else ctx.rect(0,split<0?0:p.pivotY,W,split<0?p.pivotY:H-p.pivotY);ctx.clip()}
     ctx.translate(p.pivotX,p.pivotY);ctx.rotate(p.angle*Math.PI/180);ctx.translate(-p.pivotX,-p.pivotY);
     const image=(img:CanvasImageSource,x=0,y=0)=>ctx.drawImage(img,p.x+x,p.y+y,W*p.factor,H*p.factor);

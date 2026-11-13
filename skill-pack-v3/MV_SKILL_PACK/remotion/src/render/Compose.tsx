@@ -2,6 +2,7 @@
 // per-panel crop/zoom/tilt/flip/slide and clip segment, impact frames, chroma flash, slash wipe, zoom punch + tilt, shake,
 // speed/focus lines, name cards and a title slam. Used by the editor preview AND the MP4 export (same <Scene>).
 import React from "react";
+import {sceneClock} from "../lib/sceneClock";
 import { random } from "remotion";
 import { backdropOf, cameraOf, compColors, coverScale, fxActive, globalComp, gradeOf, panelSourceTime, resolvePanels, type CompBackdropArt, type ResolvedPanel, type SceneComp } from "../lib/compose";
 
@@ -99,12 +100,13 @@ export function GradeDefs({ data }: { data: any }) {
 export function CompScene({ data, i, t, W, H, media, graded, under }: { data: any; i: number; t: number; W: number; H: number; media: Media; graded?: boolean; under?: boolean }) {
   const s = data.scenes[i], c: SceneComp = s.comp, fps = data.fps ?? 30, end = data.scenes[i + 1]?.start ?? data.duration;
   const g = globalComp(data), col = compColors(data), beat = 60 / (data.bpm ?? 120);
-  const frame = Math.round(t * fps), from = Math.round(s.start * fps), len = Math.max(1, Math.ceil(end * fps - 1e-6) - from) /* the scene is shown while t < end, so its last frame is ceil(end·fps)-1 (end not on a frame boundary used to hide every panel on that frame) */, sf = frame - from, st = t - s.start;
+  const clock=sceneClock(s,i,end,t);
+  const frame = Math.round(t * fps), from = Math.round(clock.start * fps), len = Math.max(1, Math.ceil((clock.start+clock.duration) * fps - 1e-6) - from) /* the scene is shown while t < end, so its last frame is ceil(end·fps)-1 (end not on a frame boundary used to hide every panel on that frame) */, sf = frame - from, st = clock.local;
   const active = fxActive(c, st);
   const cam = cameraOf(data);
   // shake: smooth noise (not a new random offset every frame), fading out; only scenes that set comp.shake (impact shots)
   const amp = (c.shake ?? 0) * Math.exp(-st * 3.2), nx = Math.max(0, st) * cam.shakeHz;
-  const sx = noise1(`shx${i}`, nx) * amp, sy = noise1(`shy${i}`, nx + 17.3) * amp * 0.7;
+  const sx = noise1(`shx${clock.index}`, nx) * amp, sy = noise1(`shy${clock.index}`, nx + 17.3) * amp * 0.7;
   // punch-in: time-based ease-out over comp.camera.punchSec (was 3 frames -> a visible pop); only scenes that set comp.punch
   const pk = lerp(st, [0, cam.punchSec], [1, 0], ease), punch = 1 + (c.punch ?? 0) * pk * (c.enter === "zoom" ? 3 : 1), tilt = (c.tilt ?? 0) * pk;
   const neg = active.includes("redneg") || active.includes("tealneg"), chroma = active.includes("chroma");

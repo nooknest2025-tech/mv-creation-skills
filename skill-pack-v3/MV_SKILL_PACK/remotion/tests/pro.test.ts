@@ -6,7 +6,7 @@ import { TRAITS } from "../src/lib/traits";
 import { CATALOG } from "../src/lib/catalog";
 import { resolveLines } from "../src/lib/resolve";
 import { charTimes } from "../src/lib/song";
-import { banReason, fitSet } from "../src/lib/direction";
+import { banReason, fitSet, scoreStyle } from "../src/lib/direction";
 import { placeText, readableFill, contrast, relLum } from "../src/lib/visual";
 import { HYBRIDS, HYBRID_IDS, applyHybrid, distribute, pickHybrid } from "../src/lib/hybrids";
 import { review } from "../src/lib/critic";
@@ -43,6 +43,13 @@ describe("mood styles (composable motion)", () => {
 });
 
 describe("fit-based variety", () => {
+  it("does not rate a style's implementation family as aesthetic quality", () => {
+    const ctx = { genre: "rock_edm", secType: "verse", energy: 0.5, cps: 4, bpm: 120, text: "" };
+    for (const style of ["simple", "karaoke", "pro_slide", "pro_smash"]) {
+      expect(scoreStyle(style, { ...ctx, pro: true })).toEqual(scoreStyle(style, { ...ctx, pro: false }));
+      expect(scoreStyle(style, { ...ctx, prefer: [style] }).score).toBeGreaterThan(scoreStyle(style, ctx).score);
+    }
+  });
   it("3-minute song gets >= 5 distinct styles by default, deterministic per seed, reroll changes it", () => {
     const S = song3();
     const a = resolveLines(S, { genre: "idol_pop" }), b = resolveLines(S, { genre: "idol_pop" }), c = resolveLines(S, { genre: "idol_pop", seed: 7 });
@@ -124,11 +131,13 @@ describe("hybrid structures", () => {
 
 describe("pro critic", () => {
   const shot = (i: number, move: string, locked = false): Shot => ({ id: `S${i}`, start: i * 2, end: i * 2 + 2, src: "a.jpg", kind: "image", move, sectionType: "verse", section: "V", locked });
-  it("fixes 3x same move on auto shots", () => {
+  it("keeps repeated auto moves and asks for a contextual review", () => {
     const shots = [0, 1, 2, 3].map((i) => shot(i, "kb_in"));
     const r = review({ shots, lines: [], beat: { bpm: 120, phase: 0 }, textY: 0.84 });
-    expect(r.issues.some((x) => x.rule === "same_move" && x.fixed)).toBe(true);
-    expect(shots[2].move).not.toBe("kb_in");
+    expect(r.issues.some((x) => x.rule === "same_move" && !x.fixed)).toBe(true);
+    expect(shots.every((s) => s.move === "kb_in")).toBe(true);
+    const varied = review({ shots: shots.map((s, i) => ({ ...s, move: i % 2 ? "static" : "kb_in" })), lines: [], beat: { bpm: 120, phase: 0 }, textY: 0.84 });
+    expect(r.score).toBe(varied.score);
     expect(r.note).toMatch(/演出メモ/);
   });
   it("manual mode: user-locked shots and lyric styles are kept, but suggestions are emitted", () => {
@@ -143,10 +152,22 @@ describe("pro critic", () => {
     expect(p.review!.issues.some((x) => x.rule === "fit" && !x.fixed && x.at === "L0")).toBe(true);
     expect(p.review!.note).toMatch(/ご指定箇所は変えていません/);
   });
-  it("hero restraint: two big moves in one section -> the auto one is demoted", () => {
-    const S = song3();
-    const p = buildProps(S, { genre: "rock_edm", lyrics: { variety: 1 } } as any, []);
-    for (const sec of new Set(p.lines.map((l) => l.section))) expect(p.lines.filter((l) => l.section === sec && !l.locked && TRAITS[l.style].hero).length).toBeLessThanOrEqual(1);
+  it("keeps a planned sequence of strong styles, including its parameters", () => {
+    const lines = resolveLines(song3()).slice(0, 3).map((L, i) => ({ ...L, section: "V", style: ["pro_smash", "pro_crop", "reveal"][i], params: { ...L.params, size: 1.4 }, tOff: L.tOn + 4 }));
+    const before = lines.map((L) => ({ style: L.style, params: { ...L.params } }));
+    const r = review({ shots: [], lines, beat: { bpm: 120, phase: 0 }, textY: 0.84 });
+    expect(r.issues.some((x) => x.rule === "restraint" && !x.fixed)).toBe(true);
+    expect(lines.map((L) => ({ style: L.style, params: L.params }))).toEqual(before);
+    expect(r.score).toBe(100);
+  });
+  it("does not extend a user-locked line even when more display time is available", () => {
+    const line = resolveLines(song3())[0];
+    line.locked = true; line.tOff = line.tOn + 0.1; line.tEnd = line.tOff + line.exit;
+    const before = { tOff: line.tOff, tEnd: line.tEnd };
+    const r = review({ shots: [], lines: [line], beat: { bpm: 120, phase: 0 }, textY: 0.84 });
+    expect({ tOff: line.tOff, tEnd: line.tEnd }).toEqual(before);
+    expect(r.issues.some((x) => x.rule === "readability" && !x.fixed)).toBe(true);
+    expect(r.score).toBeLessThan(100);
   });
   it("readability: short lines are extended when there is room", () => {
     const S = song3(); S.lines[0].end = S.lines[0].start + 0.3; S.lines[0].text = "遠い街の灯りに君を想う夜"; Object.assign(S.lines[0], charTimes(S.lines[0].text, S.lines[0].start, S.lines[0].end));
